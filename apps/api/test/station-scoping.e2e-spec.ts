@@ -17,6 +17,7 @@ describe('Station scoping boundary (e2e)', () => {
 
   const runId = Date.now().toString(36);
   const usernameEmployee = `e2e_employee_${runId}`;
+  const usernameSupervisor = `e2e_supervisor_${runId}`;
   const password = 'BoundaryTest123!';
 
   let companyA: { id: string };
@@ -24,6 +25,7 @@ describe('Station scoping boundary (e2e)', () => {
   let stationA: { id: string };
   let stationB: { id: string };
   let employeeUserId: string;
+  let supervisorUserId: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -93,14 +95,52 @@ describe('Station scoping boundary (e2e)', () => {
     await prisma.userStationScope.create({
       data: { userId: employeeUser.id, stationId: stationA.id },
     });
+
+    // A second scoped user with a *write* permission — the mutation path
+    // (StationsService.update) must enforce the same boundary as the read
+    // path, not just gate on @RequirePermission.
+    const supervisorRole = await prisma.role.upsert({
+      where: { name: 'station_supervisor' },
+      create: { name: 'station_supervisor' },
+      update: {},
+    });
+    const manageStationsPermission = await prisma.permission.upsert({
+      where: { key: 'stations:manage' },
+      create: { key: 'stations:manage' },
+      update: {},
+    });
+    await prisma.rolePermission.upsert({
+      where: {
+        roleId_permissionId: { roleId: supervisorRole.id, permissionId: manageStationsPermission.id },
+      },
+      create: { roleId: supervisorRole.id, permissionId: manageStationsPermission.id },
+      update: {},
+    });
+
+    const supervisorUser = await prisma.user.create({
+      data: {
+        username: usernameSupervisor,
+        passwordHash: await argon2.hash(password),
+        fullName: 'E2E Boundary Test Supervisor',
+      },
+    });
+    supervisorUserId = supervisorUser.id;
+
+    await prisma.userRole.create({ data: { userId: supervisorUser.id, roleId: supervisorRole.id } });
+    // Scoped to Station A ONLY, same as the employee above.
+    await prisma.userStationScope.create({
+      data: { userId: supervisorUser.id, stationId: stationA.id },
+    });
   });
 
   afterAll(async () => {
-    await prisma.auditLog.deleteMany({ where: { userId: employeeUserId } });
-    await prisma.refreshToken.deleteMany({ where: { userId: employeeUserId } });
-    await prisma.userStationScope.deleteMany({ where: { userId: employeeUserId } });
-    await prisma.userRole.deleteMany({ where: { userId: employeeUserId } });
-    await prisma.user.delete({ where: { id: employeeUserId } });
+    await prisma.auditLog.deleteMany({ where: { userId: { in: [employeeUserId, supervisorUserId] } } });
+    await prisma.refreshToken.deleteMany({ where: { userId: { in: [employeeUserId, supervisorUserId] } } });
+    await prisma.userStationScope.deleteMany({
+      where: { userId: { in: [employeeUserId, supervisorUserId] } },
+    });
+    await prisma.userRole.deleteMany({ where: { userId: { in: [employeeUserId, supervisorUserId] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [employeeUserId, supervisorUserId] } } });
     await prisma.station.delete({ where: { id: stationA.id } });
     await prisma.station.delete({ where: { id: stationB.id } });
     await prisma.company.delete({ where: { id: companyA.id } });
@@ -112,6 +152,14 @@ describe('Station scoping boundary (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ username: usernameEmployee, password })
+      .expect(200);
+    return res.body.accessToken;
+  }
+
+  async function loginAsSupervisor(): Promise<string> {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ username: usernameSupervisor, password })
       .expect(200);
     return res.body.accessToken;
   }
@@ -151,5 +199,15 @@ describe('Station scoping boundary (e2e)', () => {
 
   it('rejects unauthenticated requests to stations entirely', async () => {
     await request(app.getHttpServer()).get('/api/v1/stations').expect(401);
+  });
+
+  it('blocks a scoped supervisor with stations:manage from updating another station by guessing its ID', async () => {
+    const accessToken = await loginAsSupervisor();
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/stations/${stationB.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: 'Hijacked name' })
+      .expect(403);
   });
 });

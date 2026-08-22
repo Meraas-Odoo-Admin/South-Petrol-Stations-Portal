@@ -34,17 +34,22 @@ export class StationsService {
       throw new ConflictException('This company already has a station with that stationNumber.');
     }
 
-    const station = await this.prisma.station.create({ data: dto });
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.station.create({ data: dto });
 
-    await this.audit.log({
-      userId: actorId,
-      action: 'CREATE',
-      entityType: 'Station',
-      entityId: station.id,
-      newValue: { internalCode: station.internalCode, companyId: station.companyId },
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'CREATE',
+          entityType: 'Station',
+          entityId: station.id,
+          newValue: { internalCode: station.internalCode, companyId: station.companyId },
+        },
+        tx,
+      );
+
+      return station;
     });
-
-    return station;
   }
 
   async findAll(userId: string) {
@@ -74,17 +79,23 @@ export class StationsService {
 
   async update(id: string, dto: UpdateStationDto, userId: string, actorId: string) {
     const before = await this.findOne(id, userId);
-    const station = await this.prisma.station.update({ where: { id }, data: dto });
 
-    await this.audit.log({
-      userId: actorId,
-      action: 'UPDATE',
-      entityType: 'Station',
-      entityId: station.id,
-      oldValue: { name: before.name, status: before.status },
-      newValue: { name: station.name, status: station.status },
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.station.update({ where: { id }, data: dto });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'UPDATE',
+          entityType: 'Station',
+          entityId: station.id,
+          oldValue: { name: before.name, status: before.status },
+          newValue: { name: station.name, status: station.status },
+        },
+        tx,
+      );
+
+      return station;
     });
-
-    return station;
   }
 }

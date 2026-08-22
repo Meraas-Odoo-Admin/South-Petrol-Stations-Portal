@@ -25,22 +25,30 @@ export class UsersService {
     }
 
     const passwordHash = await argon2.hash(dto.password);
-    const user = await this.prisma.user.create({
-      data: {
-        username: dto.username,
-        passwordHash,
-        fullName: dto.fullName,
-        phone: dto.phone,
-        mustChangePassword: true,
-      },
-    });
 
-    await this.audit.log({
-      userId: actorId,
-      action: 'CREATE',
-      entityType: 'User',
-      entityId: user.id,
-      newValue: { username: user.username, fullName: user.fullName },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          username: dto.username,
+          passwordHash,
+          fullName: dto.fullName,
+          phone: dto.phone,
+          mustChangePassword: true,
+        },
+      });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'CREATE',
+          entityType: 'User',
+          entityId: created.id,
+          newValue: { username: created.username, fullName: created.fullName },
+        },
+        tx,
+      );
+
+      return created;
     });
 
     return toSafeUser(user);
@@ -78,38 +86,48 @@ export class UsersService {
       throw new NotFoundException('Role not found.');
     }
 
-    await this.prisma.userRole.upsert({
-      where: { userId_roleId: { userId, roleId } },
-      create: { userId, roleId },
-      update: {},
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userRole.upsert({
+        where: { userId_roleId: { userId, roleId } },
+        create: { userId, roleId },
+        update: {},
+      });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'ASSIGN_ROLE',
+          entityType: 'User',
+          entityId: userId,
+          newValue: { roleId, roleName: role.name },
+        },
+        tx,
+      );
     });
 
     this.rbac.invalidate(userId);
-
-    await this.audit.log({
-      userId: actorId,
-      action: 'ASSIGN_ROLE',
-      entityType: 'User',
-      entityId: userId,
-      newValue: { roleId, roleName: role.name },
-    });
-
     return this.findOne(userId);
   }
 
   async removeRole(userId: string, roleId: string, actorId: string) {
     await this.ensureUserExists(userId);
-    await this.prisma.userRole.deleteMany({ where: { userId, roleId } });
-    this.rbac.invalidate(userId);
 
-    await this.audit.log({
-      userId: actorId,
-      action: 'REMOVE_ROLE',
-      entityType: 'User',
-      entityId: userId,
-      oldValue: { roleId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userRole.deleteMany({ where: { userId, roleId } });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'REMOVE_ROLE',
+          entityType: 'User',
+          entityId: userId,
+          oldValue: { roleId },
+        },
+        tx,
+      );
     });
 
+    this.rbac.invalidate(userId);
     return this.findOne(userId);
   }
 
@@ -120,18 +138,23 @@ export class UsersService {
       throw new NotFoundException('Station not found.');
     }
 
-    await this.prisma.userStationScope.upsert({
-      where: { userId_stationId: { userId, stationId } },
-      create: { userId, stationId },
-      update: {},
-    });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userStationScope.upsert({
+        where: { userId_stationId: { userId, stationId } },
+        create: { userId, stationId },
+        update: {},
+      });
 
-    await this.audit.log({
-      userId: actorId,
-      action: 'ADD_STATION_SCOPE',
-      entityType: 'User',
-      entityId: userId,
-      newValue: { stationId, internalCode: station.internalCode },
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'ADD_STATION_SCOPE',
+          entityType: 'User',
+          entityId: userId,
+          newValue: { stationId, internalCode: station.internalCode },
+        },
+        tx,
+      );
     });
 
     return this.findOne(userId);
@@ -139,14 +162,20 @@ export class UsersService {
 
   async removeStationScope(userId: string, stationId: string, actorId: string) {
     await this.ensureUserExists(userId);
-    await this.prisma.userStationScope.deleteMany({ where: { userId, stationId } });
 
-    await this.audit.log({
-      userId: actorId,
-      action: 'REMOVE_STATION_SCOPE',
-      entityType: 'User',
-      entityId: userId,
-      oldValue: { stationId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userStationScope.deleteMany({ where: { userId, stationId } });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'REMOVE_STATION_SCOPE',
+          entityType: 'User',
+          entityId: userId,
+          oldValue: { stationId },
+        },
+        tx,
+      );
     });
 
     return this.findOne(userId);
