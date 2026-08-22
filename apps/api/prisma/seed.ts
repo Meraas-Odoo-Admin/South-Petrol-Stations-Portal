@@ -39,6 +39,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   system_admin: PERMISSIONS.map((p) => p.key),
 };
 
+// The only roles that see every station regardless of UserStationScope.
+// station_employee/station_supervisor stay at the schema default (false) —
+// both are exercised as scoped-to-one-station in the e2e boundary test.
+const UNRESTRICTED_STATION_ACCESS_ROLES = new Set(['directorate_admin', 'system_admin']);
+
 const SYSTEM_SETTINGS = [
   { key: 'fillup.max_per_week', value: '3', description: 'Max fill-ups per vehicle per week' },
   {
@@ -71,10 +76,11 @@ async function main() {
 
   const rolesByName = new Map<string, { id: string }>();
   for (const [roleName, permissionKeys] of Object.entries(ROLE_PERMISSIONS)) {
+    const unrestrictedStationAccess = UNRESTRICTED_STATION_ACCESS_ROLES.has(roleName);
     const role = await prisma.role.upsert({
       where: { name: roleName },
-      create: { name: roleName },
-      update: {},
+      create: { name: roleName, unrestrictedStationAccess },
+      update: { unrestrictedStationAccess },
     });
     rolesByName.set(roleName, role);
 

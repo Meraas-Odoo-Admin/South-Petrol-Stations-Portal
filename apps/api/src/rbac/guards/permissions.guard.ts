@@ -44,6 +44,14 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
+    // A still-valid access token must stop authorizing the moment the
+    // account is deactivated — login/refresh already check this, but an
+    // access token otherwise keeps working until it naturally expires.
+    const isActive = await this.rbac.isUserActive(user.id);
+    if (!isActive) {
+      throw new UnauthorizedException();
+    }
+
     if (required.length === 0) {
       return true; // authenticated only, no specific permission required
     }
