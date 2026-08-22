@@ -1,5 +1,5 @@
-// M0 scope: prove the database connection and migration flow work.
-// Domain models (Company, Station, User, RBAC, FillUpTransaction, ...) land in M1+.
+// M1 scope: Auth, RBAC, Users, Companies, Stations.
+// Driver/VehicleOwner/Vehicle/FillUpTransaction/Exception land in M2/M3.
 // See docs/IMPLEMENTATION_PLAN.md §4 for the full schema this will grow into.
 
 generator client {
@@ -11,10 +11,172 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Prisma requires at least one model to generate a client and to have
-// something for `prisma migrate dev` to migrate. This is infrastructure
-// only — not a domain entity — and is replaced by the real schema in M1.
-model SchemaProbe {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
+// ── Companies & Stations ─────────────────────────────────────────────
+
+model Company {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  stations  Station[]
+  createdAt DateTime  @default(now())
+}
+
+model Station {
+  id                  String                    @id @default(cuid())
+  internalCode        String                    @unique // the ONLY globally unique station identifier
+  stationNumber       String // as reported by the company — NOT globally unique
+  name                String
+  companyId           String
+  company             Company                   @relation(fields: [companyId], references: [id])
+  municipality        String?
+  status              StationStatus             @default(ACTIVE)
+  securityAuthorityId String? // TBD — see docs/OPEN_ITEMS.md #4. Nullable until scope question is answered.
+  securityAuthority   SecurityAuthority?        @relation(fields: [securityAuthorityId], references: [id])
+  fuelAvailability    StationFuelAvailability[]
+  userScopes          UserStationScope[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([companyId, stationNumber]) // the composite key that encodes the lesson learned
+}
+
+enum StationStatus {
+  ACTIVE
+  SUSPENDED_LEGAL // موقوفة قضائيًا
+  SUSPENDED_COMMITTEE // موقوفة (لجنة)
+  SUSPENDED_OWNER // معلّقة - خاصة
+  NOT_YET_SUPPLIED // لم تُزوَّد بعد
+  UNVERIFIED // غير مؤكد — from the handwritten list, needs manual review
+}
+
+// Fuel availability is TIME-VARYING per the client — never a fixed column on Station.
+model StationFuelAvailability {
+  id          String   @id @default(cuid())
+  stationId   String
+  station     Station  @relation(fields: [stationId], references: [id])
+  fuelType    FuelType
+  isAvailable Boolean  @default(true)
+  updatedBy   String? // userId
+  updatedAt   DateTime @updatedAt
+
+  @@unique([stationId, fuelType])
+}
+
+enum FuelType {
+  PETROL_95
+  DIESEL
+  KEROSENE // currently unused per client, but the enum stays open for the future
+}
+
+// Placeholder for the لجنة إعادة تنظيم المدن scope question — left unseeded until
+// docs/OPEN_ITEMS.md #4 is answered.
+model SecurityAuthority {
+  id       String    @id @default(cuid())
+  name     String    @unique // "مديرية أمن سبها", "الحرس البلدي", "الجمارك", ...
+  stations Station[]
+}
+
+// ── RBAC ──────────────────────────────────────────────────────────────
+
+model Role {
+  id                        String           @id @default(cuid())
+  name                      String           @unique // "station_employee", "station_supervisor", "directorate_admin", "system_admin"
+  description               String?
+  // Explicit, admin-managed "sees every station" flag. Never inferred from
+  // an empty UserStationScope list — a scoped role with zero assigned
+  // stations must see NOTHING, not everything. Only directorate-wide roles
+  // (directorate_admin, system_admin) get this set to true.
+  unrestrictedStationAccess Boolean          @default(false)
+  permissions               RolePermission[]
+  users                     UserRole[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique // "fillups:create", "fillups:approve_exception", "reports:view_all_stations"
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id                  String              @id @default(cuid())
+  username            String              @unique
+  passwordHash        String
+  fullName            String
+  phone               String?
+  isActive            Boolean             @default(true)
+  mustChangePassword  Boolean             @default(false)
+  failedLoginAttempts Int                 @default(0)
+  lockedUntil         DateTime?
+  roles               UserRole[]
+  stationScope        UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
+  refreshTokens       RefreshToken[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+// Station-scoped access — a station employee is restricted to their station(s) at the QUERY level, not just the UI.
+model UserStationScope {
+  userId    String
+  stationId String
+  user      User    @relation(fields: [userId], references: [id])
+  station   Station @relation(fields: [stationId], references: [id])
+
+  @@id([userId, stationId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String // never store the raw token
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ── Tunable business rules — the whole point of §3 ───────────────────
+
+model SystemSetting {
+  key         String   @id // "fillup.max_per_week", "fillup.min_gap_days", "fillup.week_start_day"
+  value       String // stored as string, parsed by the consuming service
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String // "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "APPROVE_EXCEPTION" ...
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
 }

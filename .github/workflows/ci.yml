@@ -8,6 +8,26 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      JWT_ACCESS_SECRET: "ci-only-secret-not-used-anywhere-real"
+      JWT_ACCESS_EXPIRES_IN: "15m"
+      JWT_REFRESH_EXPIRES_IN: "7d"
+      CORS_ORIGINS: "http://localhost:5173"
     steps:
       - uses: actions/checkout@v4
 
@@ -25,8 +45,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @fuel-tracking/api run prisma:generate
-        env:
-          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+
+      - name: Apply Prisma migrations
+        run: pnpm --filter @fuel-tracking/api exec prisma migrate deploy
 
       - name: Lint
         run: pnpm run lint
@@ -36,3 +57,6 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+      - name: E2E test (station-scoping boundary)
+        run: pnpm --filter @fuel-tracking/api run test:e2e
