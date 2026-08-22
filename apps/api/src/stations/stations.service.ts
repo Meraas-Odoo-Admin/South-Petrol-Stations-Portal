@@ -55,7 +55,7 @@ export class StationsService {
   async findAll(userId: string) {
     const scope = await this.rbac.getStationScope(userId);
     return this.prisma.station.findMany({
-      where: scope ? { id: { in: scope } } : undefined,
+      where: scope !== null ? { id: { in: scope } } : undefined,
       orderBy: { internalCode: 'asc' },
     });
   }
@@ -67,7 +67,7 @@ export class StationsService {
     }
 
     const scope = await this.rbac.getStationScope(userId);
-    if (scope && !scope.includes(station.id)) {
+    if (scope !== null && !scope.includes(station.id)) {
       // The station is real, but out of this user's scope. Guessing IDs
       // must not leak whether the station exists, but it also must not
       // succeed — 403, not the station's data.
