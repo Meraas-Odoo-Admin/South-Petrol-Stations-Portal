@@ -36,6 +36,11 @@ rules Claude Code (or any contributor) follows on this project, see
    docker compose -f infra/docker-compose.yml up -d
    ```
 
+   Postgres is exposed on host port **5433**, not the default 5432 — this
+   avoids colliding with any Postgres already running locally. Adminer
+   still connects to it as `postgres:5432` internally (the Docker network
+   hostname), so no change is needed there.
+
 4. Run the initial Prisma migration:
 
    ```sh

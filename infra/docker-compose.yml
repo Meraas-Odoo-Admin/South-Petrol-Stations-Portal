@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: fuel_tracking
       POSTGRES_DB: fuel_tracking
     ports:
-      - "5432:5432"
+      # Host 5433 -> container 5432: this machine already has a local Postgres
+      # bound to 5432, so this project stays off it deliberately.
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
