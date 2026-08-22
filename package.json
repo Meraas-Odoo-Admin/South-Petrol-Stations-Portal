@@ -1,0 +1,27 @@
+{
+  "name": "fuel-tracking-system",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter ./apps/* run dev",
+    "build:packages": "pnpm --filter @fuel-tracking/shared-types run build",
+    "build": "pnpm --recursive run build",
+    "lint": "pnpm run build:packages && pnpm --recursive run lint",
+    "typecheck": "pnpm run build:packages && pnpm --recursive run typecheck",
+    "test": "pnpm run build:packages && pnpm --recursive run test",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

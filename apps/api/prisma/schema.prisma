@@ -1,0 +1,20 @@
+// M0 scope: prove the database connection and migration flow work.
+// Domain models (Company, Station, User, RBAC, FillUpTransaction, ...) land in M1+.
+// See docs/IMPLEMENTATION_PLAN.md §4 for the full schema this will grow into.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Prisma requires at least one model to generate a client and to have
+// something for `prisma migrate dev` to migrate. This is infrastructure
+// only — not a domain entity — and is replaced by the real schema in M1.
+model SchemaProbe {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}
