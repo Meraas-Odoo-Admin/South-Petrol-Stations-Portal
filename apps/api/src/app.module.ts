@@ -11,6 +11,9 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
 import { StationsModule } from './stations/stations.module';
+import { DriversModule } from './drivers/drivers.module';
+import { OwnersModule } from './owners/owners.module';
+import { VehiclesModule } from './vehicles/vehicles.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './rbac/guards/permissions.guard';
 
@@ -33,6 +36,9 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     UsersModule,
     CompaniesModule,
     StationsModule,
+    DriversModule,
+    OwnersModule,
+    VehiclesModule,
     HealthModule,
   ],
   providers: [

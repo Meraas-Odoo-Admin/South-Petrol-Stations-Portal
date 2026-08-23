@@ -25,16 +25,40 @@ const PERMISSIONS = [
   { key: 'users:manage', description: 'Create/update users and station scope' },
   { key: 'roles:manage', description: 'Assign/remove roles' },
   { key: 'reports:view_all_stations', description: 'View directorate-wide reports' },
+  { key: 'drivers:manage', description: 'Create/update the driver registry' },
+  { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
+  { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes, driver associations' },
 ];
 
+// drivers:manage/owners:manage/vehicles:manage follow the same single-tier
+// pattern as users:manage (one permission gates read+write) rather than the
+// read/manage split used by companies:*/stations:*, since there's no
+// station-scoped "read" use case for this registry data yet.
+//
+// station_employee does NOT get these in M2: by analogy to stations:read
+// (the only thing station_employee currently holds), read access to this
+// registry is earned by a role that *manages* something, not by the role
+// that only records fill-ups. Fill-up creation (M3) will need drivers/
+// vehicles lookup from station_employee — deliberately left as a decision
+// for M3, since it may want a narrower, search-only permission rather than
+// full drivers:manage/vehicles:manage. See the M2 scoping report.
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   station_employee: ['stations:read'],
-  station_supervisor: ['stations:read', 'stations:manage'],
+  station_supervisor: [
+    'stations:read',
+    'stations:manage',
+    'drivers:manage',
+    'owners:manage',
+    'vehicles:manage',
+  ],
   directorate_admin: [
     'companies:read',
     'stations:read',
     'stations:manage',
     'reports:view_all_stations',
+    'drivers:manage',
+    'owners:manage',
+    'vehicles:manage',
   ],
   system_admin: PERMISSIONS.map((p) => p.key),
 };
