@@ -25,6 +25,11 @@ const PERMISSIONS = [
   { key: 'users:manage', description: 'Create/update users and station scope' },
   { key: 'roles:manage', description: 'Assign/remove roles' },
   { key: 'reports:view_all_stations', description: 'View directorate-wide reports' },
+  {
+    key: 'reports:view',
+    description:
+      'View per-station reports (daily report, violations list, driver/vehicle history)',
+  },
   { key: 'drivers:manage', description: 'Create/update the driver registry' },
   { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
   { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes, driver associations' },
@@ -67,12 +72,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:create',
     'fillups:update',
     'fillups:approve_exception',
+    // Supervisors review what their station recorded — same reasoning as
+    // fillups:approve_exception (employees record, supervisors review).
+    'reports:view',
   ],
   directorate_admin: [
     'companies:read',
     'stations:read',
     'stations:manage',
     'reports:view_all_stations',
+    'reports:view',
     'drivers:manage',
     'drivers:read',
     'owners:manage',
