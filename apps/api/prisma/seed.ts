@@ -28,6 +28,18 @@ const PERMISSIONS = [
   { key: 'drivers:manage', description: 'Create/update the driver registry' },
   { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
   { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes, driver associations' },
+  { key: 'drivers:read', description: 'Look up the driver registry (read-only)' },
+  { key: 'vehicles:read', description: 'Look up the vehicle registry (read-only)' },
+  { key: 'fillups:create', description: 'Record a fill-up, including one submitted with an exception' },
+  // Seeded for role-table completeness (docs/IMPLEMENTATION_PLAN.md §5 lists
+  // it against station_supervisor) — no endpoint uses it in M3.
+  // FillUpTransaction is append-only, same precedent as no-delete on
+  // stations/users/drivers/owners/vehicles and the insert-only audit log.
+  // What "editing" a fill-up would even mean (correcting a typo? voiding a
+  // bad entry?) isn't specified anywhere in the plan — needs a decision
+  // before anything is built against this permission.
+  { key: 'fillups:update', description: '(Unused in M3 — see comment above.)' },
+  { key: 'fillups:approve_exception', description: 'Approve a requested fill-up exception' },
 ];
 
 // drivers:manage/owners:manage/vehicles:manage follow the same single-tier
@@ -35,21 +47,26 @@ const PERMISSIONS = [
 // read/manage split used by companies:*/stations:*, since there's no
 // station-scoped "read" use case for this registry data yet.
 //
-// station_employee does NOT get these in M2: by analogy to stations:read
-// (the only thing station_employee currently holds), read access to this
-// registry is earned by a role that *manages* something, not by the role
-// that only records fill-ups. Fill-up creation (M3) will need drivers/
-// vehicles lookup from station_employee — deliberately left as a decision
-// for M3, since it may want a narrower, search-only permission rather than
-// full drivers:manage/vehicles:manage. See the M2 scoping report.
+// M3 resolves the gap M2 deliberately left open: GET /drivers and
+// GET /vehicles now require drivers:read/vehicles:read instead of the
+// :manage tier (recording a fill-up needs to look up an existing
+// driver/vehicle, not edit the registry). Every role that already held
+// :manage is granted the matching :read explicitly — PermissionsGuard
+// checks the exact permission string, not a tier hierarchy, so holding
+// :manage does not imply :read.
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  station_employee: ['stations:read'],
+  station_employee: ['stations:read', 'drivers:read', 'vehicles:read', 'fillups:create'],
   station_supervisor: [
     'stations:read',
     'stations:manage',
     'drivers:manage',
+    'drivers:read',
     'owners:manage',
     'vehicles:manage',
+    'vehicles:read',
+    'fillups:create',
+    'fillups:update',
+    'fillups:approve_exception',
   ],
   directorate_admin: [
     'companies:read',
@@ -57,8 +74,21 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:manage',
     'reports:view_all_stations',
     'drivers:manage',
+    'drivers:read',
     'owners:manage',
     'vehicles:manage',
+    'vehicles:read',
+    // Same as station_supervisor. The §5 role table only lists
+    // reports:view_all_stations for this role, but directorate_admin
+    // already holds manage-tier permissions in every other domain beyond
+    // what that table lists (companies:manage-adjacent reads,
+    // stations:manage, drivers:manage, owners:manage, vehicles:manage) —
+    // the table is "Example permissions", not an exhaustive spec (see the
+    // M3 review report). Withholding fillups:* alone would have been the
+    // inconsistent choice, not this.
+    'fillups:create',
+    'fillups:update',
+    'fillups:approve_exception',
   ],
   system_admin: PERMISSIONS.map((p) => p.key),
 };
@@ -74,6 +104,51 @@ const SYSTEM_SETTINGS = [
     key: 'fillup.min_gap_days',
     value: '2',
     description: 'Minimum days between two fill-ups for the same vehicle',
+  },
+  // PLACEHOLDER values (same numbers as the vehicle-level defaults) — the
+  // aggregate per-driver cap is a confirmed requirement (docs/OPEN_ITEMS.md:
+  // "Multi-vehicle drivers need both a per-vehicle cap and an aggregate
+  // per-driver cap") but the actual numbers, and even whether the two caps
+  // should be independent, are NOT confirmed. Change these rows, not code,
+  // once the client answers.
+  {
+    key: 'fillup.max_per_week_per_driver',
+    value: '3',
+    description: 'PLACEHOLDER — max fill-ups per driver per week, across all their vehicles',
+  },
+  {
+    key: 'fillup.min_gap_days_per_driver',
+    value: '2',
+    description: 'PLACEHOLDER — minimum days between two fill-ups for the same driver, across all their vehicles',
+  },
+  {
+    key: 'fillup.week_window_mode',
+    value: 'rolling',
+    description: "'rolling' (last 7 days) or 'fixed' (calendar week starting fillup.week_start_day)",
+  },
+  // Unused while week_window_mode = 'rolling'. Placeholder pending §13's
+  // still-open week-start-day question — 6 = Saturday, matching the Libyan
+  // work week, but not client-confirmed.
+  {
+    key: 'fillup.week_start_day',
+    value: '6',
+    description: 'PLACEHOLDER, unused while week_window_mode=rolling — 0=Sunday..6=Saturday',
+  },
+];
+
+// Synthetic placeholders so the exception approve flow has something to
+// test against — NOT the client-confirmed categories from docs/OPEN_ITEMS.md
+// #12/#13 (transit-traveler, medical), which are still pending.
+const EXCEPTION_TYPES = [
+  {
+    key: 'OTHER',
+    name: 'Other (synthetic placeholder — not a real client-confirmed category)',
+    requiresProof: true,
+  },
+  {
+    key: 'OTHER_NO_PROOF',
+    name: 'Other, no proof required (synthetic placeholder — not a real client-confirmed category)',
+    requiresProof: false,
   },
 ];
 
@@ -124,6 +199,15 @@ async function main() {
       where: { key: setting.key },
       create: setting,
       update: { value: setting.value, description: setting.description },
+    });
+  }
+
+  // ── Exception types ────────────────────────────────────────────────
+  for (const exceptionType of EXCEPTION_TYPES) {
+    await prisma.exceptionType.upsert({
+      where: { key: exceptionType.key },
+      create: exceptionType,
+      update: { name: exceptionType.name, requiresProof: exceptionType.requiresProof },
     });
   }
 

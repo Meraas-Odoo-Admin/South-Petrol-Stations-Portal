@@ -476,6 +476,8 @@ When a fill-up is rejected, the API returns the reason to the frontend, which of
 
 `getWeekWindow()` is intentionally abstracted — it's the one function that changes shape depending on whether the client confirms a fixed week-start-day or a rolling 7-day window (§13). Write both implementations behind the same interface now if you want to be ready either way; it's a small function.
 
+**Aggregate per-driver cap, and its interaction with the per-vehicle cap, is PROVISIONAL.** `docs/OPEN_ITEMS.md`'s resolved section confirms the client wants both a per-vehicle cap and an aggregate per-driver cap, but flags the mechanism as "implementation detail still to be finalized." M3 implements `FillUpRuleEngine.evaluate(vehicleId, driverId, occurredAt)` as four independent checks — vehicle gap, vehicle weekly cap, driver gap, driver weekly cap, in that order, first failure wins (`VEHICLE_GAP_TOO_SHORT` / `VEHICLE_WEEKLY_CAP_REACHED` / `DRIVER_GAP_TOO_SHORT` / `DRIVER_WEEKLY_CAP_REACHED`) — with the driver-level `SystemSetting` numbers (`fillup.max_per_week_per_driver`, `fillup.min_gap_days_per_driver`) seeded as placeholders at the same values as the vehicle-level ones. Neither the check order nor the fact that the two caps are independent (rather than combined into one number, or evaluated some other way) is client-confirmed — treat both as placeholders pending the final answer, not as a settled design.
+
 ---
 
 ## 7. API design conventions
