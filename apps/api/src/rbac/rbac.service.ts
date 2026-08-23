@@ -8,6 +8,14 @@ interface CacheEntry {
   expiresAt: number;
 }
 
+// KNOWN GAP (found in review, tracked for M2): isActive is cached under
+// this same TTL. There is currently no deactivate-user endpoint anywhere
+// in the codebase, so this has never been exercised outside a test that
+// manually calls invalidate(). When one is built, it MUST call
+// invalidate(userId) immediately after flipping isActive to false —
+// otherwise a deactivated user's still-valid access token keeps
+// authorizing requests for up to CACHE_TTL_MS, not "the next request".
+// Role/scope removal already does this correctly (see UsersService).
 const CACHE_TTL_MS = 30_000;
 
 @Injectable()
@@ -72,7 +80,10 @@ export class RbacService {
 
   // Roles/permissions/active-status changed for this user — drop the cached
   // bundle so the next request reflects it immediately instead of waiting
-  // out the TTL.
+  // out the TTL. Any code path that revokes access (role removal, station
+  // scope removal, and — when it's built — user deactivation) MUST call
+  // this right after the DB write, or the change only takes effect once
+  // the cache entry naturally expires (up to CACHE_TTL_MS later).
   invalidate(userId: string): void {
     this.cache.delete(userId);
   }
