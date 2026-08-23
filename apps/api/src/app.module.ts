@@ -16,6 +16,7 @@ import { OwnersModule } from './owners/owners.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { FillUpsModule } from './fillups/fillups.module';
+import { ReportsModule } from './reports/reports.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './rbac/guards/permissions.guard';
 
@@ -43,6 +44,7 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     VehiclesModule,
     SystemSettingsModule,
     FillUpsModule,
+    ReportsModule,
     HealthModule,
   ],
   providers: [
