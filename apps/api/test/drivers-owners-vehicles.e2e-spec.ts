@@ -50,7 +50,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
 
     prisma = moduleRef.get(PrismaService);
 
-    const driversPermission = await prisma.permission.upsert({
+    const driversManagePermission = await prisma.permission.upsert({
       where: { key: 'drivers:manage' },
       create: { key: 'drivers:manage' },
       update: {},
@@ -60,9 +60,22 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       create: { key: 'owners:manage' },
       update: {},
     });
-    const vehiclesPermission = await prisma.permission.upsert({
+    const vehiclesManagePermission = await prisma.permission.upsert({
       where: { key: 'vehicles:manage' },
       create: { key: 'vehicles:manage' },
+      update: {},
+    });
+    // GET /drivers and GET /vehicles are gated on :read, not :manage, as of
+    // M3 — holding :manage alone no longer satisfies them (PermissionsGuard
+    // checks the exact permission string, not a tier hierarchy).
+    const driversReadPermission = await prisma.permission.upsert({
+      where: { key: 'drivers:read' },
+      create: { key: 'drivers:read' },
+      update: {},
+    });
+    const vehiclesReadPermission = await prisma.permission.upsert({
+      where: { key: 'vehicles:read' },
+      create: { key: 'vehicles:read' },
       update: {},
     });
 
@@ -71,9 +84,11 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     managerRoleId = managerRole.id;
     await prisma.rolePermission.createMany({
       data: [
-        { roleId: managerRole.id, permissionId: driversPermission.id },
+        { roleId: managerRole.id, permissionId: driversManagePermission.id },
         { roleId: managerRole.id, permissionId: ownersPermission.id },
-        { roleId: managerRole.id, permissionId: vehiclesPermission.id },
+        { roleId: managerRole.id, permissionId: vehiclesManagePermission.id },
+        { roleId: managerRole.id, permissionId: driversReadPermission.id },
+        { roleId: managerRole.id, permissionId: vehiclesReadPermission.id },
       ],
     });
 

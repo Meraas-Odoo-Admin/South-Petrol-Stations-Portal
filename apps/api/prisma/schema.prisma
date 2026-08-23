@@ -1,6 +1,6 @@
 // M1 scope: Auth, RBAC, Users, Companies, Stations.
 // M2 scope: Drivers, VehicleOwners, Vehicles.
-// FillUpTransaction/Exception land in M3.
+// M3 scope: FillUpTransaction, ExceptionType, Exception.
 // See docs/IMPLEMENTATION_PLAN.md §4 for the full schema this will grow into.
 
 generator client {
@@ -35,6 +35,7 @@ model Station {
   securityAuthority   SecurityAuthority?        @relation(fields: [securityAuthorityId], references: [id])
   fuelAvailability    StationFuelAvailability[]
   userScopes          UserStationScope[]
+  fillUps             FillUpTransaction[]
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
 
@@ -121,6 +122,7 @@ model User {
   roles               UserRole[]
   stationScope        UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
   refreshTokens       RefreshToken[]
+  recordedFillUps     FillUpTransaction[] @relation("RecordedBy")
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 }
@@ -159,7 +161,7 @@ model RefreshToken {
 // ── Tunable business rules — the whole point of §3 ───────────────────
 
 model SystemSetting {
-  key         String   @id // "fillup.max_per_week", "fillup.min_gap_days", "fillup.week_start_day"
+  key         String   @id // "fillup.max_per_week", "fillup.min_gap_days", "fillup.week_start_day", "fillup.max_per_week_per_driver", "fillup.min_gap_days_per_driver", "fillup.week_window_mode"
   value       String // stored as string, parsed by the consuming service
   description String?
   updatedAt   DateTime @updatedAt
@@ -179,6 +181,7 @@ model Driver {
   fullName       String
   phone          String? // TBD — see docs/OPEN_ITEMS.md #7. Nullable until confirmed.
   vehicles       DriverVehicle[]
+  fillUps        FillUpTransaction[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -216,6 +219,7 @@ model Vehicle {
   owner           VehicleOwner?         @relation(fields: [ownerId], references: [id])
   plateHistory    VehiclePlateHistory[]
   drivers         DriverVehicle[]
+  fillUps         FillUpTransaction[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 }
@@ -241,6 +245,60 @@ model DriverVehicle {
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
 
   @@id([driverId, vehicleId])
+}
+
+// ── Fill-ups & Exceptions ────────────────────────────────────────────
+
+model FillUpTransaction {
+  id             String      @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle     @relation(fields: [vehicleId], references: [id])
+  driverId       String
+  driver         Driver      @relation(fields: [driverId], references: [id])
+  stationId      String
+  station        Station     @relation(fields: [stationId], references: [id])
+  fuelType       FuelType
+  quantityLiters Decimal
+  occurredAt     DateTime    @default(now())
+  recordedById   String
+  recordedBy     User        @relation("RecordedBy", fields: [recordedById], references: [id])
+  isException    Boolean     @default(false)
+  exception      Exception?
+  // Client retry key for POST /fillups — a flaky station connection retrying
+  // the same submission must resolve to the SAME row, never a duplicate.
+  idempotencyKey String      @unique
+  createdAt      DateTime    @default(now())
+
+  @@index([vehicleId, occurredAt]) // the rule engine's hottest query path
+  @@index([driverId, occurredAt])
+  @@index([stationId, occurredAt])
+}
+
+// Lookup table, not an enum — the client already surfaced two new exception
+// categories after the first questionnaire round. New categories must never
+// require a code change.
+model ExceptionType {
+  id            String      @id @default(cuid())
+  key           String      @unique // "medical_chronic", "transit_traveler", "government", "emergency"
+  name          String
+  requiresProof Boolean     @default(true)
+  isActive      Boolean     @default(true)
+  exceptions    Exception[]
+}
+
+model Exception {
+  id                  String            @id @default(cuid())
+  fillUpTransactionId String            @unique
+  fillUpTransaction   FillUpTransaction @relation(fields: [fillUpTransactionId], references: [id])
+  exceptionTypeId     String
+  exceptionType       ExceptionType     @relation(fields: [exceptionTypeId], references: [id])
+  reason              String
+  // Nullable: set only on approval, not at request time — a requested
+  // exception has no approver yet (see POST /fillups/:id/exceptions/approve).
+  approvedById        String?
+  proofReference      String?
+  validUntil          DateTime? // null = one-off; set = recurring exception with an expiry
+  createdAt           DateTime          @default(now())
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────

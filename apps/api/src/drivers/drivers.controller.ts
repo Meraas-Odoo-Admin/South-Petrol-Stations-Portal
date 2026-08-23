@@ -19,13 +19,13 @@ export class DriversController {
     return this.drivers.create(dto, actor.id);
   }
 
-  @RequirePermission('drivers:manage')
+  @RequirePermission('drivers:read')
   @Get()
   findAll(@Query() query: PaginationQueryDto) {
     return this.drivers.findAll(query);
   }
 
-  @RequirePermission('drivers:manage')
+  @RequirePermission('drivers:read')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.drivers.findOne(id);

@@ -21,13 +21,13 @@ export class VehiclesController {
     return this.vehicles.create(dto, actor.id);
   }
 
-  @RequirePermission('vehicles:manage')
+  @RequirePermission('vehicles:read')
   @Get()
   findAll(@Query() query: FindVehiclesQueryDto) {
     return this.vehicles.findAll(query);
   }
 
-  @RequirePermission('vehicles:manage')
+  @RequirePermission('vehicles:read')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.vehicles.findOne(id);

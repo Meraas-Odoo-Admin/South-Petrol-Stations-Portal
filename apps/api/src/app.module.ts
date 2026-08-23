@@ -14,6 +14,8 @@ import { StationsModule } from './stations/stations.module';
 import { DriversModule } from './drivers/drivers.module';
 import { OwnersModule } from './owners/owners.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
+import { FillUpsModule } from './fillups/fillups.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './rbac/guards/permissions.guard';
 
@@ -39,6 +41,8 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     DriversModule,
     OwnersModule,
     VehiclesModule,
+    SystemSettingsModule,
+    FillUpsModule,
     HealthModule,
   ],
   providers: [
