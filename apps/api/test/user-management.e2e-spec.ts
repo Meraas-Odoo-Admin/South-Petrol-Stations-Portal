@@ -47,6 +47,16 @@ describe('User management endpoints (e2e)', () => {
   // Populated by the "create a user" test itself, cleaned up in afterAll.
   let createdViaEndpointUserId: string | undefined;
 
+  // Explicit timeout, well over Jest's 5000ms default: a cold NestJS+Prisma
+  // bootstrap plus this fixture setup measured 320-916ms across several
+  // cold runs (fresh caches, restarted DB) in station-scoping.e2e-spec.ts,
+  // but a prior run of that same suite genuinely blew past 5000ms on a
+  // one-off external stall — Jest gave up mid-hook and moved on to
+  // afterAll while the original beforeAll kept running unattended in the
+  // background, leaving orphaned rows in the DB with no LOGIN audit trail
+  // (proving no test ever ran) once it finally finished. 30s gives real
+  // headroom over the ~1s typical cost without masking a genuine hang for
+  // minutes. Applied here too since this suite bootstraps the same way.
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -160,7 +170,7 @@ describe('User management endpoints (e2e)', () => {
     await prisma.userStationScope.create({
       data: { userId: scopeRemoveTarget.id, stationId: stationA.id },
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     const allUserIds = [

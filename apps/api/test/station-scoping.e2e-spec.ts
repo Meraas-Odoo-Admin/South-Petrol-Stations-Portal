@@ -34,6 +34,15 @@ describe('Station scoping boundary (e2e)', () => {
   let unrestrictedUserId: string;
   let unrestrictedRoleId: string;
 
+  // Explicit timeout, well over Jest's 5000ms default: a cold NestJS+Prisma
+  // bootstrap plus this fixture setup measured 320-916ms across several
+  // cold runs (fresh caches, restarted DB), but a prior run genuinely blew
+  // past 5000ms on a one-off external stall — Jest gave up mid-hook and
+  // moved on to afterAll while the original beforeAll kept running
+  // unattended in the background, leaving orphaned rows in the DB with no
+  // LOGIN audit trail (proving no test ever ran) once it finally finished.
+  // 30s gives real headroom over the ~1s typical cost without masking a
+  // genuine hang for minutes.
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -174,7 +183,7 @@ describe('Station scoping boundary (e2e)', () => {
     });
     unrestrictedUserId = unrestrictedUser.id;
     await prisma.userRole.create({ data: { userId: unrestrictedUser.id, roleId: unrestrictedRole.id } });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     const allUserIds = [employeeUserId, supervisorUserId, noScopeUserId, unrestrictedUserId];
