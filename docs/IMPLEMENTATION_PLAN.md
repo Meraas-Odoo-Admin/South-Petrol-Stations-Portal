@@ -410,8 +410,12 @@ export class PermissionsGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const required = this.reflector.get<string[]>('permissions', ctx.getHandler());
-    if (!required) return true;
+    // No @RequirePermission and no @Public marker on this route = fail
+    // closed. A route that forgot to declare either must not silently
+    // become public.
+    if (!required) throw new ForbiddenException();
     const { user } = ctx.switchToHttp().getRequest();
+    if (!(await this.rbac.isUserActive(user.id))) throw new UnauthorizedException();
     const userPermissions = await this.rbac.getPermissionsForUser(user.id); // cached
     return required.every(p => userPermissions.has(p));
   }
@@ -432,7 +436,7 @@ Seed four starting roles (matching what's already been discussed with the client
 | `directorate_admin` | `reports:view_all_stations` |
 | `system_admin` | all permissions, `users:manage`, `roles:manage` |
 
-**Station scoping is enforced in the service layer, not the controller.** Every repository method that lists or reads fill-ups must intersect the query with the caller's `UserStationScope` (empty scope = no restriction, for directorate-wide roles). This is the difference between "the UI hides other stations" and "a station employee literally cannot fetch another station's data even by guessing an ID" (an IDOR fix, not a UX nicety).
+**Station scoping is enforced in the service layer, not the controller.** Every repository method that lists or reads fill-ups must intersect the query with the caller's `UserStationScope`. **"Sees every station" is an explicit, admin-managed flag — `Role.unrestrictedStationAccess` — never inferred from an empty scope list.** A scoped role (`station_employee`, `station_supervisor`) with zero `UserStationScope` rows must see *nothing*, not everything: an employee who hasn't been assigned a station yet, or who just had their last one removed, is not the same thing as a directorate-wide role. Only roles with `unrestrictedStationAccess: true` (`directorate_admin`, `system_admin`) bypass the scope check entirely; every other role gets the exact (possibly empty) list of station IDs from `UserStationScope`. This is the difference between "the UI hides other stations" and "a station employee literally cannot fetch another station's data even by guessing an ID" (an IDOR fix, not a UX nicety) — and it's also the fix for a real bug caught in review: treating an empty scope list as "unrestricted" instead of "access to nothing" briefly shipped in M1 before being caught and corrected.
 
 ---
 
