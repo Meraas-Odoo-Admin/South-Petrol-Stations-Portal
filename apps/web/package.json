@@ -8,15 +8,25 @@
     "build": "tsc --noEmit && vite build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"no tests yet\" && exit 0",
+    "test": "echo \"no unit/component tests yet — see test:e2e\" && exit 0",
+    "test:e2e": "playwright test",
+    "test:e2e:typecheck": "tsc -p e2e/tsconfig.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
     "@fuel-tracking/shared-types": "workspace:*",
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.101.4",
+    "axios": "^1.19.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.86.0",
+    "react-router-dom": "^7.18.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.20.1",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

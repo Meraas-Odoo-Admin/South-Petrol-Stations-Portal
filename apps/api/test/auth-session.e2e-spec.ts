@@ -33,10 +33,17 @@ describe('Auth session lifecycle (e2e)', () => {
   const usernameRefresh = `e2e_auth_refresh_${runId}`;
   const usernameLogout = `e2e_auth_logout_${runId}`;
   const usernameLockout = `e2e_auth_lockout_${runId}`;
+  const usernameMe = `e2e_auth_me_${runId}`;
+  const usernameChangePw = `e2e_auth_changepw_${runId}`;
 
   let refreshUserId: string;
   let logoutUserId: string;
   let lockoutUserId: string;
+  let meUserId: string;
+  let changePwUserId: string;
+  let meRoleId: string;
+  let meStation: { id: string; internalCode: string; name: string };
+  let meCompanyId: string;
 
   // See station-scoping.e2e-spec.ts / user-management.e2e-spec.ts for why
   // this is 30s and not Jest's 5000ms default.
@@ -71,13 +78,42 @@ describe('Auth session lifecycle (e2e)', () => {
 
     const lockoutUser = await createUser(usernameLockout);
     lockoutUserId = lockoutUser.id;
+
+    // ── Fixtures for GET /auth/me ────────────────────────────────────────
+    const company = await prisma.company.create({ data: { name: `E2E Auth Me Company ${runId}` } });
+    meCompanyId = company.id;
+    meStation = await prisma.station.create({
+      data: { internalCode: `E2E-AUTH-ME-${runId}`, stationNumber: '1', name: 'E2E Auth Me Station', companyId: company.id },
+    });
+    const mePermission = await prisma.permission.upsert({
+      where: { key: 'stations:read' },
+      create: { key: 'stations:read' },
+      update: {},
+    });
+    const meRole = await prisma.role.create({ data: { name: `e2e_auth_me_role_${runId}` } });
+    meRoleId = meRole.id;
+    await prisma.rolePermission.create({ data: { roleId: meRole.id, permissionId: mePermission.id } });
+
+    const meUser = await createUser(usernameMe);
+    meUserId = meUser.id;
+    await prisma.userRole.create({ data: { userId: meUser.id, roleId: meRole.id } });
+    await prisma.userStationScope.create({ data: { userId: meUser.id, stationId: meStation.id } });
+
+    const changePwUser = await createUser(usernameChangePw);
+    changePwUserId = changePwUser.id;
   }, 30_000);
 
   afterAll(async () => {
-    const allUserIds = [refreshUserId, logoutUserId, lockoutUserId];
+    const allUserIds = [refreshUserId, logoutUserId, lockoutUserId, meUserId, changePwUserId];
     await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
+    await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
+    await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
+    await prisma.rolePermission.deleteMany({ where: { roleId: meRoleId } });
+    await prisma.role.delete({ where: { id: meRoleId } });
+    await prisma.station.delete({ where: { id: meStation.id } });
+    await prisma.company.delete({ where: { id: meCompanyId } });
     await app.close();
   });
 
@@ -210,5 +246,106 @@ describe('Auth session lifecycle (e2e)', () => {
     const unlockedUser = await prisma.user.findUniqueOrThrow({ where: { id: lockoutUserId } });
     expect(unlockedUser.failedLoginAttempts).toBe(0);
     expect(unlockedUser.lockedUntil).toBeNull();
+  });
+
+  // ── GET /auth/me ─────────────────────────────────────────────────────
+  // The frontend's one source of truth for "who am I / what can I do" —
+  // permissions otherwise only ever exist server-side, checked per-request.
+
+  it('rejects GET /auth/me with no access token', async () => {
+    await request(app.getHttpServer()).get('/api/v1/auth/me').expect(401);
+  });
+
+  it('returns the caller\'s own identity, roles, permissions, and station scope', async () => {
+    const pair = await authService.issueTokenPair(meUserId, usernameMe);
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .expect(200);
+
+    expect(res.body.id).toBe(meUserId);
+    expect(res.body.username).toBe(usernameMe);
+    expect(res.body.mustChangePassword).toBe(false);
+    expect(res.body.roles).toEqual([`e2e_auth_me_role_${runId}`]);
+    expect(res.body.permissions).toEqual(['stations:read']);
+    expect(res.body.stationScope).toEqual([
+      { stationId: meStation.id, internalCode: meStation.internalCode, name: meStation.name },
+    ]);
+    // Never leaked, same precedent as every other user-facing endpoint.
+    expect(res.body.passwordHash).toBeUndefined();
+  });
+
+  // ── POST /auth/change-password ───────────────────────────────────────
+
+  it('rejects /auth/change-password with no access token', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/change-password')
+      .send({ currentPassword: password, newPassword: 'NewPassword123!' })
+      .expect(401);
+  });
+
+  it('rejects the wrong currentPassword, and rejects a newPassword shorter than 8 characters', async () => {
+    const pair = await authService.issueTokenPair(changePwUserId, usernameChangePw);
+    const server = app.getHttpServer();
+
+    await request(server)
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .send({ currentPassword: 'WrongCurrentPassword!', newPassword: 'NewPassword123!' })
+      .expect(401);
+
+    await request(server)
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .send({ currentPassword: password, newPassword: 'short' })
+      .expect(400);
+
+    const unchangedUser = await prisma.user.findUniqueOrThrow({ where: { id: changePwUserId } });
+    expect(await argon2.verify(unchangedUser.passwordHash, password)).toBe(true);
+  });
+
+  it('changes the password, clears mustChangePassword, revokes every existing refresh token, and lets the SAME session continue via a freshly issued pair', async () => {
+    const server = app.getHttpServer();
+    const newPassword = 'BrandNewPassword456!';
+
+    // A second, independent session for this user — proves "revoke every
+    // refresh token" is not scoped to only the one making this request.
+    const otherSessionPair = await authService.issueTokenPair(changePwUserId, usernameChangePw);
+    const otherSessionTokenHash = createHash('sha256').update(otherSessionPair.refreshToken).digest('hex');
+
+    const pair = await authService.issueTokenPair(changePwUserId, usernameChangePw);
+
+    const res = await request(server)
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .send({ currentPassword: password, newPassword })
+      .expect(200);
+    expect(typeof res.body.accessToken).toBe('string');
+
+    const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: changePwUserId } });
+    expect(updatedUser.mustChangePassword).toBe(false);
+    expect(await argon2.verify(updatedUser.passwordHash, newPassword)).toBe(true);
+    expect(await argon2.verify(updatedUser.passwordHash, password)).toBe(false);
+
+    // The OTHER session's refresh token is now revoked — "forces re-login
+    // on other sessions/devices".
+    const otherSessionRow = await prisma.refreshToken.findFirst({
+      where: { tokenHash: otherSessionTokenHash },
+    });
+    expect(otherSessionRow?.revokedAt).not.toBeNull();
+
+    // But THIS request's own session can "proceed normally": the new
+    // accessToken from the response works immediately, without a fresh
+    // login.
+    await request(server)
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${res.body.accessToken}`)
+      .expect(200);
+
+    const auditRow = await prisma.auditLog.findFirst({
+      where: { userId: changePwUserId, action: 'CHANGE_PASSWORD' },
+    });
+    expect(auditRow).toBeDefined();
   });
 });

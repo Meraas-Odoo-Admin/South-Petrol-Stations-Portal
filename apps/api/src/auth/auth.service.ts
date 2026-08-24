@@ -5,6 +5,7 @@ import * as argon2 from 'argon2';
 import { randomBytes, createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { RbacService } from '../rbac/rbac.service';
 import { parseDurationToMs } from '../common/utils/duration';
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly audit: AuditService,
+    private readonly rbac: RbacService,
   ) {}
 
   async validateCredentials(username: string, password: string, ipAddress?: string) {
@@ -144,5 +146,81 @@ export class AuthService {
       entityType: 'RefreshToken',
       entityId: existing.id,
     });
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<TokenPair> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const currentPasswordValid = await argon2.verify(user.passwordHash, currentPassword);
+    if (!currentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect.');
+    }
+
+    const passwordHash = await argon2.hash(newPassword);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: false },
+      });
+
+      // Revokes every RefreshToken row for this user, including the one
+      // backing the very request that's calling this method — "forces
+      // re-login on other sessions/devices" per the M4 instructions.
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      await this.audit.log(
+        { userId, action: 'CHANGE_PASSWORD', entityType: 'User', entityId: userId },
+        tx,
+      );
+    });
+
+    // The instructions also require the mustChangePassword frontend flow
+    // to "proceed normally" right after this call succeeds — which isn't
+    // possible if THIS session's own refresh token was just revoked above
+    // along with everyone else's. Issuing a fresh pair here (same as
+    // login/refresh) resolves that: this session keeps working
+    // immediately, while every OTHER session's now-revoked token fails on
+    // its next refresh attempt.
+    return this.issueTokenPair(user.id, user.username);
+  }
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: { include: { role: true } },
+        stationScope: { include: { station: true } },
+      },
+    });
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const permissions = await this.rbac.getPermissionsForUser(userId);
+
+    return {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      mustChangePassword: user.mustChangePassword,
+      roles: user.roles.map((userRole) => userRole.role.name),
+      permissions: [...permissions],
+      stationScope: user.stationScope.map((scope) => ({
+        stationId: scope.stationId,
+        internalCode: scope.station.internalCode,
+        name: scope.station.name,
+      })),
+    };
   }
 }
