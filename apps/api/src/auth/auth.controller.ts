@@ -1,9 +1,10 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, TokenPair } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -63,6 +64,29 @@ export class AuthController {
       await this.auth.logout(raw, user.id);
     }
     res.clearCookie(REFRESH_COOKIE_NAME, REFRESH_COOKIE_OPTIONS);
+  }
+
+  @RequirePermission()
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const pair = await this.auth.changePassword(user.id, dto.currentPassword, dto.newPassword);
+    this.setRefreshCookie(res, pair);
+    return { accessToken: pair.accessToken };
+  }
+
+  // No specific permission beyond being authenticated — this is every
+  // user's own "who am I" lookup, the frontend's one source of truth for
+  // current user + permissions (they're otherwise only ever checked
+  // server-side, per request).
+  @RequirePermission()
+  @Get('me')
+  getMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.auth.getMe(user.id);
   }
 
   private setRefreshCookie(res: Response, pair: TokenPair) {
