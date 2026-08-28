@@ -16,6 +16,11 @@ export function Layout() {
       <nav className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 px-4 py-3 text-white">
         <div className="flex flex-wrap items-center gap-4">
           <span className="font-bold">منظومة تتبع تعبئة الوقود</span>
+          {hasPermission('fillups:create') && (
+            <NavLink to="/fillups/new" className={navLinkClass}>
+              تسجيل تعبئة
+            </NavLink>
+          )}
           {hasPermission('reports:view_all_stations') && (
             <NavLink to="/reports/dashboard" className={navLinkClass}>
               لوحة المتابعة
@@ -29,10 +34,32 @@ export function Layout() {
               <NavLink to="/reports/violations" className={navLinkClass}>
                 المخالفات
               </NavLink>
-              <NavLink to="/lookup" className={navLinkClass}>
-                بحث سائق/مركبة
-              </NavLink>
             </>
+          )}
+          {hasPermission('stations:read') && (
+            <NavLink to="/stations" className={navLinkClass}>
+              المحطات
+            </NavLink>
+          )}
+          {hasPermission('vehicles:read') && (
+            <NavLink to="/vehicles" className={navLinkClass}>
+              المركبات
+            </NavLink>
+          )}
+          {hasPermission('drivers:read') && (
+            <NavLink to="/drivers" className={navLinkClass}>
+              السائقون
+            </NavLink>
+          )}
+          {hasPermission('vehicles:approve_change') && (
+            <NavLink to="/vehicles/change-requests" className={navLinkClass}>
+              طلبات تعديل المركبات
+            </NavLink>
+          )}
+          {hasPermission('users:manage') && (
+            <NavLink to="/admin" className={navLinkClass}>
+              الإدارة
+            </NavLink>
           )}
         </div>
         <div className="flex items-center gap-3">

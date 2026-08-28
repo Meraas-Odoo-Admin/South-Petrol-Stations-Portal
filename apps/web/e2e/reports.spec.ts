@@ -33,12 +33,14 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   await expect(maskedField).toContainText(last4);
   await expect(maskedField).not.toHaveText(fixtures.driverIdentityNumber);
 
-  // Export: their own station is auto-filled (scoped, read-only) —
-  // shown as a disabled <input>'s VALUE, not text content, hence
-  // toHaveValue() rather than getByText(). Exporting must trigger a real
-  // file download, not just render a button.
+  // Export: their own station is auto-selected in a disabled <select>
+  // (GET /stations-backed StationSelect, not a free-text input — see this
+  // phase's item 2 fix) — the selected <option>'s label carries the
+  // internalCode, not the element's value (that's the stationId).
+  // Exporting must trigger a real file download, not just render a button.
   await page.goto('/reports/daily');
-  await expect(page.locator('input[disabled]')).toHaveValue(
+  const stationSelect = page.locator('select[disabled]');
+  await expect(stationSelect.locator('option:checked')).toHaveText(
     new RegExp(fixtures.stationInternalCode),
   );
   const [download] = await Promise.all([

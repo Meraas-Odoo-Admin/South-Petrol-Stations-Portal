@@ -14,6 +14,8 @@ export interface Fixtures {
   driverId: string;
   driverFullName: string;
   driverIdentityNumber: string;
+  vehicleId: string;
+  vehicleCurrentPlate: string;
   supervisorUsername: string;
   supervisorPassword: string;
   supervisorUserId: string;

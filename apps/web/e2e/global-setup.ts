@@ -26,9 +26,12 @@ interface Fixtures {
   driverId: string;
   driverFullName: string;
   driverIdentityNumber: string;
+  vehicleId: string;
+  vehicleCurrentPlate: string;
   supervisorUsername: string;
   supervisorPassword: string;
   supervisorUserId: string;
+  originalSupervisorStationIds: string[];
   adminUsername: string;
   adminPassword: string;
   needsChangeUsername: string;
@@ -67,6 +70,20 @@ async function login(username: string, password: string, attempt = 1): Promise<{
 
 async function main() {
   const runId = Date.now().toString(36);
+  // This phase added class-validator format enforcement for
+  // identityNumber/currentPlate (see
+  // apps/api/src/common/validators/libyan-formats.ts) — runId's base36
+  // alphabet can contain letters, which no longer passes, so fixtures that
+  // need to look like real Libyan documents use random digit strings
+  // instead. Station/company/vehicle internalCode fields have no format
+  // constraint, so they keep using the original alphanumeric runId.
+  // RANDOM, not a Date.now()-derived modulo — a `Date.now() % 1_000_000`
+  // version of this genuinely collided with a leftover row from an
+  // earlier run within one dev session (it repeats every ~16.7 minutes;
+  // there are no DELETE endpoints, so old fixture rows never go away).
+  const randomDigits = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
+  const numericId11 = randomDigits(11); // fills identityNumber's 11 digits after the type prefix
+  const plateSeq = randomDigits(7);
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
   // sysadmin1 has every permission and unrestrictedStationAccess — used
@@ -92,7 +109,7 @@ async function main() {
     { headers: sysadminHeaders },
   );
 
-  const driverIdentityNumber = `119${runId}2345`;
+  const driverIdentityNumber = `1${numericId11}`;
   const driver = await axios.post(
     `${API_BASE}/drivers`,
     {
@@ -105,7 +122,7 @@ async function main() {
 
   const vehicle = await axios.post(
     `${API_BASE}/vehicles`,
-    { internalCode: `PW-VEH-${runId}`, currentPlate: `PW-PLATE-${runId}` },
+    { internalCode: `PW-VEH-${runId}`, currentPlate: `5-${plateSeq}` },
     { headers: sysadminHeaders },
   );
 
@@ -135,17 +152,21 @@ async function main() {
     throw new Error('Expected seeded users supervisor1/admin1 not found — was prisma db seed run?');
   }
 
-  // Clear any station scopes left over from a PRIOR run of this suite —
-  // e.g. one where global-teardown didn't get a chance to remove them
-  // (crashed, or hit an unretried 429 before retry-with-backoff was
-  // added). DailyReportPage renders user.stationScope[0], so a stale
-  // extra scope from an old run makes the test assert against the WRONG
-  // station and fail confusingly. Always start this run from zero.
+  // Clear supervisor1's station scope(s) so this run starts from exactly
+  // one (the fixture station below) — DailyReportPage renders
+  // user.stationScope[0], so more than one scope makes the test assert
+  // against the WRONG station and fail confusingly. This now legitimately
+  // includes prisma/seed.ts's own scope (supervisor1 is seeded with a
+  // station scope as of this phase — see seed.ts), not just leftovers from
+  // a crashed prior run, so the cleared scopes are snapshotted here and
+  // restored in global-teardown.ts rather than discarded — otherwise every
+  // Playwright run would silently undo the seed fixture.
   const supervisorDetail = await axios.get<{
     stationScope: Array<{ stationId: string }>;
   }>(`${API_BASE}/users/${supervisorUser.id}`, { headers: sysadminHeaders });
-  for (const scope of supervisorDetail.data.stationScope) {
-    await axios.delete(`${API_BASE}/users/${supervisorUser.id}/station-scope/${scope.stationId}`, {
+  const originalSupervisorStationIds = supervisorDetail.data.stationScope.map((s) => s.stationId);
+  for (const stationId of originalSupervisorStationIds) {
+    await axios.delete(`${API_BASE}/users/${supervisorUser.id}/station-scope/${stationId}`, {
       headers: sysadminHeaders,
     });
   }
@@ -202,9 +223,12 @@ async function main() {
     driverId: driver.data.id,
     driverFullName: driver.data.fullName,
     driverIdentityNumber,
+    vehicleId: vehicle.data.id,
+    vehicleCurrentPlate: vehicle.data.currentPlate,
     supervisorUsername: 'supervisor1',
     supervisorPassword: TEMP_PASSWORD,
     supervisorUserId: supervisorUser.id,
+    originalSupervisorStationIds,
     adminUsername: 'admin1',
     adminPassword: TEMP_PASSWORD,
     needsChangeUsername,

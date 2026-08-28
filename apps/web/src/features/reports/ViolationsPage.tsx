@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ReportExportFormat,
   ViolationStatus,
@@ -9,15 +9,31 @@ import { apiClient } from '../../lib/apiClient';
 import { downloadBlob } from '../../lib/download';
 import { useAuth } from '../auth/AuthProvider';
 import { maskIdentityNumber } from '../../lib/masking';
+import { formatLicensePlate } from '../../lib/libyanFormats';
 import { Pagination } from '../../components/Pagination';
+import { StationSelect } from '../../components/StationSelect';
+import { LtrText } from '../../components/LtrText';
+import { PageHeader } from '../../components/design/PageHeader';
+import { Card } from '../../components/design/Card';
+import { PillButton } from '../../components/design/PillButton';
+import { StatusPill } from '../../components/design/StatusPill';
+import { CodeText } from '../../components/design/CodeText';
+import { TriggerDetail } from '../fillups/RecordFillUpPage';
+import { RULE_VIOLATION_MESSAGES } from '../fillups/ruleViolationMessages';
+import type { RuleFailureReason } from '@fuel-tracking/shared-types';
 
 const TAKE = 20;
+
+const selectClass =
+  'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
 
 export function ViolationsPage() {
   const { user, hasPermission } = useAuth();
   const canViewAllStations = hasPermission('reports:view_all_stations');
+  const canApprove = hasPermission('fillups:approve_exception');
   const ownStation = user?.stationScope[0] ?? null;
   const permissions = user?.permissions ?? [];
+  const queryClient = useQueryClient();
 
   const [stationId, setStationId] = useState(canViewAllStations ? '' : (ownStation?.stationId ?? ''));
   const [from, setFrom] = useState('');
@@ -63,118 +79,143 @@ export function ViolationsPage() {
     };
   }
 
+  const approveMutation = useMutation({
+    mutationFn: (fillUpTransactionId: string) =>
+      apiClient.post(`/fillups/${fillUpTransactionId}/exceptions/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reports', 'violations'] });
+    },
+  });
+
   return (
     <div>
-      <h1 className="mb-4 text-lg font-bold text-slate-900">المخالفات / الاستثناءات</h1>
+      <PageHeader
+        title="المخالفات / الاستثناءات"
+        actions={
+          <>
+            <PillButton variant="secondary" size="sm" onClick={() => handleExport('xlsx')} disabled={exporting !== null}>
+              {exporting === 'xlsx' ? '...' : 'تصدير Excel'}
+            </PillButton>
+            <PillButton size="sm" onClick={() => handleExport('pdf')} disabled={exporting !== null}>
+              {exporting === 'pdf' ? '...' : 'تصدير PDF'}
+            </PillButton>
+          </>
+        }
+      />
 
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-sm text-slate-600">المحطة</label>
-          {canViewAllStations ? (
-            <input
-              value={stationId}
-              onChange={(e) => resetPageAnd(setStationId)(e.target.value)}
-              placeholder="جميع المحطات"
-              className="w-64 rounded border border-slate-300 px-2 py-1"
-            />
-          ) : (
-            <input
-              value={ownStation ? `${ownStation.internalCode} — ${ownStation.name}` : 'لا توجد محطة'}
-              disabled
-              className="w-64 rounded border border-slate-300 bg-slate-100 px-2 py-1 text-slate-500"
-            />
-          )}
+      <Card className="mb-4 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-ink-soft">المحطة</label>
+            {canViewAllStations ? (
+              <StationSelect value={stationId} onChange={resetPageAnd(setStationId)} allowAllOption className={`w-52 ${selectClass}`} />
+            ) : (
+              <StationSelect value={stationId} onChange={resetPageAnd(setStationId)} disabled className={`w-52 ${selectClass}`} />
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-ink-soft">من تاريخ</label>
+            <input type="date" value={from} onChange={(e) => resetPageAnd(setFrom)(e.target.value)} className={selectClass} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-ink-soft">إلى تاريخ</label>
+            <input type="date" value={to} onChange={(e) => resetPageAnd(setTo)(e.target.value)} className={selectClass} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-ink-soft">الحالة</label>
+            <select
+              value={status}
+              onChange={(e) => resetPageAnd(setStatus)(e.target.value as ViolationStatus)}
+              className={selectClass}
+            >
+              <option value="all">الكل</option>
+              <option value="pending">قيد الانتظار</option>
+              <option value="approved">معتمدة</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-sm text-slate-600">من تاريخ</label>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => resetPageAnd(setFrom)(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm text-slate-600">إلى تاريخ</label>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => resetPageAnd(setTo)(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm text-slate-600">الحالة</label>
-          <select
-            value={status}
-            onChange={(e) => resetPageAnd(setStatus)(e.target.value as ViolationStatus)}
-            className="rounded border border-slate-300 px-2 py-1"
-          >
-            <option value="all">الكل</option>
-            <option value="pending">قيد الانتظار</option>
-            <option value="approved">معتمدة</option>
-          </select>
-        </div>
-        <button
-          type="button"
-          onClick={() => handleExport('xlsx')}
-          disabled={exporting !== null}
-          className="rounded bg-emerald-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          {exporting === 'xlsx' ? '...' : 'تصدير Excel'}
-        </button>
-        <button
-          type="button"
-          onClick={() => handleExport('pdf')}
-          disabled={exporting !== null}
-          className="rounded bg-rose-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          {exporting === 'pdf' ? '...' : 'تصدير PDF'}
-        </button>
-      </div>
+      </Card>
 
-      {isLoading && <p className="text-slate-500">...جارٍ التحميل</p>}
-      {isError && <p className="text-red-600">تعذر تحميل المخالفات.</p>}
+      {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isError && <p className="text-[13px] text-danger">تعذر تحميل المخالفات.</p>}
+      {approveMutation.isError && <p className="mb-2 text-[13px] text-danger">تعذر اعتماد الاستثناء.</p>}
 
       {data && (
-        <>
-          <table className="w-full border-collapse text-sm">
+        <Card>
+          <table className="w-full text-[12.5px]">
             <thead>
-              <tr className="border-b border-slate-300">
-                <th className="p-2 text-start">التاريخ</th>
-                <th className="p-2 text-start">المحطة</th>
-                <th className="p-2 text-start">المركبة</th>
-                <th className="p-2 text-start">السائق</th>
-                <th className="p-2 text-start">رقم الهوية</th>
-                <th className="p-2 text-start">نوع الاستثناء</th>
-                <th className="p-2 text-start">الحالة</th>
+              <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                <th className="px-[18px] py-2.5 text-start">التاريخ</th>
+                <th className="px-[18px] py-2.5 text-start">المحطة</th>
+                <th className="px-[18px] py-2.5 text-start">المركبة</th>
+                <th className="px-[18px] py-2.5 text-start">السائق</th>
+                <th className="px-[18px] py-2.5 text-start">رقم الهوية</th>
+                <th className="px-[18px] py-2.5 text-start">نوع الاستثناء</th>
+                <th className="px-[18px] py-2.5 text-start">سبب المخالفة (تشخيص النظام)</th>
+                <th className="px-[18px] py-2.5 text-start">الحالة</th>
+                {canApprove && <th className="px-[18px] py-2.5 text-start"></th>}
               </tr>
             </thead>
             <tbody>
               {data.rows.map((row) => (
-                <tr key={row.id} className="border-b border-slate-100">
-                  <td className="p-2">{new Date(row.fillUpTransaction.occurredAt).toLocaleString('ar')}</td>
-                  <td className="p-2">{row.fillUpTransaction.station.internalCode}</td>
-                  <td className="p-2">{row.fillUpTransaction.vehicle.currentPlate}</td>
-                  <td className="p-2">{row.fillUpTransaction.driver.fullName}</td>
-                  <td className="p-2">
-                    {maskIdentityNumber(row.fillUpTransaction.driver.identityNumber, permissions)}
+                <tr key={row.id} className="border-b border-surface-alt align-top last:border-0">
+                  <td className="px-[18px] py-3">
+                    <CodeText>{new Date(row.fillUpTransaction.occurredAt).toLocaleString('en-GB')}</CodeText>
                   </td>
-                  <td className="p-2">{row.exceptionType.name}</td>
-                  <td className="p-2">{row.approvedById ? 'معتمدة' : 'قيد الانتظار'}</td>
+                  <td className="px-[18px] py-3">{row.fillUpTransaction.station.internalCode}</td>
+                  <td className="px-[18px] py-3">
+                    <LtrText>{formatLicensePlate(row.fillUpTransaction.vehicle.currentPlate)}</LtrText>
+                  </td>
+                  <td className="px-[18px] py-3 font-medium text-ink">{row.fillUpTransaction.driver.fullName}</td>
+                  <td className="px-[18px] py-3">
+                    <LtrText>{maskIdentityNumber(row.fillUpTransaction.driver.identityNumber, permissions)}</LtrText>
+                  </td>
+                  <td className="px-[18px] py-3">{row.exceptionType.name}</td>
+                  <td className="px-[18px] py-3">
+                    {row.triggerReason ? (
+                      <>
+                        <p className="text-ink">{RULE_VIOLATION_MESSAGES[row.triggerReason as RuleFailureReason] ?? row.triggerReason}</p>
+                        <TriggerDetail trigger={row.triggerDetail} />
+                      </>
+                    ) : (
+                      <span className="text-ink-faint">—</span>
+                    )}
+                  </td>
+                  <td className="px-[18px] py-3">
+                    <StatusPill variant={row.approvedById ? 'ok' : 'accent'}>
+                      {row.approvedById ? 'معتمدة' : 'قيد الانتظار'}
+                    </StatusPill>
+                  </td>
+                  {canApprove && (
+                    <td className="px-[18px] py-3">
+                      {!row.approvedById && (
+                        <PillButton
+                          data-testid="approve-exception-button"
+                          size="sm"
+                          onClick={() => approveMutation.mutate(row.fillUpTransactionId)}
+                          disabled={approveMutation.isPending}
+                          className="!bg-ok !text-white !border-0 !shadow-none"
+                        >
+                          اعتماد
+                        </PillButton>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {data.rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-4 text-center text-slate-500">
+                  <td colSpan={canApprove ? 9 : 8} className="p-4 text-center text-[13px] text-ink-soft">
                     لا توجد مخالفات مطابقة
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          <Pagination skip={skip} take={TAKE} total={data.total} onSkipChange={setSkip} />
-        </>
+          <div className="px-[18px] py-3">
+            <Pagination skip={skip} take={TAKE} total={data.total} onSkipChange={setSkip} />
+          </div>
+        </Card>
       )}
     </div>
   );

@@ -59,15 +59,28 @@ async function main() {
     }
   }
 
-  // Remove the station scope added to supervisor1 in global-setup.ts.
+  // Remove the station scope added to supervisor1 in global-setup.ts, and
+  // restore whichever scope(s) it had before this run (as of this phase,
+  // that's prisma/seed.ts's own supervisor1 scope — see the comment in
+  // global-setup.ts). Without restoring these, every Playwright run would
+  // silently undo the seed fixture that DailyReportPage/ViolationsPage
+  // depend on for supervisor1 to see any station data at all.
   try {
     const sysadminLogin = await login('sysadmin1', SEEDED_PASSWORD);
+    const sysadminHeaders = { Authorization: `Bearer ${sysadminLogin.accessToken}` };
     await axios.delete(
       `${API_BASE}/users/${fixtures.supervisorUserId}/station-scope/${fixtures.stationId}`,
-      { headers: { Authorization: `Bearer ${sysadminLogin.accessToken}` } },
+      { headers: sysadminHeaders },
     );
+    for (const stationId of fixtures.originalSupervisorStationIds ?? []) {
+      await axios.post(
+        `${API_BASE}/users/${fixtures.supervisorUserId}/station-scope`,
+        { stationId },
+        { headers: sysadminHeaders },
+      );
+    }
   } catch {
-    console.warn('[global-teardown] Failed to remove supervisor1 station scope');
+    console.warn('[global-teardown] Failed to restore supervisor1 station scope');
   }
 }
 
