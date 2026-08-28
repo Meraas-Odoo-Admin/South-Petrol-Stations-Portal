@@ -110,21 +110,26 @@ model RolePermission {
 }
 
 model User {
-  id                  String              @id @default(cuid())
-  username            String              @unique
-  passwordHash        String
-  fullName            String
-  phone               String?
-  isActive            Boolean             @default(true)
-  mustChangePassword  Boolean             @default(false)
-  failedLoginAttempts Int                 @default(0)
-  lockedUntil         DateTime?
-  roles               UserRole[]
-  stationScope        UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
-  refreshTokens       RefreshToken[]
-  recordedFillUps     FillUpTransaction[] @relation("RecordedBy")
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                           String                 @id @default(cuid())
+  username                     String                 @unique
+  passwordHash                 String
+  fullName                     String
+  phone                        String?
+  isActive                     Boolean                @default(true)
+  mustChangePassword           Boolean                @default(false)
+  failedLoginAttempts          Int                    @default(0)
+  lockedUntil                  DateTime?
+  roles                        UserRole[]
+  stationScope                 UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
+  refreshTokens                RefreshToken[]
+  recordedFillUps              FillUpTransaction[]    @relation("RecordedBy")
+  vehicleChangeRequestsMade    VehicleChangeRequest[] @relation("VehicleChangeRequestedBy")
+  vehicleChangeRequestsDecided VehicleChangeRequest[] @relation("VehicleChangeDecidedBy")
+  standingExceptionsGranted    StandingException[]    @relation("StandingExceptionGrantedBy")
+  standingExceptionsRevoked    StandingException[]    @relation("StandingExceptionRevokedBy")
+  auditLogs                    AuditLog[]
+  createdAt                    DateTime               @default(now())
+  updatedAt                    DateTime               @updatedAt
 }
 
 model UserRole {
@@ -175,15 +180,16 @@ enum IdentityType {
 }
 
 model Driver {
-  id             String          @id @default(cuid())
-  identityType   IdentityType
-  identityNumber String // immutable together with identityType after creation, like User.username
-  fullName       String
-  phone          String? // TBD — see docs/OPEN_ITEMS.md #7. Nullable until confirmed.
-  vehicles       DriverVehicle[]
-  fillUps        FillUpTransaction[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 String              @id @default(cuid())
+  identityType       IdentityType
+  identityNumber     String // immutable together with identityType after creation, like User.username
+  fullName           String
+  phone              String? // TBD — see docs/OPEN_ITEMS.md #7. Nullable until confirmed.
+  vehicles           DriverVehicle[]
+  fillUps            FillUpTransaction[]
+  standingExceptions StandingException[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@unique([identityType, identityNumber])
 }
@@ -206,22 +212,30 @@ enum VehicleUsageType {
 }
 
 model Vehicle {
-  id              String                @id @default(cuid())
-  internalCode    String                @unique // fixed forever, even if the plate changes
-  currentPlate    String                @unique
-  chassisNumber   String?               @unique
-  vehicleType     String?
-  model           String?
-  color           String?
-  manufactureYear Int?
-  usageType       VehicleUsageType?
-  ownerId         String?
-  owner           VehicleOwner?         @relation(fields: [ownerId], references: [id])
-  plateHistory    VehiclePlateHistory[]
-  drivers         DriverVehicle[]
-  fillUps         FillUpTransaction[]
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id                  String                  @id @default(cuid())
+  internalCode        String                  @unique // fixed forever, even if the plate changes
+  currentPlate        String                  @unique
+  chassisNumber       String?                 @unique
+  // رقم كتيب السيارة — added for the anti-fraud chassis/booklet linkage
+  // (docs/IMPLEMENTATION_PLAN.md phase note: chassis-booklet-linkage
+  // proposal). Nullable: not every vehicle has one recorded yet.
+  registrationBooklet String?                 @unique
+  vehicleType         String?
+  model               String?
+  color               String?
+  manufactureYear     Int?
+  usageType           VehicleUsageType?
+  ownerId             String?
+  owner               VehicleOwner?           @relation(fields: [ownerId], references: [id])
+  plateHistory        VehiclePlateHistory[]
+  chassisHistory      VehicleChassisHistory[]
+  bookletHistory      VehicleBookletHistory[]
+  changeRequests      VehicleChangeRequest[]
+  drivers             DriverVehicle[]
+  fillUps             FillUpTransaction[]
+  standingExceptions  StandingException[]
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
 }
 
 // Plates change (sale, re-registration, damage) — never lose fill-up history
@@ -233,6 +247,74 @@ model VehiclePlateHistory {
   plate     String
   validFrom DateTime  @default(now())
   validTo   DateTime?
+
+  @@index([vehicleId])
+}
+
+// Same pattern as VehiclePlateHistory, for chassisNumber. Only ever written
+// by VehiclesService.applyApprovedChange (via a VehicleChangeRequest
+// approval) once a value already exists — a first-time null -> value set
+// doesn't go through the request/approval flow at all, so it doesn't get a
+// history row either (nothing to preserve yet).
+model VehicleChassisHistory {
+  id            String    @id @default(cuid())
+  vehicleId     String
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id])
+  chassisNumber String
+  validFrom     DateTime  @default(now())
+  validTo       DateTime?
+
+  @@index([vehicleId])
+}
+
+// Same pattern, for registrationBooklet.
+model VehicleBookletHistory {
+  id                  String    @id @default(cuid())
+  vehicleId           String
+  vehicle             Vehicle   @relation(fields: [vehicleId], references: [id])
+  registrationBooklet String
+  validFrom           DateTime  @default(now())
+  validTo             DateTime?
+
+  @@index([vehicleId])
+}
+
+enum VehicleChangeType {
+  CHASSIS_CHANGE
+  BOOKLET_CHANGE
+}
+
+enum VehicleChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Anti-fraud gate for displacing an ALREADY-SET chassisNumber/
+// registrationBooklet — the requested value never takes effect on creation;
+// only VehiclesService.decideChange(..., 'approve') writes it to Vehicle,
+// inside the same transaction as the history row and this row's own
+// status update. A first-time null -> value set bypasses this table
+// entirely (see VehiclesService.setOrRequestChange) — there's no
+// established identity to displace yet, so nothing to gate.
+model VehicleChangeRequest {
+  id              String                     @id @default(cuid())
+  vehicleId       String
+  vehicle         Vehicle                    @relation(fields: [vehicleId], references: [id])
+  changeType      VehicleChangeType
+  currentValue    String // snapshot at request time, for audit context
+  requestedValue  String
+  reason          String
+  proofReference  String // mandatory for both change types — not the fill-up ExceptionType's optional-per-category toggle
+  status          VehicleChangeRequestStatus @default(PENDING)
+  requestedById   String
+  requestedBy     User                       @relation("VehicleChangeRequestedBy", fields: [requestedById], references: [id])
+  decidedById     String?
+  decidedBy       User?                      @relation("VehicleChangeDecidedBy", fields: [decidedById], references: [id])
+  decidedAt       DateTime?
+  rejectionReason String? // mandatory (enforced at the DTO level) when status is set to REJECTED; unset otherwise
+
+  createdAt DateTime @default(now())
 
   @@index([vehicleId])
 }
@@ -250,28 +332,72 @@ model DriverVehicle {
 // ── Fill-ups & Exceptions ────────────────────────────────────────────
 
 model FillUpTransaction {
-  id             String      @id @default(cuid())
-  vehicleId      String
-  vehicle        Vehicle     @relation(fields: [vehicleId], references: [id])
-  driverId       String
-  driver         Driver      @relation(fields: [driverId], references: [id])
-  stationId      String
-  station        Station     @relation(fields: [stationId], references: [id])
-  fuelType       FuelType
-  quantityLiters Decimal
-  occurredAt     DateTime    @default(now())
-  recordedById   String
-  recordedBy     User        @relation("RecordedBy", fields: [recordedById], references: [id])
-  isException    Boolean     @default(false)
-  exception      Exception?
+  id                  String             @id @default(cuid())
+  vehicleId           String
+  vehicle             Vehicle            @relation(fields: [vehicleId], references: [id])
+  driverId            String
+  driver              Driver             @relation(fields: [driverId], references: [id])
+  stationId           String
+  station             Station            @relation(fields: [stationId], references: [id])
+  fuelType            FuelType
+  quantityLiters      Decimal
+  occurredAt          DateTime           @default(now())
+  recordedById        String
+  recordedBy          User               @relation("RecordedBy", fields: [recordedById], references: [id])
+  isException         Boolean            @default(false)
+  exception           Exception?
+  // Set when a rule that would have blocked this fill-up was instead
+  // auto-allowed by an active StandingException — distinct from the
+  // one-time isException/Exception flow (which requires a fresh
+  // submission + approval every time). Never set together with
+  // isException: a fill-up is either flagged for one-time review or
+  // silently covered by a standing grant, not both.
+  standingExceptionId String?
+  standingException   StandingException? @relation(fields: [standingExceptionId], references: [id])
+  // Which specific rule the standing exception covered for THIS fill-up —
+  // a grant can cover several rules, but a given fill-up trips at most one
+  // (first-failure-wins, same as the rejection path).
+  coveredRule         String?
   // Client retry key for POST /fillups — a flaky station connection retrying
   // the same submission must resolve to the SAME row, never a duplicate.
-  idempotencyKey String      @unique
-  createdAt      DateTime    @default(now())
+  idempotencyKey      String             @unique
+  createdAt           DateTime           @default(now())
 
   @@index([vehicleId, occurredAt]) // the rule engine's hottest query path
   @@index([driverId, occurredAt])
   @@index([stationId, occurredAt])
+}
+
+// Interim design, NOT from the original client questionnaire — flagged to
+// the client for confirmation (see docs/OPEN_ITEMS.md). A supervisor/admin
+// grants an ongoing exemption from one or more specific rule codes to a
+// driver, a vehicle, or both, instead of the requester needing a fresh
+// one-time Exception every single time. Fully audited (grant + revoke),
+// visible on the driver/vehicle's own profile, never a blanket "exempt
+// from everything" — `rules` lists exactly which RuleFailureReason codes
+// (plus the new LITERS_PER_PERSON_CAP_REACHED) this grant covers.
+model StandingException {
+  id        String   @id @default(cuid())
+  driverId  String?
+  driver    Driver?  @relation(fields: [driverId], references: [id])
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
+  rules     String[] // RuleFailureReason codes this grant covers
+
+  reason      String
+  grantedById String
+  grantedBy   User      @relation("StandingExceptionGrantedBy", fields: [grantedById], references: [id])
+  grantedAt   DateTime  @default(now())
+  expiresAt   DateTime? // null = indefinite, active until revoked
+
+  revokedById String?
+  revokedBy   User?     @relation("StandingExceptionRevokedBy", fields: [revokedById], references: [id])
+  revokedAt   DateTime?
+
+  coveredFillUps FillUpTransaction[]
+
+  @@index([driverId])
+  @@index([vehicleId])
 }
 
 // Lookup table, not an enum — the client already surfaced two new exception
@@ -299,6 +425,15 @@ model Exception {
   proofReference      String?
   validUntil          DateTime? // null = one-off; set = recurring exception with an expiry
   createdAt           DateTime          @default(now())
+
+  // Diagnostic snapshot of what the rule engine WOULD have rejected this
+  // fill-up for, captured server-side at submission time (the engine is
+  // run in diagnostic-only mode — its result is never trusted from the
+  // client) — so the approver sees why this was flagged instead of a bare
+  // "submitted as exception" with no context. Null only for rows created
+  // before this field existed.
+  triggerReason String? // a RuleFailureReason value, e.g. "DRIVER_GAP_TOO_SHORT"
+  triggerDetail Json? // { vehicleInternalCode, vehicleCurrentPlate, occurredAt } of the specific prior fill-up that triggered it
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────
@@ -306,6 +441,7 @@ model Exception {
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
   action     String // "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "APPROVE_EXCEPTION" ...
   entityType String
   entityId   String

@@ -17,6 +17,8 @@ import { VehiclesModule } from './vehicles/vehicles.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { FillUpsModule } from './fillups/fillups.module';
 import { ReportsModule } from './reports/reports.module';
+import { RolesModule } from './roles/roles.module';
+import { StandingExceptionsModule } from './standing-exceptions/standing-exceptions.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './rbac/guards/permissions.guard';
 
@@ -45,6 +47,8 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     SystemSettingsModule,
     FillUpsModule,
     ReportsModule,
+    RolesModule,
+    StandingExceptionsModule,
     HealthModule,
   ],
   providers: [

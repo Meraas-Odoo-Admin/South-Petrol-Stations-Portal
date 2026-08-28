@@ -17,4 +17,13 @@ export class FindVehiclesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   chassisNumber?: string;
+
+  // Independent from the three fields above (which AND together for a
+  // precise lookup) — this ORs a single typed term across internalCode and
+  // currentPlate, for a free-text "find this vehicle" search where the
+  // caller doesn't know (or care) which field it matches.
+  @ApiProperty({ required: false, description: 'Free-text OR search across internalCode and currentPlate.' })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

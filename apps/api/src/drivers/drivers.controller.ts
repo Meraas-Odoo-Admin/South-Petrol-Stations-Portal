@@ -13,7 +13,10 @@ import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 export class DriversController {
   constructor(private readonly drivers: DriversService) {}
 
-  @RequirePermission('drivers:manage')
+  // drivers:create is intentionally narrower than drivers:manage — creating
+  // a new driver record is not the same right as editing an existing one
+  // (station_employee holds :create only, see seed.ts).
+  @RequirePermission('drivers:create')
   @Post()
   create(@Body() dto: CreateDriverDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.drivers.create(dto, actor.id);
@@ -28,7 +31,13 @@ export class DriversController {
   @RequirePermission('drivers:read')
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.drivers.findOne(id);
+    return this.drivers.findOneDetailed(id);
+  }
+
+  @RequirePermission('drivers:reveal_identity')
+  @Post(':id/reveal-identity')
+  revealIdentity(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.drivers.revealIdentity(id, actor.id);
   }
 
   @RequirePermission('drivers:manage')

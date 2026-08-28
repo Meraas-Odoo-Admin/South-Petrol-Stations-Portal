@@ -10,9 +10,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
-import { FillUpsRepository } from './fillups.repository';
+import { FillUpsRepository, StandingExceptionsRepository } from './fillups.repository';
 import { FillUpRuleEngine } from './rule-engine/fill-up-rule-engine';
+import type { RuleTrigger } from './rule-engine/types';
 import { CreateFillUpDto } from './dto/create-fillup.dto';
+import { CreateExceptionTypeDto } from './dto/create-exception-type.dto';
+import { UpdateExceptionTypeDto } from './dto/update-exception-type.dto';
 
 const FILL_UP_WITH_EXCEPTION_INCLUDE = { exception: true } as const;
 
@@ -46,13 +49,37 @@ export class FillUpsService {
     private readonly rbac: RbacService,
     private readonly settings: SystemSettingsService,
     private readonly repo: FillUpsRepository,
+    private readonly standingExceptionsRepo: StandingExceptionsRepository,
   ) {
     // Constructed directly rather than DI-injected: FillUpRuleEngine takes
-    // plain SettingsReader/FillUpHistoryReader interfaces (see rule-engine/
-    // types.ts) so it stays independently unit-testable without Nest's
-    // TestingModule. SystemSettingsService/FillUpsRepository are the real
-    // Prisma-backed implementations of those interfaces.
-    this.ruleEngine = new FillUpRuleEngine(this.settings, this.repo);
+    // plain SettingsReader/FillUpHistoryReader/StandingExceptionReader
+    // interfaces (see rule-engine/types.ts) so it stays independently
+    // unit-testable without Nest's TestingModule.
+    // SystemSettingsService/FillUpsRepository/StandingExceptionsRepository
+    // are the real Prisma-backed implementations of those interfaces.
+    this.ruleEngine = new FillUpRuleEngine(this.settings, this.repo, this.standingExceptionsRepo);
+  }
+
+  // Human-readable snapshot of the specific prior fill-up that triggered a
+  // rule — used both for the Exception.triggerDetail persisted at
+  // submission time (item 8) and for the inline 422 rejection response, so
+  // the same shape backs both surfaces.
+  private async describeTrigger(trigger: RuleTrigger | undefined) {
+    if (!trigger) {
+      return null;
+    }
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: trigger.vehicleId },
+      select: { internalCode: true, currentPlate: true },
+    });
+    return {
+      vehicleId: trigger.vehicleId,
+      vehicleInternalCode: vehicle?.internalCode ?? null,
+      vehicleCurrentPlate: vehicle?.currentPlate ?? null,
+      // ISO string, not a raw Date — this is stored as JSON (Exception.
+      // triggerDetail) and returned as JSON over the API either way.
+      occurredAt: trigger.occurredAt.toISOString(),
+    };
   }
 
   async create(dto: CreateFillUpDto, idempotencyKey: string, actorId: string) {
@@ -107,7 +134,11 @@ export class FillUpsService {
     if (!exceptionModeFieldsPresent) {
       const ruleResult = await this.ruleEngine.evaluate(dto.vehicleId, dto.driverId, occurredAt);
       if (!ruleResult.allowed) {
-        return { status: 'rejected' as const, reason: ruleResult.reason };
+        return {
+          status: 'rejected' as const,
+          reason: ruleResult.reason,
+          trigger: await this.describeTrigger(ruleResult.trigger),
+        };
       }
 
       const transaction = await this.prisma.$transaction(async (tx) => {
@@ -122,6 +153,12 @@ export class FillUpsService {
             recordedById: actorId,
             isException: false,
             idempotencyKey,
+            // Set only when a rule that would have blocked this fill-up
+            // was instead auto-allowed by an active StandingException —
+            // "auto-allowed with no trace" is exactly what the standing-
+            // exception design explicitly must NOT do.
+            standingExceptionId: ruleResult.coveredBy?.standingExceptionId,
+            coveredRule: ruleResult.coveredBy?.rule,
           },
         });
 
@@ -131,7 +168,13 @@ export class FillUpsService {
             action: 'CREATE',
             entityType: 'FillUpTransaction',
             entityId: created.id,
-            newValue: { vehicleId: created.vehicleId, stationId: created.stationId, isException: false },
+            newValue: {
+              vehicleId: created.vehicleId,
+              stationId: created.stationId,
+              isException: false,
+              standingExceptionId: ruleResult.coveredBy?.standingExceptionId ?? undefined,
+              coveredRule: ruleResult.coveredBy?.rule ?? undefined,
+            },
           },
           tx,
         );
@@ -146,8 +189,16 @@ export class FillUpsService {
     }
 
     // Exception mode: "no hard block, exception with a mandatory reason"
-    // (docs/OPEN_ITEMS.md, resolved). The rule engine is bypassed entirely
-    // — this is the request that already knows it's over-cap.
+    // (docs/OPEN_ITEMS.md, resolved). The rule engine's verdict is never
+    // used to BLOCK this request — but it IS run once, diagnostic-only, to
+    // capture which rule actually would have fired and which specific
+    // prior fill-up triggered it (item 8). Never trust a client-supplied
+    // diagnostic for this — always re-derive it server-side, same as any
+    // other authoritative check.
+    const diagnostic = await this.ruleEngine.evaluate(dto.vehicleId, dto.driverId, occurredAt);
+    const triggerReason = diagnostic.allowed ? null : diagnostic.reason;
+    const triggerDetail = diagnostic.allowed ? null : await this.describeTrigger(diagnostic.trigger);
+
     if (!dto.reason) {
       throw new BadRequestException(
         'reason is required when submitting a fill-up with an exception.',
@@ -192,6 +243,8 @@ export class FillUpsService {
           reason: dto.reason!,
           proofReference: dto.proofReference,
           approvedById: null,
+          triggerReason,
+          triggerDetail: triggerDetail ?? undefined,
         },
       });
 
@@ -271,6 +324,74 @@ export class FillUpsService {
         where: { id: fillUpId },
         include: FILL_UP_WITH_EXCEPTION_INCLUDE,
       });
+    });
+  }
+
+  // The frontend's "submit as exception" flow needs to know which
+  // categories exist and which require proof BEFORE submitting — there was
+  // no read endpoint for ExceptionType at all until now (CLAUDE.md rule 5:
+  // exception categories are a lookup table, so this is just exposing rows
+  // that already exist, not adding new data).
+  listActiveExceptionTypes() {
+    return this.prisma.exceptionType.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // Admin panel, item 7's "exception types itself should be DB-driven, not
+  // hardcoded" — the table already was (CLAUDE.md rule 5), what was
+  // missing was a way to manage it without a raw DB write. Includes
+  // inactive types too — an admin editing the catalog needs to see
+  // everything, not just what's currently offered to a submitter.
+  listAllExceptionTypes() {
+    return this.prisma.exceptionType.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  async createExceptionType(dto: CreateExceptionTypeDto, actorId: string) {
+    const existing = await this.prisma.exceptionType.findUnique({ where: { key: dto.key } });
+    if (existing) {
+      throw new ConflictException('key is already in use.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.exceptionType.create({
+        data: { key: dto.key, name: dto.name, requiresProof: dto.requiresProof ?? true },
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'CREATE',
+          entityType: 'ExceptionType',
+          entityId: created.id,
+          newValue: { key: created.key, name: created.name, requiresProof: created.requiresProof },
+        },
+        tx,
+      );
+      return created;
+    });
+  }
+
+  async updateExceptionType(id: string, dto: UpdateExceptionTypeDto, actorId: string) {
+    const before = await this.prisma.exceptionType.findUnique({ where: { id } });
+    if (!before) {
+      throw new NotFoundException('Exception type not found.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.exceptionType.update({ where: { id }, data: dto });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'UPDATE',
+          entityType: 'ExceptionType',
+          entityId: id,
+          oldValue: { name: before.name, requiresProof: before.requiresProof, isActive: before.isActive },
+          newValue: { name: updated.name, requiresProof: updated.requiresProof, isActive: updated.isActive },
+        },
+        tx,
+      );
+      return updated;
     });
   }
 }

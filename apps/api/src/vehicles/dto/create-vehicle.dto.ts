@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { VehicleUsageType } from '@prisma/client';
+import {
+  CHASSIS_NUMBER_REGEX,
+  LICENSE_PLATE_REGEX,
+  REGISTRATION_BOOKLET_REGEX,
+} from '../../common/validators/libyan-formats';
 
 export class CreateVehicleDto {
   @ApiProperty()
@@ -8,15 +14,31 @@ export class CreateVehicleDto {
   @MinLength(1)
   internalCode!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'City code (1-2 digits) + sequence (1-7 digits), optional hyphen/space separator.' })
   @IsString()
-  @MinLength(1)
+  @Matches(LICENSE_PLATE_REGEX, { message: 'currentPlate must be a city code plus sequence, e.g. "12-3456".' })
   currentPlate!: string;
 
-  @ApiProperty({ required: false })
+  // Chassis numbers are case-insensitive on input but stored/compared
+  // uppercase (ISO 3779) — normalize before @Matches runs.
+  @ApiProperty({ required: false, description: '17-character VIN (ISO 3779), excludes I/O/Q.' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @IsString()
+  @Matches(CHASSIS_NUMBER_REGEX, { message: 'chassisNumber must be exactly 17 characters (A-H, J-N, P, R-Z, 0-9).' })
+  chassisNumber?: string;
+
+  // A first-time set — this is creation, there's no existing value to
+  // displace — so no VehicleChangeRequest approval is needed here. Only
+  // changing an ALREADY-SET registrationBooklet on an existing vehicle
+  // goes through POST /vehicles/:id/change-requests.
+  @ApiProperty({ required: false, description: '6-12 alphanumeric characters.' })
   @IsOptional()
   @IsString()
-  chassisNumber?: string;
+  @Matches(REGISTRATION_BOOKLET_REGEX, {
+    message: 'registrationBooklet must be 6-12 alphanumeric characters.',
+  })
+  registrationBooklet?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

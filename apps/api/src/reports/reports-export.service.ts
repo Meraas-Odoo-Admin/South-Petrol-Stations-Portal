@@ -41,6 +41,66 @@ function pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   });
 }
 
+interface PdfTableColumn {
+  header: string;
+  width: number;
+}
+
+// Item 14: PDF exports previously rendered each row as one pipe-delimited
+// text line (`doc.text(\`${a} | ${b} | ...\`)`) — readable but not a table:
+// no column alignment, no header emphasis, nothing that survives being
+// printed or resized. This draws an actual bordered/ruled table, wrapping
+// to a new page (with the header re-drawn) when a page fills up, same as
+// any real report generator would.
+function drawPdfTable(
+  doc: PDFKit.PDFDocument,
+  columns: PdfTableColumn[],
+  rows: string[][],
+  startY: number,
+): void {
+  const left = doc.page.margins.left;
+  const rowHeight = 20;
+  const bottomLimit = doc.page.height - doc.page.margins.bottom;
+
+  function drawHeader(y: number): number {
+    let x = left;
+    doc.font('Helvetica-Bold').fontSize(9);
+    for (const col of columns) {
+      doc.text(col.header, x + 2, y + 4, { width: col.width - 4, ellipsis: true });
+      x += col.width;
+    }
+    doc
+      .moveTo(left, y + rowHeight)
+      .lineTo(x, y + rowHeight)
+      .lineWidth(0.75)
+      .stroke();
+    return y + rowHeight;
+  }
+
+  let y = drawHeader(startY);
+  doc.font('Helvetica').fontSize(9);
+
+  for (const row of rows) {
+    if (y + rowHeight > bottomLimit) {
+      doc.addPage();
+      y = drawHeader(doc.page.margins.top);
+      doc.font('Helvetica').fontSize(9);
+    }
+    let x = left;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i]!;
+      doc.text(row[i] ?? '', x + 2, y + 4, { width: col.width - 4, ellipsis: true });
+      x += col.width;
+    }
+    doc
+      .moveTo(left, y + rowHeight)
+      .lineTo(x, y + rowHeight)
+      .lineWidth(0.25)
+      .stroke('#cccccc');
+    y += rowHeight;
+  }
+}
+
 @Injectable()
 export class ReportsExportService {
   async dailyReportToXlsx(report: DailyReport): Promise<Buffer> {
@@ -67,14 +127,26 @@ export class ReportsExportService {
     const doc = new PDFDocument({ margin: 50 });
     doc.fontSize(16).text('Daily Fill-Up Report', { underline: true });
     doc.moveDown();
-    doc.fontSize(11);
+    doc.fontSize(11).font('Helvetica');
     doc.text(`Station: ${report.stationId ?? 'All stations'}`);
     doc.text(`Date: ${report.date}`);
     doc.moveDown();
-    doc.text(`Total fill-ups: ${report.totalFillUps}`);
-    doc.text(`Total liters: ${report.totalLiters}`);
-    doc.text(`Exceptions pending: ${report.exceptionsPending}`);
-    doc.text(`Exceptions approved: ${report.exceptionsApproved}`);
+
+    drawPdfTable(
+      doc,
+      [
+        { header: 'Field', width: 220 },
+        { header: 'Value', width: 220 },
+      ],
+      [
+        ['Total fill-ups', String(report.totalFillUps)],
+        ['Total liters', String(report.totalLiters)],
+        ['Exceptions pending', String(report.exceptionsPending)],
+        ['Exceptions approved', String(report.exceptionsApproved)],
+      ],
+      doc.y,
+    );
+
     return pdfToBuffer(doc);
   }
 
@@ -102,17 +174,30 @@ export class ReportsExportService {
     const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
     doc.fontSize(16).text('Violations / Exceptions', { underline: true });
     doc.moveDown();
-    doc.fontSize(9);
 
-    for (const row of rows) {
-      const plain = this.violationRowToPlainObject(row);
-      doc.text(
-        `${plain.date} | ${plain.station} | ${plain.vehicle} | ${plain.driver} | ${plain.exceptionType} | ${plain.status} | ${plain.reason}`,
-      );
-    }
     if (rows.length === 0) {
-      doc.text('No violations match this filter.');
+      doc.fontSize(11).font('Helvetica').text('No violations match this filter.');
+      return pdfToBuffer(doc);
     }
+
+    drawPdfTable(
+      doc,
+      [
+        { header: 'Date', width: 110 },
+        { header: 'Station', width: 90 },
+        { header: 'Vehicle', width: 90 },
+        { header: 'Driver', width: 130 },
+        { header: 'Exception Type', width: 110 },
+        { header: 'Status', width: 70 },
+        { header: 'Reason', width: 200 },
+      ],
+      rows.map((row) => {
+        const plain = this.violationRowToPlainObject(row);
+        return [plain.date, plain.station, plain.vehicle, plain.driver, plain.exceptionType, plain.status, plain.reason];
+      }),
+      doc.y,
+    );
+
     return pdfToBuffer(doc);
   }
 

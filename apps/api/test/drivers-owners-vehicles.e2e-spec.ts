@@ -19,6 +19,22 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
   let prisma: PrismaService;
 
   const runId = Date.now().toString(36);
+  // Real-format fixtures (this phase added class-validator format
+  // enforcement — see apps/api/src/common/validators/libyan-formats.ts):
+  // identityNumber must be 12 digits, currentPlate a city-code+sequence
+  // (sequence capped at 7 digits by the format), chassisNumber exactly 17
+  // alphanumeric chars. RANDOM, not a Date.now()-derived modulo — an
+  // earlier version used `Date.now() % 1_000_000`, which repeats every
+  // ~16.7 minutes and genuinely collided with a leftover row from an
+  // earlier run of this same suite within one dev session (there are no
+  // DELETE endpoints, so old fixture rows never go away). A random digit
+  // string has no periodicity to collide on.
+  const randomDigits = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
+  const numericId11 = randomDigits(11); // fills identityNumber's 11 digits after the type prefix
+  const plateSeqA = randomDigits(7);
+  const plateSeqB = randomDigits(7);
+  const plateSeqOther = randomDigits(7);
+  const chassis17 = randomDigits(17);
   const password = 'BoundaryTest123!';
 
   const usernameManager = `e2e_dov_manager_${runId}`;
@@ -55,6 +71,16 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       create: { key: 'drivers:manage' },
       update: {},
     });
+    // POST /drivers is gated on drivers:create (narrower than :manage, item
+    // 1's RBAC fix) — a role that only holds :manage no longer covers
+    // creating a NEW driver, only editing existing ones. This fixture's
+    // manager role needs both, same as the real station_supervisor/
+    // directorate_admin roles in seed.ts.
+    const driversCreatePermission = await prisma.permission.upsert({
+      where: { key: 'drivers:create' },
+      create: { key: 'drivers:create' },
+      update: {},
+    });
     const ownersPermission = await prisma.permission.upsert({
       where: { key: 'owners:manage' },
       create: { key: 'owners:manage' },
@@ -85,6 +111,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     await prisma.rolePermission.createMany({
       data: [
         { roleId: managerRole.id, permissionId: driversManagePermission.id },
+        { roleId: managerRole.id, permissionId: driversCreatePermission.id },
         { roleId: managerRole.id, permissionId: ownersPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesManagePermission.id },
         { roleId: managerRole.id, permissionId: driversReadPermission.id },
@@ -191,7 +218,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         identityType: 'NATIONAL_ID',
-        identityNumber: `dov-${runId}-1`,
+        identityNumber: `1${numericId11}`,
         fullName: 'E2E DOV Driver One',
       })
       .expect(201);
@@ -208,7 +235,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .get(`/api/v1/drivers/${driverId}`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
-    expect(getRes.body.identityNumber).toBe(`dov-${runId}-1`);
+    expect(getRes.body.identityNumber).toBe(`1${numericId11}`);
 
     const updateRes = await request(server)
       .patch(`/api/v1/drivers/${driverId}`)
@@ -227,7 +254,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         identityType: 'NATIONAL_ID',
-        identityNumber: `dov-${runId}-1`, // same pair as the driver created above
+        identityNumber: `1${numericId11}`, // same pair as the driver created above
         fullName: 'Duplicate Attempt',
       })
       .expect(409);
@@ -242,7 +269,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/v1/drivers/${driverId}`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ identityNumber: `dov-${runId}-changed` })
+      .send({ identityNumber: `9${numericId11}` })
       .expect(400);
   });
 
@@ -284,24 +311,24 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         internalCode: `VEH-${runId}`,
-        currentPlate: `PLATE-${runId}-A`,
-        chassisNumber: `CHASSIS-${runId}`,
+        currentPlate: `5-${plateSeqA}`,
+        chassisNumber: chassis17,
         ownerId,
       })
       .expect(201);
     vehicleId = createRes.body.id;
-    expect(createRes.body.currentPlate).toBe(`PLATE-${runId}-A`);
+    expect(createRes.body.currentPlate).toBe(`5-${plateSeqA}`);
 
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}`, currentPlate: `PLATE-${runId}-DIFFERENT` })
+      .send({ internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}` })
       .expect(409);
 
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `PLATE-${runId}-A` })
+      .send({ internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}` })
       .expect(409);
   });
 
@@ -311,8 +338,8 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
 
     for (const query of [
       `internalCode=${encodeURIComponent(`VEH-${runId}`)}`,
-      `currentPlate=${encodeURIComponent(`PLATE-${runId}-A`)}`,
-      `chassisNumber=${encodeURIComponent(`CHASSIS-${runId}`)}`,
+      `currentPlate=${encodeURIComponent(`5-${plateSeqA}`)}`,
+      `chassisNumber=${encodeURIComponent(chassis17)}`,
     ]) {
       const res = await request(server)
         .get(`/api/v1/vehicles?${query}`)
@@ -354,7 +381,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/v1/vehicles/${vehicleId}`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ currentPlate: `PLATE-${runId}-VIA-PATCH` })
+      .send({ currentPlate: `9-${plateSeqB}` })
       .expect(400);
   });
 
@@ -369,7 +396,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
         identityType: 'ADMINISTRATIVE_ID',
-        identityNumber: `dov-${runId}-2`,
+        identityNumber: `9${numericId11}`,
         fullName: 'E2E DOV Driver Two',
       })
       .expect(201);
@@ -441,10 +468,10 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     const beforeHistory = await prisma.vehiclePlateHistory.findMany({ where: { vehicleId } });
     expect(beforeHistory).toHaveLength(1);
     const originalRow = beforeHistory[0]!;
-    expect(originalRow.plate).toBe(`PLATE-${runId}-A`);
+    expect(originalRow.plate).toBe(`5-${plateSeqA}`);
     expect(originalRow.validTo).toBeNull();
 
-    const newPlate = `PLATE-${runId}-B`;
+    const newPlate = `8-${plateSeqB}`;
     const res = await request(server)
       .post(`/api/v1/vehicles/${vehicleId}/plate-change`)
       .set('Authorization', `Bearer ${accessToken}`)
@@ -462,7 +489,7 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     // overwritten in place.
     const closedRow = afterHistory.find((r) => r.id === originalRow.id);
     expect(closedRow).toBeDefined();
-    expect(closedRow!.plate).toBe(`PLATE-${runId}-A`);
+    expect(closedRow!.plate).toBe(`5-${plateSeqA}`);
     expect(closedRow!.validTo).not.toBeNull();
 
     // The new row is open (validTo: null) with the new plate.
@@ -490,14 +517,14 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     const otherVehicleRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}-OTHER`, currentPlate: `PLATE-${runId}-OTHER` })
+      .send({ internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}` })
       .expect(201);
     const otherVehicleId = otherVehicleRes.body.id;
 
     await request(server)
       .post(`/api/v1/vehicles/${vehicleId}/plate-change`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ newPlate: `PLATE-${runId}-OTHER` })
+      .send({ newPlate: `15-${plateSeqOther}` })
       .expect(409);
 
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: otherVehicleId } });

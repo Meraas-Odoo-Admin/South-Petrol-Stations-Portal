@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, Matches } from 'class-validator';
+import { IsEnum, IsOptional, IsString, Matches } from 'class-validator';
+import { FuelType } from '@prisma/client';
 
+// Item 13: expanded beyond the original stationId/date pair — driverId and
+// fuelType are new filter dimensions, not just the existing two applying
+// live (that was item 12, already done separately). Both are optional and
+// intersect with the existing station/date filters, same AND-of-filters
+// pattern as ViolationsQueryDto.
 export class DailyReportQueryDto {
   // Required unless the caller holds reports:view_all_stations — enforced
   // in ReportsService, not here, since it depends on who's asking.
@@ -18,4 +24,14 @@ export class DailyReportQueryDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be in YYYY-MM-DD format' })
   date?: string;
+
+  @ApiProperty({ required: false, description: 'Narrow the report to one driver' })
+  @IsOptional()
+  @IsString()
+  driverId?: string;
+
+  @ApiProperty({ required: false, enum: FuelType })
+  @IsOptional()
+  @IsEnum(FuelType)
+  fuelType?: FuelType;
 }

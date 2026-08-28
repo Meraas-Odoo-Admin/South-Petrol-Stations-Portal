@@ -12,11 +12,15 @@ export type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
 export interface DailyReportQuery {
   stationId?: string;
   date?: string; // YYYY-MM-DD
+  driverId?: string;
+  fuelType?: FuelType;
 }
 
 export interface DailyReportResponse {
   stationId: string | null; // null = all stations combined
   date: string;
+  driverId: string | null;
+  fuelType: FuelType | null;
   totalFillUps: number;
   totalLiters: number;
   exceptionsPending: number;
@@ -65,6 +69,18 @@ export interface ExceptionSummary {
   validUntil: string | null;
   createdAt: string;
   exceptionType: ExceptionTypeSummary;
+  // Diagnostic snapshot captured server-side at submission time (item 8) —
+  // which rule the fill-up would have tripped and the specific prior
+  // fill-up that triggered it, so the approver sees why this was flagged
+  // instead of a bare "submitted as exception". Null for rows created
+  // before this field existed, or if the rule engine somehow ran clean.
+  triggerReason: string | null;
+  triggerDetail: {
+    vehicleId: string;
+    vehicleInternalCode: string | null;
+    vehicleCurrentPlate: string | null;
+    occurredAt: string;
+  } | null;
 }
 
 // A raw FillUpTransaction row as returned by the API — quantityLiters is a

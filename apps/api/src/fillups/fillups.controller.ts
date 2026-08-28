@@ -1,8 +1,20 @@
-import { BadRequestException, Body, Controller, Headers, Param, Post, Res } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { FillUpsService } from './fillups.service';
 import { CreateFillUpDto } from './dto/create-fillup.dto';
+import { CreateExceptionTypeDto } from './dto/create-exception-type.dto';
+import { UpdateExceptionTypeDto } from './dto/update-exception-type.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
@@ -32,7 +44,7 @@ export class FillUpsController {
 
     if (result.status === 'rejected') {
       res.status(422);
-      return { allowed: false, reason: result.reason, requiresException: true };
+      return { allowed: false, reason: result.reason, trigger: result.trigger, requiresException: true };
     }
 
     if (result.status === 'existing') {
@@ -47,5 +59,41 @@ export class FillUpsController {
   @Post(':id/exceptions/approve')
   approveException(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.fillups.approveException(id, actor.id);
+  }
+
+  // Registered BEFORE @Get(':id')-shaped routes would go, if this
+  // controller ever grows one — static path segments must win over a
+  // dynamic :id at the same depth.
+  @RequirePermission('exception_types:manage')
+  @Get('exception-types/all')
+  listAllExceptionTypes() {
+    return this.fillups.listAllExceptionTypes();
+  }
+
+  @RequirePermission('exception_types:manage')
+  @Post('exception-types')
+  createExceptionType(@Body() dto: CreateExceptionTypeDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.fillups.createExceptionType(dto, actor.id);
+  }
+
+  @RequirePermission('exception_types:manage')
+  @Patch('exception-types/:id')
+  updateExceptionType(
+    @Param('id') id: string,
+    @Body() dto: UpdateExceptionTypeDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.fillups.updateExceptionType(id, dto, actor.id);
+  }
+
+  // Gated on fillups:create (not a separate permission) — anyone who can
+  // submit a fill-up needs this to know the exception categories and
+  // whether each requires proof, same as approving needs its own gate.
+  // Only ACTIVE types — the admin-only "see everything, including
+  // deactivated" view is listAllExceptionTypes above.
+  @RequirePermission('fillups:create')
+  @Get('exception-types')
+  listExceptionTypes() {
+    return this.fillups.listActiveExceptionTypes();
   }
 }

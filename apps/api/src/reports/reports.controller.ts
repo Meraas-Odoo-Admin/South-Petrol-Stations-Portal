@@ -97,7 +97,14 @@ export class ReportsController {
       .send(buffer);
   }
 
-  @RequirePermission('reports:view')
+  // drivers:read, not reports:view — this is "this driver's history" shown
+  // inline on the driver detail page (gated on drivers:read to reach the
+  // page at all), not a directorate-level report. station_employee holds
+  // drivers:read but not reports:view; it used to 403 here despite the
+  // page around it loading fine, a real bug (station scoping is still
+  // enforced inside getDriverHistory regardless of which permission gates
+  // the route, so this doesn't widen what any role can actually see).
+  @RequirePermission('drivers:read')
   @Get('drivers/:driverId/history')
   getDriverHistory(
     @Param('driverId') driverId: string,
@@ -107,7 +114,8 @@ export class ReportsController {
     return this.reports.getDriverHistory(driverId, query, actor.id);
   }
 
-  @RequirePermission('reports:view')
+  // vehicles:read, same reasoning as getDriverHistory above.
+  @RequirePermission('vehicles:read')
   @Get('vehicles/:vehicleId/history')
   getVehicleHistory(
     @Param('vehicleId') vehicleId: string,

@@ -90,6 +90,8 @@ export class ReportsService {
     const where = {
       occurredAt: { gte: start, lt: end },
       ...(stationId ? { stationId } : {}),
+      ...(query.driverId ? { driverId: query.driverId } : {}),
+      ...(query.fuelType ? { fuelType: query.fuelType } : {}),
     };
 
     const [aggregate, exceptionsPending, exceptionsApproved] = await Promise.all([
@@ -109,6 +111,8 @@ export class ReportsService {
     return {
       stationId: stationId ?? null,
       date: start.toISOString().slice(0, 10),
+      driverId: query.driverId ?? null,
+      fuelType: query.fuelType ?? null,
       totalFillUps: aggregate._count._all,
       totalLiters: aggregate._sum.quantityLiters?.toNumber() ?? 0,
       exceptionsPending,

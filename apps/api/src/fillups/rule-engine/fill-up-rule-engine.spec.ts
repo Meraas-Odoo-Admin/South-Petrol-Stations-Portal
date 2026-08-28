@@ -1,5 +1,11 @@
 import { FillUpRuleEngine } from './fill-up-rule-engine';
-import type { FillUpHistoryReader, FillUpHistoryRecord, SettingsReader } from './types';
+import type {
+  FillUpHistoryReader,
+  FillUpHistoryRecord,
+  RuleFailureReason,
+  SettingsReader,
+  StandingExceptionReader,
+} from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -42,6 +48,17 @@ class FakeHistory implements FillUpHistoryReader {
   }
 }
 
+class FakeStandingExceptions implements StandingExceptionReader {
+  constructor(private readonly covering: { id: string; rule: RuleFailureReason } | null = null) {}
+
+  async findActiveCovering(params: { rule: RuleFailureReason }): Promise<{ id: string } | null> {
+    if (this.covering && this.covering.rule === params.rule) {
+      return { id: this.covering.id };
+    }
+    return null;
+  }
+}
+
 // Placeholder defaults (fillup.max_per_week_per_driver/min_gap_days_per_driver
 // are literally seeded as placeholders — see seed.ts) mirrored here so the
 // tests exercise the same numbers the real engine will actually run with.
@@ -50,6 +67,7 @@ const DEFAULT_SETTINGS = {
   'fillup.min_gap_days': '2',
   'fillup.max_per_week_per_driver': '3',
   'fillup.min_gap_days_per_driver': '2',
+  'fillup.max_liters_per_week_per_driver': '1000', // high enough to stay out of the way of unrelated tests
   'fillup.week_window_mode': 'rolling',
   'fillup.week_start_day': '6',
 };
@@ -58,9 +76,14 @@ function daysAgo(reference: Date, days: number): Date {
   return new Date(reference.getTime() - days * DAY_MS);
 }
 
+function record(vehicleId: string, occurredAt: Date, quantityLiters = 30): FillUpHistoryRecord {
+  return { vehicleId, occurredAt, quantityLiters };
+}
+
 describe('FillUpRuleEngine', () => {
   const now = new Date('2026-08-23T12:00:00.000Z');
   const vehicleId = 'veh-1';
+  const otherVehicleId = 'veh-2';
   const driverId = 'drv-1';
 
   it('allows a fill-up with no prior history at all', async () => {
@@ -69,21 +92,24 @@ describe('FillUpRuleEngine', () => {
     expect(result).toEqual({ allowed: true });
   });
 
-  it('rejects with VEHICLE_GAP_TOO_SHORT when the vehicle\'s last fill-up is inside min_gap_days', async () => {
-    const history = new FakeHistory({
-      [vehicleId]: [{ occurredAt: daysAgo(now, 1) }], // 1 day < min_gap_days (2)
-    });
+  it('rejects with VEHICLE_GAP_TOO_SHORT when the vehicle\'s last fill-up is inside min_gap_days, and names the triggering fill-up', async () => {
+    const priorAt = daysAgo(now, 1); // 1 day < min_gap_days (2)
+    const history = new FakeHistory({ [vehicleId]: [record(vehicleId, priorAt)] });
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
     const result = await engine.evaluate(vehicleId, driverId, now);
-    expect(result).toEqual({ allowed: false, reason: 'VEHICLE_GAP_TOO_SHORT' });
+    expect(result).toEqual({
+      allowed: false,
+      reason: 'VEHICLE_GAP_TOO_SHORT',
+      trigger: { vehicleId, occurredAt: priorAt },
+    });
   });
 
   it('rejects with VEHICLE_WEEKLY_CAP_REACHED when the vehicle already has max_per_week fill-ups in the rolling window, even though the gap rule is satisfied', async () => {
     const history = new FakeHistory({
       [vehicleId]: [
-        { occurredAt: daysAgo(now, 2) }, // satisfies the 2-day gap
-        { occurredAt: daysAgo(now, 4) },
-        { occurredAt: daysAgo(now, 6) },
+        record(vehicleId, daysAgo(now, 2)), // satisfies the 2-day gap
+        record(vehicleId, daysAgo(now, 4)),
+        record(vehicleId, daysAgo(now, 6)),
       ],
     });
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
@@ -91,14 +117,19 @@ describe('FillUpRuleEngine', () => {
     expect(result).toEqual({ allowed: false, reason: 'VEHICLE_WEEKLY_CAP_REACHED' });
   });
 
-  it('rejects with DRIVER_GAP_TOO_SHORT when the vehicle checks pass but the driver\'s last fill-up (on any vehicle) is inside min_gap_days_per_driver', async () => {
+  it('rejects with DRIVER_GAP_TOO_SHORT when the vehicle checks pass but the driver\'s last fill-up (on any vehicle) is inside min_gap_days_per_driver, and names the OTHER vehicle it happened on', async () => {
+    const priorAt = daysAgo(now, 1);
     const history = new FakeHistory(
       {}, // vehicle has no history at all
-      { [driverId]: [{ occurredAt: daysAgo(now, 1) }] }, // on some other vehicle
+      { [driverId]: [record(otherVehicleId, priorAt)] }, // on some other vehicle
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
     const result = await engine.evaluate(vehicleId, driverId, now);
-    expect(result).toEqual({ allowed: false, reason: 'DRIVER_GAP_TOO_SHORT' });
+    expect(result).toEqual({
+      allowed: false,
+      reason: 'DRIVER_GAP_TOO_SHORT',
+      trigger: { vehicleId: otherVehicleId, occurredAt: priorAt },
+    });
   });
 
   it('rejects with DRIVER_WEEKLY_CAP_REACHED when the driver already has max_per_week_per_driver fill-ups across their vehicles this week, even though the vehicle checks pass', async () => {
@@ -106,9 +137,9 @@ describe('FillUpRuleEngine', () => {
       {},
       {
         [driverId]: [
-          { occurredAt: daysAgo(now, 2) }, // satisfies the driver gap rule
-          { occurredAt: daysAgo(now, 4) },
-          { occurredAt: daysAgo(now, 6) },
+          record(otherVehicleId, daysAgo(now, 2)), // satisfies the driver gap rule
+          record(otherVehicleId, daysAgo(now, 4)),
+          record(otherVehicleId, daysAgo(now, 6)),
         ],
       },
     );
@@ -117,23 +148,101 @@ describe('FillUpRuleEngine', () => {
     expect(result).toEqual({ allowed: false, reason: 'DRIVER_WEEKLY_CAP_REACHED' });
   });
 
-  it('returns the VEHICLE reason when both vehicle and driver checks would independently fail, per the stated check order (vehicle before driver)', async () => {
+  it('rejects with LITERS_PER_PERSON_CAP_REACHED when the driver\'s liters in the rolling window already reach the cap', async () => {
+    const settings = { ...DEFAULT_SETTINGS, 'fillup.max_liters_per_week_per_driver': '100' };
     const history = new FakeHistory(
-      { [vehicleId]: [{ occurredAt: daysAgo(now, 1) }] }, // vehicle gap fails
-      { [driverId]: [{ occurredAt: daysAgo(now, 1) }] }, // driver gap would also fail
+      {},
+      {
+        [driverId]: [
+          record(otherVehicleId, daysAgo(now, 2), 60),
+          record(otherVehicleId, daysAgo(now, 4), 40),
+        ],
+      },
+    );
+    const engine = new FillUpRuleEngine(new FakeSettings(settings), history);
+    const result = await engine.evaluate(vehicleId, driverId, now);
+    expect(result).toEqual({ allowed: false, reason: 'LITERS_PER_PERSON_CAP_REACHED' });
+  });
+
+  it('LITERS_PER_PERSON_CAP_REACHED resets once the tripping fill-ups roll out of the 7-day rolling window', async () => {
+    const settings = { ...DEFAULT_SETTINGS, 'fillup.max_liters_per_week_per_driver': '100' };
+    // Same 60+40=100L that trips the cap in the test above, but now 8 days
+    // old — outside the 7-day rolling window — so none of it should count
+    // toward the driver's current total, and the fill-up should be allowed.
+    const history = new FakeHistory(
+      {},
+      {
+        [driverId]: [
+          record(otherVehicleId, daysAgo(now, 8), 60),
+          record(otherVehicleId, daysAgo(now, 9), 40),
+        ],
+      },
+    );
+    const engine = new FillUpRuleEngine(new FakeSettings(settings), history);
+    const result = await engine.evaluate(vehicleId, driverId, now);
+    expect(result).toEqual({ allowed: true });
+  });
+
+  it('returns the VEHICLE reason when both vehicle and driver checks would independently fail, per the stated check order (vehicle before driver)', async () => {
+    const priorAt = daysAgo(now, 1);
+    const history = new FakeHistory(
+      { [vehicleId]: [record(vehicleId, priorAt)] }, // vehicle gap fails
+      { [driverId]: [record(vehicleId, priorAt)] }, // driver gap would also fail
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
     const result = await engine.evaluate(vehicleId, driverId, now);
-    expect(result).toEqual({ allowed: false, reason: 'VEHICLE_GAP_TOO_SHORT' });
+    expect(result).toEqual({
+      allowed: false,
+      reason: 'VEHICLE_GAP_TOO_SHORT',
+      trigger: { vehicleId, occurredAt: priorAt },
+    });
   });
 
   it('allows a fill-up when both gap rules are satisfied and both weekly counts are under their caps', async () => {
     const history = new FakeHistory(
-      { [vehicleId]: [{ occurredAt: daysAgo(now, 3) }] },
-      { [driverId]: [{ occurredAt: daysAgo(now, 3) }] },
+      { [vehicleId]: [record(vehicleId, daysAgo(now, 3))] },
+      { [driverId]: [record(vehicleId, daysAgo(now, 3))] },
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
     const result = await engine.evaluate(vehicleId, driverId, now);
     expect(result).toEqual({ allowed: true });
+  });
+
+  describe('standing exceptions', () => {
+    it('auto-allows a fill-up that would otherwise trip VEHICLE_GAP_TOO_SHORT, and reports which grant covered it', async () => {
+      const history = new FakeHistory({ [vehicleId]: [record(vehicleId, daysAgo(now, 1))] });
+      const standingExceptions = new FakeStandingExceptions({
+        id: 'grant-1',
+        rule: 'VEHICLE_GAP_TOO_SHORT',
+      });
+      const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history, standingExceptions);
+      const result = await engine.evaluate(vehicleId, driverId, now);
+      expect(result).toEqual({
+        allowed: true,
+        coveredBy: { standingExceptionId: 'grant-1', rule: 'VEHICLE_GAP_TOO_SHORT' },
+      });
+    });
+
+    it('does not exempt a DIFFERENT rule than the one the grant covers', async () => {
+      const history = new FakeHistory({ [vehicleId]: [record(vehicleId, daysAgo(now, 1))] });
+      const standingExceptions = new FakeStandingExceptions({
+        id: 'grant-1',
+        rule: 'DRIVER_GAP_TOO_SHORT', // covers a different rule
+      });
+      const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history, standingExceptions);
+      const result = await engine.evaluate(vehicleId, driverId, now);
+      expect(result).toEqual({
+        allowed: false,
+        reason: 'VEHICLE_GAP_TOO_SHORT',
+        trigger: { vehicleId, occurredAt: daysAgo(now, 1) },
+      });
+    });
+
+    it('still rejects normally when no StandingExceptionReader is supplied at all (real controller wiring always supplies one, but the constructor param is optional for tests)', async () => {
+      const history = new FakeHistory({ [vehicleId]: [record(vehicleId, daysAgo(now, 1))] });
+      const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
+      const result = await engine.evaluate(vehicleId, driverId, now);
+      expect(result.allowed).toBe(false);
+    });
   });
 });

@@ -59,6 +59,48 @@ export class DriversService {
     return driver;
   }
 
+  // Separate from findOne for the same reason as
+  // VehiclesService.findOneDetailed — only GET /drivers/:id (the actual
+  // detail page) needs the vehicle cross-link, not every internal caller.
+  async findOneDetailed(id: string) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { id },
+      include: {
+        vehicles: {
+          include: {
+            vehicle: { select: { id: true, internalCode: true, currentPlate: true } },
+          },
+        },
+      },
+    });
+    if (!driver) {
+      throw new NotFoundException('Driver not found.');
+    }
+    return driver;
+  }
+
+  // Item 10 (policy, interim per explicit instruction): masking of
+  // identityNumber is otherwise entirely a client-side display concern —
+  // the API has always returned the real value (see the comment on
+  // FillUpDriverSummary in shared-types), so THIS is the only place that
+  // reveal is actually an auditable action rather than just a permission
+  // check. supervisor+ reveals on demand; the click itself is what's
+  // logged, not merely holding the permission.
+  async revealIdentity(id: string, actorId: string) {
+    const driver = await this.findOne(id);
+    await this.audit.log({
+      userId: actorId,
+      action: 'REVEAL_NATIONAL_ID',
+      entityType: 'Driver',
+      entityId: id,
+      // Never log the actual national ID (CLAUDE.md rule 10) — just that a
+      // reveal happened, same as every other audit row logs entity IDs,
+      // not PII.
+      newValue: { revealed: true },
+    });
+    return { identityNumber: driver.identityNumber };
+  }
+
   async update(id: string, dto: UpdateDriverDto, actorId: string) {
     const before = await this.findOne(id);
 

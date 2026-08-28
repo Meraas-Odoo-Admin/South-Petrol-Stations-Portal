@@ -458,6 +458,10 @@ describe('Fill-ups (e2e)', () => {
     expect(rejectRes.body).toEqual({
       allowed: false,
       reason: 'VEHICLE_WEEKLY_CAP_REACHED',
+      // A weekly-cap violation has no single triggering fill-up (it's an
+      // aggregate count, unlike the gap checks) — trigger is null, not
+      // omitted, since the API always includes the key now (item 8).
+      trigger: null,
       requiresException: true,
     });
 
