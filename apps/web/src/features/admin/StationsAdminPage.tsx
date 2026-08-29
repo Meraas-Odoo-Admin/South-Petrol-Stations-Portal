@@ -1,25 +1,22 @@
 import { Fragment, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { apiClient } from '../../lib/apiClient';
 import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { useStations } from '../stations/useStations';
+import { STATION_STATUS_LABELS, STATION_STATUS_VARIANT, stationStatusLabel } from '../../lib/labels';
 
 interface CompanyRow {
   id: string;
   name: string;
 }
 
-type StationStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-
-const STATUS_VARIANT: Record<StationStatus, 'ok' | 'neutral' | 'danger'> = {
-  ACTIVE: 'ok',
-  INACTIVE: 'neutral',
-  SUSPENDED: 'danger',
-};
+// Matches apps/api/prisma/schema.prisma's StationStatus enum exactly —
+// the previous local type here (ACTIVE/INACTIVE/SUSPENDED) didn't match
+// the real enum, so an edit could submit a status the backend rejects.
+type StationStatus = keyof typeof STATION_STATUS_LABELS;
 
 // Item 7's explicit ask: confirmed no station create/edit UI existed
 // anywhere before this — POST/PATCH /stations were already built
@@ -74,13 +71,12 @@ export function StationsAdminPage() {
       setMunicipality('');
       invalidate();
     },
-    onError: (err) => {
-      setError(
-        isAxiosError<{ message?: string | string[] }>(err)
-          ? [err.response?.data?.message].flat().filter(Boolean).join(' — ') || 'تعذر إضافة المحطة.'
-          : 'تعذر إضافة المحطة.',
-      );
-    },
+    // The backend's own exception messages are English technical strings
+    // ("internalCode is already in use.") — never shown to the user
+    // directly, since this is an Arabic UI. Found via the code-leak audit:
+    // this used to surface them verbatim whenever the backend responded
+    // with a message body.
+    onError: () => setError('تعذر إضافة المحطة — تحقّق من عدم تكرار الرمز الداخلي أو رقم المحطة.'),
   });
 
   const updateMutation = useMutation({
@@ -157,92 +153,96 @@ export function StationsAdminPage() {
         {isError && <p className="p-4 text-sm text-danger">تعذر تحميل قائمة المحطات.</p>}
 
         {stations && (
-          <table className="w-full text-[12.5px]">
-            <thead>
-              <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
-                <th className="px-[18px] py-2.5 text-start">الاسم</th>
-                <th className="px-[18px] py-2.5 text-start">الرمز الداخلي</th>
-                <th className="px-[18px] py-2.5 text-start">رقم المحطة</th>
-                <th className="px-[18px] py-2.5 text-start">البلدية</th>
-                <th className="px-[18px] py-2.5 text-start">الحالة</th>
-                <th className="px-[18px] py-2.5 text-start"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {stations.map((station) => (
-                <Fragment key={station.id}>
-                  <tr className="border-b border-surface-alt last:border-0">
-                    <td className="px-[18px] py-3 font-medium text-ink">{station.name}</td>
-                    <td className="px-[18px] py-3">
-                      <CodeText>{station.internalCode}</CodeText>
-                    </td>
-                    <td className="px-[18px] py-3">
-                      <CodeText>{station.stationNumber}</CodeText>
-                    </td>
-                    <td className="px-[18px] py-3 text-ink">{station.municipality ?? '—'}</td>
-                    <td className="px-[18px] py-3">
-                      <StatusPill variant={STATUS_VARIANT[(station.status as StationStatus) ?? 'ACTIVE']}>
-                        {station.status}
-                      </StatusPill>
-                    </td>
-                    <td className="px-[18px] py-3">
-                      <PillButton
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (editingId === station.id) {
-                            setEditingId(null);
-                            return;
-                          }
-                          setEditingId(station.id);
-                          setEditName(station.name);
-                          setEditMunicipality(station.municipality ?? '');
-                          setEditStatus((station.status as StationStatus) ?? 'ACTIVE');
-                        }}
-                      >
-                        {editingId === station.id ? 'إغلاق' : 'تعديل'}
-                      </PillButton>
-                    </td>
-                  </tr>
-                  {editingId === station.id && (
-                    <tr className="border-b border-surface-alt bg-paper last:border-0">
-                      <td colSpan={6} className="px-[18px] py-4">
-                        <div className="flex flex-wrap items-end gap-3">
-                          <div>
-                            <label className="mb-1 block text-[11.5px] text-ink-soft">الاسم</label>
-                            <input value={editName} onChange={(e) => setEditName(e.target.value)} className={`w-56 ${inputClass}`} />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[11.5px] text-ink-soft">البلدية</label>
-                            <input
-                              value={editMunicipality}
-                              onChange={(e) => setEditMunicipality(e.target.value)}
-                              className={`w-40 ${inputClass}`}
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[11.5px] text-ink-soft">الحالة</label>
-                            <select
-                              value={editStatus}
-                              onChange={(e) => setEditStatus(e.target.value as StationStatus)}
-                              className={inputClass}
-                            >
-                              <option value="ACTIVE">ACTIVE</option>
-                              <option value="INACTIVE">INACTIVE</option>
-                              <option value="SUSPENDED">SUSPENDED</option>
-                            </select>
-                          </div>
-                          <PillButton disabled={!editName || updateMutation.isPending} onClick={() => updateMutation.mutate(station.id)}>
-                            حفظ
-                          </PillButton>
-                        </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-[12.5px]">
+              <thead>
+                <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                  <th className="px-[18px] py-2.5 text-start">الاسم</th>
+                  <th className="px-[18px] py-2.5 text-start">الرمز الداخلي</th>
+                  <th className="px-[18px] py-2.5 text-start">رقم المحطة</th>
+                  <th className="px-[18px] py-2.5 text-start">البلدية</th>
+                  <th className="px-[18px] py-2.5 text-start">الحالة</th>
+                  <th className="px-[18px] py-2.5 text-start"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {stations.map((station) => (
+                  <Fragment key={station.id}>
+                    <tr className="border-b border-surface-alt last:border-0">
+                      <td className="px-[18px] py-3 font-medium text-ink">{station.name}</td>
+                      <td className="px-[18px] py-3">
+                        <CodeText>{station.internalCode}</CodeText>
+                      </td>
+                      <td className="px-[18px] py-3">
+                        <CodeText>{station.stationNumber}</CodeText>
+                      </td>
+                      <td className="px-[18px] py-3 text-ink">{station.municipality ?? '—'}</td>
+                      <td className="px-[18px] py-3">
+                        <StatusPill variant={STATION_STATUS_VARIANT[(station.status as StationStatus) ?? 'ACTIVE'] ?? 'neutral'}>
+                          {stationStatusLabel(station.status)}
+                        </StatusPill>
+                      </td>
+                      <td className="px-[18px] py-3">
+                        <PillButton
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (editingId === station.id) {
+                              setEditingId(null);
+                              return;
+                            }
+                            setEditingId(station.id);
+                            setEditName(station.name);
+                            setEditMunicipality(station.municipality ?? '');
+                            setEditStatus((station.status as StationStatus) ?? 'ACTIVE');
+                          }}
+                        >
+                          {editingId === station.id ? 'إغلاق' : 'تعديل'}
+                        </PillButton>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                    {editingId === station.id && (
+                      <tr className="border-b border-surface-alt bg-paper last:border-0">
+                        <td colSpan={6} className="px-[18px] py-4">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <div>
+                              <label className="mb-1 block text-[11.5px] text-ink-soft">الاسم</label>
+                              <input value={editName} onChange={(e) => setEditName(e.target.value)} className={`w-56 ${inputClass}`} />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11.5px] text-ink-soft">البلدية</label>
+                              <input
+                                value={editMunicipality}
+                                onChange={(e) => setEditMunicipality(e.target.value)}
+                                className={`w-40 ${inputClass}`}
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11.5px] text-ink-soft">الحالة</label>
+                              <select
+                                value={editStatus}
+                                onChange={(e) => setEditStatus(e.target.value as StationStatus)}
+                                className={inputClass}
+                              >
+                                {Object.entries(STATION_STATUS_LABELS).map(([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <PillButton disabled={!editName || updateMutation.isPending} onClick={() => updateMutation.mutate(station.id)}>
+                              حفظ
+                            </PillButton>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>

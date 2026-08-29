@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import {
@@ -41,13 +40,9 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
       setApplied({ requiresApproval: res.data.requiresApproval });
       queryClient.invalidateQueries({ queryKey: ['vehicles', vehicleId] });
     },
-    onError: (err) => {
-      setError(
-        isAxiosError<{ message?: string | string[] }>(err)
-          ? [err.response?.data?.message].flat().filter(Boolean).join(' — ') || 'تعذر إرسال الطلب.'
-          : 'تعذر إرسال الطلب.',
-      );
-    },
+    // The backend's own message body is English technical text — never
+    // shown verbatim in this Arabic UI (code-leak audit finding).
+    onError: () => setError('تعذر إرسال الطلب — تحقّق من أن القيمة الجديدة غير مستخدمة لمركبة أخرى.'),
   });
 
   const inputClass =

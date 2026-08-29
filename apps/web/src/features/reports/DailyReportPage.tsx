@@ -10,12 +10,7 @@ import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { KpiCard } from '../../components/design/KpiCard';
-
-const FUEL_TYPE_LABELS: Record<FuelType, string> = {
-  PETROL_95: 'بنزين 95',
-  DIESEL: 'ديزل',
-  KEROSENE: 'كيروسين',
-};
+import { FUEL_TYPE_LABELS } from '../../lib/labels';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);

@@ -6,6 +6,7 @@ import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../auth/AuthProvider';
 import { maskIdentityNumber } from '../../lib/masking';
 import { formatLicensePlate } from '../../lib/libyanFormats';
+import { usageTypeLabel, fuelTypeLabel } from '../../lib/labels';
 import { Pagination } from '../../components/Pagination';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
@@ -19,6 +20,15 @@ import type { VehicleBasicInfo } from './types';
 
 const TAKE = 20;
 
+type MobileTab = 'identity' | 'plates' | 'drivers' | 'history';
+
+const MOBILE_TABS: { id: MobileTab; label: string }[] = [
+  { id: 'identity', label: 'الهوية' },
+  { id: 'plates', label: 'سجل اللوحات' },
+  { id: 'drivers', label: 'السائق والمالك' },
+  { id: 'history', label: 'سجل التعبئات' },
+];
+
 export function VehicleDetailPage() {
   const { vehicleId } = useParams<{ vehicleId: string }>();
   const { user, hasPermission } = useAuth();
@@ -26,6 +36,12 @@ export function VehicleDetailPage() {
   const canRequestChange = hasPermission('vehicles:request_change');
   const [skip, setSkip] = useState(0);
   const [openChangeForm, setOpenChangeForm] = useState<'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | null>(null);
+  // Matches design 5d — mobile gets tabs (identity / plate history /
+  // driver+owner / fill-up history) instead of everything stacked with
+  // scrolling tables. Desktop ignores this entirely: sections stay
+  // permanently visible via the `sm:!block` override below, same
+  // markup/queries as before this pass.
+  const [mobileTab, setMobileTab] = useState<MobileTab>('identity');
 
   const vehicleQuery = useQuery({
     queryKey: ['vehicles', vehicleId],
@@ -59,8 +75,23 @@ export function VehicleDetailPage() {
     <div>
       <PageHeader title={vehicle.internalCode} subtitle={formatLicensePlate(vehicle.currentPlate)} />
 
+      <div className="mb-4 flex gap-1.5 overflow-x-auto sm:hidden">
+        {MOBILE_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setMobileTab(tab.id)}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-bold ${
+              mobileTab === tab.id ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-4">
-        <Card className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
+        <Card className={`${mobileTab === 'identity' ? '' : 'hidden'} grid grid-cols-2 gap-4 p-4 sm:!grid sm:grid-cols-4`}>
           <Field label="رقم اللوحة" value={<LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>} />
           <Field
             label="رقم الشاصي"
@@ -74,12 +105,12 @@ export function VehicleDetailPage() {
           <Field label="الطراز" value={vehicle.model ?? '—'} />
           <Field label="اللون" value={vehicle.color ?? '—'} />
           <Field label="سنة الصنع" value={vehicle.manufactureYear?.toString() ?? '—'} />
-          <Field label="نوع الاستخدام" value={vehicle.usageType ?? '—'} />
+          <Field label="نوع الاستخدام" value={usageTypeLabel(vehicle.usageType)} />
           <Field label="المالك" value={vehicle.owner?.fullName ?? '—'} />
         </Card>
 
         {canRequestChange && (
-          <Card>
+          <Card className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
             <CardHeader title="تعديل هوية المركبة" />
             <div className="p-4">
               {openChangeForm ? (
@@ -103,7 +134,7 @@ export function VehicleDetailPage() {
           </Card>
         )}
 
-        <Card>
+        <Card className={mobileTab === 'drivers' ? '' : 'hidden sm:!block'}>
           <CardHeader title="السائق (السائقون)" />
           <div className="space-y-2 p-4">
             {vehicle.drivers.length === 0 && <p className="text-[13px] text-ink-soft">لا يوجد سائق مرتبط بهذه المركبة.</p>}
@@ -130,11 +161,12 @@ export function VehicleDetailPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className={mobileTab === 'plates' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل اللوحات" />
           {vehicle.plateHistory.length === 0 && <p className="p-4 text-[13px] text-ink-soft">لا يوجد سجل.</p>}
           {vehicle.plateHistory.length > 0 && (
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-[12.5px]">
               <thead>
                 <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">رقم اللوحة</th>
@@ -162,18 +194,22 @@ export function VehicleDetailPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
 
-        <StandingExceptionsSection vehicleId={vehicle.id} />
+        <div className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
+          <StandingExceptionsSection vehicleId={vehicle.id} />
+        </div>
 
-        <Card>
+        <Card className={mobileTab === 'history' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل التعبئات" />
           {historyQuery.isLoading && <p className="p-4 text-[13px] text-ink-soft">...جارٍ التحميل</p>}
           {historyQuery.isError && <p className="p-4 text-[13px] text-danger">تعذر تحميل السجل.</p>}
           {historyQuery.data && (
             <>
-              <table className="w-full text-[12.5px]">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-[12.5px]">
                 <thead>
                   <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                     <th className="px-[18px] py-2.5 text-start">التاريخ</th>
@@ -200,7 +236,7 @@ export function VehicleDetailPage() {
                       <td className="px-[18px] py-3">
                         <LtrText>{maskIdentityNumber(row.driver.identityNumber, permissions)}</LtrText>
                       </td>
-                      <td className="px-[18px] py-3">{row.fuelType}</td>
+                      <td className="px-[18px] py-3">{fuelTypeLabel(row.fuelType)}</td>
                       <td className="px-[18px] py-3">
                         <LtrText>{row.quantityLiters}</LtrText>
                       </td>
@@ -217,7 +253,8 @@ export function VehicleDetailPage() {
                     </tr>
                   )}
                 </tbody>
-              </table>
+                </table>
+              </div>
               <div className="px-[18px] py-3">
                 <Pagination skip={skip} take={TAKE} total={historyQuery.data.total} onSkipChange={setSkip} />
               </div>

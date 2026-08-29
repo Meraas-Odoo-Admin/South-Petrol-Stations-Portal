@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { apiClient } from '../../lib/apiClient';
 import { restrictToIdentityNumber } from '../../lib/libyanFormats';
 import { PillButton } from '../../components/design/PillButton';
@@ -38,13 +37,9 @@ export function DriverCreateForm({ onCreated, onCancel }: DriverCreateFormProps)
         phone: phone || undefined,
       }),
     onSuccess: (res) => onCreated(res.data),
-    onError: (err) => {
-      setError(
-        isAxiosError<{ message?: string | string[] }>(err)
-          ? [err.response?.data?.message].flat().filter(Boolean).join(' — ') || 'تعذر إضافة السائق.'
-          : 'تعذر إضافة السائق.',
-      );
-    },
+    // The backend's own message body is English technical text — never
+    // shown verbatim in this Arabic UI (code-leak audit finding).
+    onError: () => setError('تعذر إضافة السائق — تحقّق من عدم تكرار رقم الهوية.'),
   });
 
   const inputClass =

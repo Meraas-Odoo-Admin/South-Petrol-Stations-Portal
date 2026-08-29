@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { apiClient } from '../../lib/apiClient';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
@@ -34,13 +33,9 @@ export function SettingsAdminPage() {
       setTimeout(() => setSavedKey((cur) => (cur === key ? null : cur)), 2000);
       queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
     },
-    onError: (err) => {
-      setError(
-        isAxiosError<{ message?: string | string[] }>(err)
-          ? [err.response?.data?.message].flat().filter(Boolean).join(' — ') || 'تعذر حفظ القيمة.'
-          : 'تعذر حفظ القيمة.',
-      );
-    },
+    // The backend's own message body is English technical text — never
+    // shown verbatim in this Arabic UI (code-leak audit finding).
+    onError: () => setError('تعذر حفظ القيمة.'),
   });
 
   return (

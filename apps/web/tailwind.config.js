@@ -15,6 +15,7 @@ export default {
         surface: '#FFFFFF',
         'surface-alt': '#EEF2EE',
         ink: { DEFAULT: '#132524', soft: '#5B6D6A', faint: '#93A19E' },
+        line: '#E3E7E2',
       },
       fontFamily: {
         sans: ['Cairo', 'sans-serif'],

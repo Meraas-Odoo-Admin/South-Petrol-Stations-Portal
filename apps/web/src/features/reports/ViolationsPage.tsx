@@ -141,8 +141,63 @@ export function ViolationsPage() {
       {approveMutation.isError && <p className="mb-2 text-[13px] text-danger">تعذر اعتماد الاستثناء.</p>}
 
       {data && (
-        <Card>
-          <table className="w-full text-[12.5px]">
+        <>
+          {/* Mobile: tap-to-approve card list (8b) rather than a table with a hidden approve column */}
+          <div className="flex flex-col gap-2.5 sm:hidden">
+            {data.rows.map((row) => (
+              <Card key={row.id} className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[13px] font-extrabold text-ink">{row.fillUpTransaction.driver.fullName}</p>
+                    <p className="mt-0.5 text-[11.5px] text-ink-soft">
+                      <LtrText>{formatLicensePlate(row.fillUpTransaction.vehicle.currentPlate)}</LtrText>
+                      {' — '}
+                      {row.fillUpTransaction.station.internalCode}
+                    </p>
+                  </div>
+                  <StatusPill variant={row.approvedById ? 'ok' : 'accent'}>
+                    {row.approvedById ? 'معتمدة' : 'قيد الانتظار'}
+                  </StatusPill>
+                </div>
+
+                <p className="mt-2 text-[11px] text-ink-faint">
+                  <CodeText>{new Date(row.fillUpTransaction.occurredAt).toLocaleString('en-GB')}</CodeText>
+                  {' · '}
+                  {row.exceptionType.name}
+                </p>
+
+                {row.triggerReason ? (
+                  <div className="mt-2 rounded-sm bg-surface-alt px-3 py-2">
+                    <p className="text-[12px] text-ink">
+                      {RULE_VIOLATION_MESSAGES[row.triggerReason as RuleFailureReason] ?? row.triggerReason}
+                    </p>
+                    <TriggerDetail trigger={row.triggerDetail} />
+                  </div>
+                ) : null}
+
+                {canApprove && !row.approvedById && (
+                  <PillButton
+                    data-testid="approve-exception-button"
+                    size="sm"
+                    onClick={() => approveMutation.mutate(row.fillUpTransactionId)}
+                    disabled={approveMutation.isPending}
+                    className="mt-3 w-full !border-0 !bg-ok !text-white !shadow-none"
+                  >
+                    اعتماد
+                  </PillButton>
+                )}
+              </Card>
+            ))}
+            {data.rows.length === 0 && (
+              <Card className="p-6 text-center text-[13px] text-ink-soft">لا توجد مخالفات مطابقة</Card>
+            )}
+            <Pagination skip={skip} take={TAKE} total={data.total} onSkipChange={setSkip} />
+          </div>
+
+          {/* Desktop table (8b) */}
+          <Card className="hidden sm:block">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[960px] text-[12.5px]">
             <thead>
               <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                 <th className="px-[18px] py-2.5 text-start">التاريخ</th>
@@ -212,10 +267,12 @@ export function ViolationsPage() {
               )}
             </tbody>
           </table>
+          </div>
           <div className="px-[18px] py-3">
             <Pagination skip={skip} take={TAKE} total={data.total} onSkipChange={setSkip} />
           </div>
-        </Card>
+          </Card>
+        </>
       )}
     </div>
   );

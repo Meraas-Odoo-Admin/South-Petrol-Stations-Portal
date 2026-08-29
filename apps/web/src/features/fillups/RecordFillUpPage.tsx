@@ -19,7 +19,6 @@ import { formatLicensePlate } from '../../lib/libyanFormats';
 import { useAuth } from '../auth/AuthProvider';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
-import { CodeText } from '../../components/design/CodeText';
 import { VehicleSearchSelect } from './VehicleSearchSelect';
 import { DriverSearchSelect } from './DriverSearchSelect';
 import { DriverCreateForm } from '../drivers/DriverCreateForm';
@@ -365,17 +364,11 @@ export function RecordFillUpPage() {
           <p className="text-[16px] font-bold text-ink">
             {RULE_VIOLATION_MESSAGES[rejection.reason] ?? rejection.reason}
           </p>
-          <div className="mt-2 rounded-sm bg-surface-alt px-3.5 py-1">
-            <div className="flex justify-between border-b border-[#e4e0d4] py-2.5">
-              <span className="text-[11.5px] text-ink-soft">القاعدة</span>
-              <CodeText>{rejection.reason}</CodeText>
+          {rejection.trigger && (
+            <div className="mt-2 rounded-sm bg-surface-alt px-3.5 py-2.5">
+              <TriggerDetail trigger={rejection.trigger} />
             </div>
-            {rejection.trigger && (
-              <div className="py-2.5">
-                <TriggerDetail trigger={rejection.trigger} />
-              </div>
-            )}
-          </div>
+          )}
 
           <p className="mb-3 mt-4 text-[13px] font-bold text-ink">تسجيلها كاستثناء</p>
 
@@ -451,10 +444,12 @@ export function RecordFillUpPage() {
 
 // The global ValidationPipe/AllExceptionsFilter shape is
 // { statusCode, error, message }, where `message` is either a plain string
-// (thrown NestJS exceptions) or a string[] (class-validator failures).
-function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): string {
-  const message = error.response?.data?.message;
-  if (Array.isArray(message)) return message.join(' — ');
-  if (typeof message === 'string') return message;
-  return 'حدث خطأ غير متوقع.';
+// (thrown NestJS exceptions) or a string[] (class-validator failures) — both
+// always in English. Normal rule-violation rejections never reach this: they
+// come back as a 422 body handled by isRejected()/RULE_VIOLATION_MESSAGES
+// above, which is the real Arabic path. This only fires for a genuinely
+// unexpected error, and per the code-leak audit it must not surface the raw
+// English message in this Arabic UI even then.
+function formatAxiosError(_error: AxiosError<{ message?: string | string[] }>): string {
+  return 'تعذر إتمام العملية. حاول مرة أخرى.';
 }

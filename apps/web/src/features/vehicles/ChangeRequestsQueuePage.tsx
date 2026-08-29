@@ -106,7 +106,7 @@ export function ChangeRequestsQueuePage() {
                 <StatusPill variant={STATUS_VARIANT[r.status]}>{STATUS_LABELS[r.status]}</StatusPill>
               </div>
 
-              <div className="mt-4 grid grid-cols-[1fr_30px_1fr] items-center gap-0">
+              <div className="mt-4 grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_30px_1fr] sm:gap-0">
                 <div className="rounded-sm bg-surface-alt px-3.5 py-3">
                   <div className="text-[10.5px] text-ink-soft">الساري الآن</div>
                   <div className="mt-1.5">
@@ -115,7 +115,7 @@ export function ChangeRequestsQueuePage() {
                     </LtrText>
                   </div>
                 </div>
-                <div className="text-center text-ink-faint">←</div>
+                <div className="rotate-90 text-center text-ink-faint sm:rotate-0">←</div>
                 <div className="rounded-sm bg-accent-100 px-3.5 py-3">
                   <div className="text-[10.5px] text-accent-dark">المقترح</div>
                   <div className="mt-1.5">
@@ -138,7 +138,7 @@ export function ChangeRequestsQueuePage() {
               )}
 
               {r.status === 'PENDING' && (
-                <div className="mt-4 flex items-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <PillButton
                     size="sm"
                     onClick={() => approveMutation.mutate(r.id)}
@@ -148,7 +148,7 @@ export function ChangeRequestsQueuePage() {
                     اعتماد التصحيح
                   </PillButton>
                   {rejectingId === r.id ? (
-                    <div className="flex flex-1 items-center gap-2">
+                    <div className="flex w-full flex-1 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                       <input
                         value={rejectReason}
                         onChange={(e) => setRejectReason(e.target.value)}

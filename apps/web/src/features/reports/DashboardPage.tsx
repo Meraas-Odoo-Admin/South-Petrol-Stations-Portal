@@ -58,7 +58,7 @@ export function DashboardPage() {
       <PageHeader
         title="لوحة المتابعة على مستوى المديرية"
         actions={
-          <>
+          <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="mb-1 block text-[11px] font-bold text-ink-soft">من</label>
               <input
@@ -77,7 +77,7 @@ export function DashboardPage() {
                 className="h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
-          </>
+          </div>
         }
       />
 
@@ -94,7 +94,8 @@ export function DashboardPage() {
 
           <Card>
             <CardHeader title="حسب المحطة" subtitle="مرتبة بنسبة المخالفات" />
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-[12.5px]">
               <thead>
                 <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">المحطة</th>
@@ -130,6 +131,7 @@ export function DashboardPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </Card>
         </>
       )}

@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { apiClient } from '../../lib/apiClient';
+import { roleLabel } from '../../lib/labels';
 import { LtrText } from '../../components/LtrText';
 import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
@@ -52,13 +52,9 @@ export function UsersAdminPage() {
       setPhone('');
       invalidateUsers();
     },
-    onError: (err) => {
-      setError(
-        isAxiosError<{ message?: string | string[] }>(err)
-          ? [err.response?.data?.message].flat().filter(Boolean).join(' — ') || 'تعذر إضافة المستخدم.'
-          : 'تعذر إضافة المستخدم.',
-      );
-    },
+    // The backend's own message body is English technical text — never
+    // shown verbatim in this Arabic UI (code-leak audit finding).
+    onError: () => setError('تعذر إضافة المستخدم — تحقّق من عدم تكرار اسم المستخدم وأن كلمة المرور 8 أحرف على الأقل.'),
   });
 
   const assignRole = useMutation({
@@ -157,7 +153,8 @@ export function UsersAdminPage() {
         {usersQuery.isError && <p className="p-4 text-sm text-danger">تعذر تحميل قائمة المستخدمين.</p>}
 
         {usersQuery.data && (
-          <table className="w-full text-[12.5px]">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-[12.5px]">
             <thead>
               <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                 <th className="px-[18px] py-2.5 text-start">الاسم</th>
@@ -175,7 +172,7 @@ export function UsersAdminPage() {
                       <div className="font-medium text-ink">{u.fullName}</div>
                       <CodeText>{u.username}</CodeText>
                     </td>
-                    <td className="px-[18px] py-3 text-ink">{u.roles.map((r) => r.role.name).join('، ') || '—'}</td>
+                    <td className="px-[18px] py-3 text-ink">{u.roles.map((r) => roleLabel(r.role.name)).join('، ') || '—'}</td>
                     <td className="px-[18px] py-3">
                       <CodeText>
                         {u.roles.some((r) => r.role.unrestrictedStationAccess)
@@ -218,7 +215,7 @@ export function UsersAdminPage() {
                                           : removeRole.mutate({ userId: u.id, roleId: role.id })
                                       }
                                     />
-                                    {role.name}
+                                    {roleLabel(role.name)}
                                     {role.unrestrictedStationAccess && (
                                       <span className="text-[11px] text-ink-faint">(كل المحطات)</span>
                                     )}
@@ -257,6 +254,7 @@ export function UsersAdminPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </div>

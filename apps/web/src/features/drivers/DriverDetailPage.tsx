@@ -13,6 +13,7 @@ import { Card, CardHeader } from '../../components/design/Card';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { StandingExceptionsSection } from '../standing-exceptions/StandingExceptionsSection';
+import { identityTypeLabel, fuelTypeLabel } from '../../lib/labels';
 import type { DriverBasicInfo } from './types';
 
 const TAKE = 20;
@@ -65,9 +66,9 @@ export function DriverDetailPage() {
     <div>
       <PageHeader title={driver.fullName} />
 
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <Card className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3">
-          <Field label="نوع الهوية" value={driver.identityType === 'NATIONAL_ID' ? 'رقم وطني' : 'رقم إداري'} />
+          <Field label="نوع الهوية" value={identityTypeLabel(driver.identityType)} />
           <div>
             <p className="text-[11px] text-ink-faint">رقم الهوية</p>
             <p className="mt-0.5 text-[13px] font-bold text-ink" data-testid="driver-identity-number">
@@ -108,7 +109,10 @@ export function DriverDetailPage() {
           </div>
         </Card>
 
-        <StandingExceptionsSection driverId={driver.id} />
+        {/* 6c: standing-exception panel shown first on mobile */}
+        <div className="order-first sm:order-none">
+          <StandingExceptionsSection driverId={driver.id} />
+        </div>
 
         <Card>
           <CardHeader title="سجل التعبئات" />
@@ -116,7 +120,8 @@ export function DriverDetailPage() {
           {historyQuery.isError && <p className="p-4 text-[13px] text-danger">تعذر تحميل السجل.</p>}
           {historyQuery.data && (
             <>
-              <table className="w-full text-[12.5px]">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-[12.5px]">
                 <thead>
                   <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                     <th className="px-[18px] py-2.5 text-start">التاريخ</th>
@@ -139,7 +144,7 @@ export function DriverDetailPage() {
                           <LtrText>{formatLicensePlate(row.vehicle.currentPlate)}</LtrText>
                         </Link>
                       </td>
-                      <td className="px-[18px] py-3">{row.fuelType}</td>
+                      <td className="px-[18px] py-3">{fuelTypeLabel(row.fuelType)}</td>
                       <td className="px-[18px] py-3">
                         <LtrText>{row.quantityLiters}</LtrText>
                       </td>
@@ -157,6 +162,7 @@ export function DriverDetailPage() {
                   )}
                 </tbody>
               </table>
+              </div>
               <div className="px-[18px] py-3">
                 <Pagination skip={skip} take={TAKE} total={historyQuery.data.total} onSkipChange={setSkip} />
               </div>

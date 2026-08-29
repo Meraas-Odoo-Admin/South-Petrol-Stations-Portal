@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { apiClient } from '../../lib/apiClient';
 import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
@@ -48,13 +47,9 @@ export function ExceptionTypesAdminPage() {
       setNewRequiresProof(true);
       invalidate();
     },
-    onError: (err) => {
-      setError(
-        isAxiosError<{ message?: string | string[] }>(err)
-          ? [err.response?.data?.message].flat().filter(Boolean).join(' — ') || 'تعذر إضافة نوع الاستثناء.'
-          : 'تعذر إضافة نوع الاستثناء.',
-      );
-    },
+    // The backend's own message body is English technical text — never
+    // shown verbatim in this Arabic UI (code-leak audit finding).
+    onError: () => setError('تعذر إضافة نوع الاستثناء — تحقّق من عدم تكرار المفتاح.'),
   });
 
   const updateMutation = useMutation({
@@ -122,7 +117,8 @@ export function ExceptionTypesAdminPage() {
         {isError && <p className="p-4 text-sm text-danger">تعذر تحميل أنواع الاستثناءات.</p>}
 
         {data && (
-          <table className="w-full text-[12.5px]">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[620px] text-[12.5px]">
             <thead>
               <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                 <th className="px-[18px] py-2.5 text-start">المفتاح</th>
@@ -174,6 +170,7 @@ export function ExceptionTypesAdminPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </div>

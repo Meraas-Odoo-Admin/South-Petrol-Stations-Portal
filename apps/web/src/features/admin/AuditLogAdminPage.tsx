@@ -100,7 +100,8 @@ export function AuditLogAdminPage() {
                 </div>
                 <div className="flex-1 text-[12.5px] leading-[1.7] text-ink">
                   <span className="font-bold">{row.user ? row.user.fullName : '—'}</span>{' '}
-                  <CodeText>{row.action}</CodeText> {row.entityType} <CodeText>#{row.entityId.slice(0, 8)}</CodeText>
+                  <CodeText>{row.action}</CodeText> <CodeText>{row.entityType}</CodeText>{' '}
+                  <CodeText>#{row.entityId.slice(0, 8)}</CodeText>
                   {changedKeys.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {changedKeys.map((key) => {
