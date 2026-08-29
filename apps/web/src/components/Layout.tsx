@@ -156,8 +156,15 @@ export function Layout() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-paper lg:flex">
-      {/* Desktop sidebar (end/right side) — hidden below lg */}
-      <aside className="order-2 hidden w-60 shrink-0 flex-col border-s border-surface-alt bg-surface lg:flex">
+      {/* Desktop sidebar (end/right side) — hidden below lg.
+          Order matters here: with dir="rtl" and the default flex-direction
+          row, the flex main-axis start is the physical RIGHT edge — so the
+          sidebar needs the LOWER order value to land there. This was
+          previously order-2 (main was order-1), which pushed the sidebar
+          to the main-axis end (the physical LEFT) instead — confirmed via
+          a Playwright bounding-box measurement in the round-2 verification
+          pass, not something a glance at the source would catch. */}
+      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-surface-alt bg-surface lg:flex">
         <div className="px-5 py-6">
           <p className="text-[17px] font-extrabold text-primary">ضابط</p>
           <p className="text-[10.5px] font-medium text-ink-faint">مديرية أمن سبها</p>
@@ -227,7 +234,7 @@ export function Layout() {
           duplicated data-testid nodes breaking any page-level selector).
           Found via the runtime-verification screenshot pass, not by
           reading the source. */}
-      <main className="order-1 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-4 lg:min-h-screen lg:flex-1 lg:p-6">
+      <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-4 lg:min-h-screen lg:flex-1 lg:p-6">
         <Outlet />
       </main>
 

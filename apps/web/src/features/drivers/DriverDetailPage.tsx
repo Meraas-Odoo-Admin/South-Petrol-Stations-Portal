@@ -57,6 +57,7 @@ export function DriverDetailPage() {
   }
 
   const driver = driverQuery.data;
+  const primaryVehicle = driver.vehicles.find((v) => v.isPrimary) ?? driver.vehicles[0];
   const canSeeUnmasked = permissions.includes('reports:view_all_stations');
   const displayedIdentity = canSeeUnmasked
     ? driver.identityNumber
@@ -111,7 +112,12 @@ export function DriverDetailPage() {
 
         {/* 6c: standing-exception panel shown first on mobile */}
         <div className="order-first sm:order-none">
-          <StandingExceptionsSection driverId={driver.id} />
+          <StandingExceptionsSection
+            driverId={driver.id}
+            driverLabel={driver.fullName}
+            contextVehicleId={primaryVehicle?.vehicleId}
+            contextVehicleLabel={primaryVehicle ? formatLicensePlate(primaryVehicle.vehicle.currentPlate) : undefined}
+          />
         </div>
 
         <Card>

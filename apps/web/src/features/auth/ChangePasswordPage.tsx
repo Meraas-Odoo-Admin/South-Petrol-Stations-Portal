@@ -120,8 +120,12 @@ export function ChangePasswordPage() {
             />
             {errors.newPassword && <p className="mt-1.5 text-[12px] text-danger">{errors.newPassword.message}</p>}
 
+            {/* 4 segments per artboard 3c — the 3 checks below can only
+                ever fill 3 of them; the 4th stays empty even at "قوية"
+                (matches the artboard's own screenshot: 3 filled + 1 empty
+                for the strong state, not a 4th unreachable check). */}
             <div className="mt-3.5 flex gap-1.5">
-              {[0, 1, 2].map((i) => (
+              {[0, 1, 2, 3].map((i) => (
                 <span
                   key={i}
                   className={`h-1.5 flex-1 rounded-full ${i < score ? (score >= 3 ? 'bg-ok' : 'bg-accent') : 'bg-surface-alt'}`}

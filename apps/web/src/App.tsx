@@ -43,9 +43,17 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<RequireAuth />}>
+            {/* Deliberately OUTSIDE <Layout>: this is the forced first-login
+                screen (artboard 3c), meant to be a dedicated,
+                distraction-free step with no nav chrome — nested under
+                Layout it inherited the sidebar/hamburger/bottom-bar, whose
+                links let a user tap away before finishing the required
+                change. Server-side enforcement (PermissionsGuard +
+                mustChangePassword) is the real control either way; this is
+                the matching UI treatment. */}
+            <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route element={<Layout />}>
               <Route path="/" element={<HomePage />} />
-              <Route path="/change-password" element={<ChangePasswordPage />} />
               <Route path="/reports/dashboard" element={<DashboardPage />} />
               <Route path="/reports/daily" element={<DailyReportPage />} />
               <Route path="/reports/violations" element={<ViolationsPage />} />

@@ -36,7 +36,12 @@ test('a user with mustChangePassword: true is redirected to /change-password and
 
   await page.locator('input[name="currentPassword"]').fill(fixtures.needsChangePassword);
   await page.locator('input[name="newPassword"]').fill('BrandNewPassword123!');
-  await page.getByRole('button', { name: 'حفظ' }).click();
+  // confirmPassword is a required field (a later addition to this form,
+  // this test just never picked it up) — without it the form's own zod
+  // validation blocks submission entirely, which looked identical to a
+  // stuck redirect from the outside.
+  await page.locator('input[name="confirmPassword"]').fill('BrandNewPassword123!');
+  await page.getByRole('button', { name: 'حفظ والمتابعة' }).click();
 
   // Succeeds and proceeds normally — no forced re-login, per
   // AuthService.changePassword issuing a fresh token pair for this session.

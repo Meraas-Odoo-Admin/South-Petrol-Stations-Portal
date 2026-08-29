@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { PERMISSIONS_KEY } from '../../common/decorators/require-permission.decorator';
+import { ALLOW_PENDING_PASSWORD_CHANGE_KEY } from '../../common/decorators/allow-pending-password-change.decorator';
 import { RbacService } from '../rbac.service';
 
 @Injectable()
@@ -50,6 +51,23 @@ export class PermissionsGuard implements CanActivate {
     const isActive = await this.rbac.isUserActive(user.id);
     if (!isActive) {
       throw new UnauthorizedException();
+    }
+
+    // A user with mustChangePassword: true was previously only blocked
+    // client-side (RequireAuth.tsx redirecting to /change-password) — a
+    // valid access token could call any other endpoint directly. Fail
+    // closed here too, exempting only the handful of routes a user in
+    // that state genuinely needs (change-password itself, logout, and
+    // /auth/me so the frontend can even render the change-password screen).
+    const allowPending = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_PASSWORD_CHANGE_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!allowPending) {
+      const mustChangePassword = await this.rbac.mustChangePassword(user.id);
+      if (mustChangePassword) {
+        throw new ForbiddenException('Password change is required before this action.');
+      }
     }
 
     if (required.length === 0) {

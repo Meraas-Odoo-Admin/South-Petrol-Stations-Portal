@@ -5,6 +5,7 @@ interface CacheEntry {
   permissions: Set<string>;
   unrestrictedStationAccess: boolean;
   isActive: boolean;
+  mustChangePassword: boolean;
   expiresAt: number;
 }
 
@@ -37,6 +38,7 @@ export class RbacService {
       where: { id: userId },
       select: {
         isActive: true,
+        mustChangePassword: true,
         roles: {
           include: { role: { include: { permissions: { include: { permission: true } } } } },
         },
@@ -62,6 +64,7 @@ export class RbacService {
       permissions,
       unrestrictedStationAccess,
       isActive: user?.isActive ?? false,
+      mustChangePassword: user?.mustChangePassword ?? true,
       expiresAt: Date.now() + CACHE_TTL_MS,
     };
     this.cache.set(userId, entry);
@@ -76,6 +79,11 @@ export class RbacService {
   async isUserActive(userId: string): Promise<boolean> {
     const info = await this.loadUserRbacInfo(userId);
     return info.isActive;
+  }
+
+  async mustChangePassword(userId: string): Promise<boolean> {
+    const info = await this.loadUserRbacInfo(userId);
+    return info.mustChangePassword;
   }
 
   // Roles/permissions/active-status changed for this user — drop the cached

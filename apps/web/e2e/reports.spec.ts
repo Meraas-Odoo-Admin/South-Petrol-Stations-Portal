@@ -21,7 +21,12 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   // (hide, don't disable — docs/IMPLEMENTATION_PLAN.md §9).
   await expect(page.getByRole('link', { name: 'لوحة المتابعة' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'التقرير اليومي' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'المخالفات' })).toBeVisible();
+  // Scoped to the sidebar specifically — HomePage's own quick-link card
+  // ("المخالفات الحالات التي تحتاج قرارك") shares the same substring, and
+  // the sidebar's full label ("المخالفات والاستثناءات") isn't an exact
+  // match either, so neither a bare substring nor exact:true disambiguates
+  // on its own here.
+  await expect(page.locator('aside').getByRole('link', { name: 'المخالفات' })).toBeVisible();
 
   // Masking: §8's rule, operationalized as reports:view_all_stations —
   // supervisor1 lacks it, so only the last 4 digits render.
@@ -56,7 +61,10 @@ test('directorate_admin session: dashboard link visible, and the same driver\'s 
 }) => {
   await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
 
-  await expect(page.getByRole('link', { name: 'لوحة المتابعة' })).toBeVisible();
+  // exact: true — HomePage's own quick-link card carries the same heading
+  // plus a hint line as its accessible name ("لوحة المتابعة نظرة عامة على
+  // المحطات"), otherwise ambiguous alongside the sidebar's exact-text link.
+  await expect(page.getByRole('link', { name: 'لوحة المتابعة', exact: true })).toBeVisible();
 
   await page.goto(`/drivers/${fixtures.driverId}`);
   await expect(page.getByTestId('driver-identity-number')).toHaveText(fixtures.driverIdentityNumber);

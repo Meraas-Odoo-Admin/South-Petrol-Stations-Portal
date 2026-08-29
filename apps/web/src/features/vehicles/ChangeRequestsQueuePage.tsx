@@ -8,12 +8,8 @@ import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
+import { vehicleChangeTypeLabel } from '../../lib/labels';
 import type { VehicleChangeRequestEntry } from './types-change-requests';
-
-const CHANGE_TYPE_LABELS: Record<VehicleChangeRequestEntry['changeType'], string> = {
-  CHASSIS_CHANGE: 'رقم الشاصي',
-  BOOKLET_CHANGE: 'رقم كتيب المركبة',
-};
 
 const STATUS_VARIANT: Record<VehicleChangeRequestEntry['status'], 'accent' | 'ok' | 'danger'> = {
   PENDING: 'accent',
@@ -101,7 +97,7 @@ export function ChangeRequestsQueuePage() {
                   ) : (
                     <span className="text-[15px] font-extrabold text-ink">{r.vehicleId}</span>
                   )}
-                  <p className="mt-0.5 text-[11px] text-ink-faint">{CHANGE_TYPE_LABELS[r.changeType]}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-faint">{vehicleChangeTypeLabel(r.changeType)}</p>
                 </div>
                 <StatusPill variant={STATUS_VARIANT[r.status]}>{STATUS_LABELS[r.status]}</StatusPill>
               </div>

@@ -22,7 +22,11 @@ test('supervisor records a fill-up, it trips a rule, submits as an exception, th
   // tests risks tipping a LATER, unrelated test into a throttled refresh
   // that bounces it back to /login. Prefer in-app navigation wherever a
   // link exists.
-  await page.getByRole('link', { name: 'تسجيل تعبئة' }).click();
+  // exact: true — HomePage's own permission-gated quick-link card carries
+  // the same heading plus a hint line as its accessible name ("تسجيل
+  // تعبئة تسجيل عملية تعبئة جديدة لمركبة"), which otherwise makes this
+  // locator ambiguous alongside the sidebar's nav link.
+  await page.getByRole('link', { name: 'تسجيل تعبئة', exact: true }).click();
   await expect(page).toHaveURL('/fillups/new');
 
   await page.getByTestId('vehicle-search-input').fill(fixtures.vehicleCurrentPlate);
@@ -62,7 +66,7 @@ test('supervisor records a fill-up, it trips a rule, submits as an exception, th
   const row = page.locator('tbody tr', { hasText: fixtures.driverFullName });
   await expect(row).toContainText('قيد الانتظار');
 
-  await row.getByTestId('approve-exception-button').click();
+  await row.getByTestId('approve-exception-button-desktop').click();
   await expect(row).toContainText('معتمدة');
-  await expect(row.getByTestId('approve-exception-button')).toHaveCount(0);
+  await expect(row.getByTestId('approve-exception-button-desktop')).toHaveCount(0);
 });

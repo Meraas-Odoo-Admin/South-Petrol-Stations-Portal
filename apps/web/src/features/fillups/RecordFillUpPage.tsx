@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +9,6 @@ import type {
   CreateFillUpRequest,
   CreateFillUpResult,
   ExceptionTypeOption,
-  FillUpTransactionRaw,
   RuleFailureReason,
   RuleTriggerDetail,
 } from '@fuel-tracking/shared-types';
@@ -16,12 +16,15 @@ import { apiClient } from '../../lib/apiClient';
 import { StationSelect } from '../../components/StationSelect';
 import { LtrText } from '../../components/LtrText';
 import { formatLicensePlate } from '../../lib/libyanFormats';
+import { fuelTypeLabel } from '../../lib/labels';
 import { useAuth } from '../auth/AuthProvider';
+import { useStations } from '../stations/useStations';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { VehicleSearchSelect } from './VehicleSearchSelect';
 import { DriverSearchSelect } from './DriverSearchSelect';
 import { DriverCreateForm } from '../drivers/DriverCreateForm';
+import { VehicleCreateForm } from '../vehicles/VehicleCreateForm';
 import { RULE_VIOLATION_MESSAGES } from './ruleViolationMessages';
 
 // Item 8: name the specific prior fill-up that tripped a driver-level rule
@@ -86,6 +89,21 @@ function newIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
+// Captured at the moment of a successful submission, before resetAll()
+// clears the form — FillUpTransactionRaw itself only carries IDs
+// (vehicleId/driverId/stationId), not the display labels the confirmation
+// screen needs (artboard 4d's summary card: vehicle+plate, driver, fuel+
+// quantity, time).
+interface ConfirmationSummary {
+  vehicleLabel: string;
+  driverLabel: string;
+  stationName: string;
+  fuelType: CreateFillUpRequest['fuelType'];
+  quantityLiters: string;
+  occurredAt: string;
+  isException: boolean;
+}
+
 // The one screen every prior phase has been leading up to (docs/
 // IMPLEMENTATION_PLAN.md never actually scheduled this as its own phase —
 // M3 built the rule engine + backend endpoint, M4 built reporting; this
@@ -96,15 +114,27 @@ function newIdempotencyKey(): string {
 // mechanism.
 export function RecordFillUpPage() {
   const { user, hasPermission } = useAuth();
+  const navigate = useNavigate();
   const canViewAllStations = hasPermission('reports:view_all_stations');
+  const canViewReports = hasPermission('reports:view');
   const ownStation = user?.stationScope[0] ?? null;
+  const { data: stations } = useStations();
 
   const [rejection, setRejection] = useState<{ reason: RuleFailureReason; trigger: RuleTriggerDetail | null } | null>(
     null,
   );
   const [showNewDriverForm, setShowNewDriverForm] = useState(false);
   const [newlyCreatedDriverLabel, setNewlyCreatedDriverLabel] = useState<string | undefined>(undefined);
-  const [success, setSuccess] = useState<FillUpTransactionRaw | null>(null);
+  const [showNewVehicleForm, setShowNewVehicleForm] = useState(false);
+  const [newlyCreatedVehicleLabel, setNewlyCreatedVehicleLabel] = useState<string | undefined>(undefined);
+  const canCreateVehicle = hasPermission('vehicles:manage');
+  // Display labels for the currently-selected vehicle/driver — the form
+  // only ever stores their IDs (fillUpForm's vehicleId/driverId), and
+  // FillUpTransactionRaw's response doesn't carry names either, so these
+  // are the only source for the 4d confirmation screen's summary card.
+  const [selectedVehicleLabel, setSelectedVehicleLabel] = useState('');
+  const [selectedDriverLabel, setSelectedDriverLabel] = useState('');
+  const [success, setSuccess] = useState<ConfirmationSummary | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const idempotencyKeyRef = useRef(newIdempotencyKey());
 
@@ -143,6 +173,11 @@ export function RecordFillUpPage() {
     });
     exceptionForm.reset({ exceptionTypeId: '', reason: '', proofReference: '' });
     setRejection(null);
+    setSuccess(null);
+    setSelectedVehicleLabel('');
+    setSelectedDriverLabel('');
+    setNewlyCreatedVehicleLabel(undefined);
+    setNewlyCreatedDriverLabel(undefined);
     idempotencyKeyRef.current = newIdempotencyKey();
   }
 
@@ -174,6 +209,19 @@ export function RecordFillUpPage() {
     };
   }
 
+  function buildConfirmationSummary(values: FillUpFormValues, isException: boolean): ConfirmationSummary {
+    const stationName = stations?.find((s) => s.id === values.stationId)?.name ?? '';
+    return {
+      vehicleLabel: selectedVehicleLabel,
+      driverLabel: selectedDriverLabel,
+      stationName,
+      fuelType: values.fuelType,
+      quantityLiters: values.quantityLiters,
+      occurredAt: new Date().toISOString(),
+      isException,
+    };
+  }
+
   async function onSubmitFillUp(values: FillUpFormValues) {
     setSubmitError(null);
     setSuccess(null);
@@ -183,8 +231,7 @@ export function RecordFillUpPage() {
         setRejection({ reason: result.reason, trigger: result.trigger });
         return;
       }
-      setSuccess(result);
-      setTimeout(resetAll, 3000);
+      setSuccess(buildConfirmationSummary(values, result.isException));
     } catch (error) {
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
@@ -201,8 +248,7 @@ export function RecordFillUpPage() {
         setSubmitError('تعذر تسجيل الاستثناء.');
         return;
       }
-      setSuccess(result);
-      setTimeout(resetAll, 3000);
+      setSuccess(buildConfirmationSummary(fillUpForm.getValues(), result.isException));
     } catch (error) {
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
@@ -213,18 +259,70 @@ export function RecordFillUpPage() {
   const textInputClass =
     'h-11 w-full rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
 
+  // Artboard 4d: a dedicated confirmation screen (checkmark, headline,
+  // immutability note, transaction-summary card, "تعبئة جديدة"/"عرض
+  // تعبئات اليوم" actions) — replacing the small inline success banner
+  // that used to sit above the still-rendered, auto-reset-after-3s form.
+  // No desktop artboard exists for this either (4d is mobile-only, same
+  // gap as 3c) — this renders the same way at both widths, centered in
+  // the page's existing max-w-xl column.
+  if (success) {
+    return (
+      <div className="mx-auto flex max-w-xl flex-col items-center py-6 text-center" data-testid="fillup-success">
+        <div className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-ok-100">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#1f7a5c" strokeWidth="2.6">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </div>
+        <h1 className="mt-6 text-[24px] font-black text-ink">تم تسجيل التعبئة</h1>
+        <p className="mt-2.5 text-[13px] leading-[1.8] text-ink-soft">
+          {success.stationName ? `سُجّلت باسمك في ${success.stationName}، ` : 'سُجّلت باسمك، '}
+          ولا يمكن تعديلها أو حذفها بعد الآن.
+          {success.isException && ' (كاستثناء، بانتظار اعتماد المشرف)'}
+        </p>
+
+        <Card className="mt-6 w-full p-4.5 text-start">
+          <div className="flex justify-between border-b border-surface-alt py-2.5">
+            <span className="text-[12.5px] text-ink-soft">المركبة</span>
+            <span className="text-[12.5px] font-bold text-ink">
+              <LtrText>{success.vehicleLabel}</LtrText>
+            </span>
+          </div>
+          <div className="flex justify-between border-b border-surface-alt py-2.5">
+            <span className="text-[12.5px] text-ink-soft">السائق</span>
+            <span className="text-[12.5px] font-bold text-ink">{success.driverLabel}</span>
+          </div>
+          <div className="flex justify-between border-b border-surface-alt py-2.5">
+            <span className="text-[12.5px] text-ink-soft">الوقود والكمية</span>
+            <span className="text-[12.5px] font-bold text-ink">
+              {fuelTypeLabel(success.fuelType)} · <LtrText>{success.quantityLiters}</LtrText> لتر
+            </span>
+          </div>
+          <div className="flex justify-between py-2.5">
+            <span className="text-[12.5px] text-ink-soft">الوقت</span>
+            <span className="text-[12.5px] font-bold text-ink">
+              <LtrText>{new Date(success.occurredAt).toLocaleString('ar')}</LtrText>
+            </span>
+          </div>
+        </Card>
+
+        <div className="mt-6 flex w-full flex-col gap-2.5">
+          <PillButton onClick={resetAll} className="h-13 w-full text-[15px]">
+            تعبئة جديدة
+          </PillButton>
+          {canViewReports && (
+            <PillButton variant="ghost" onClick={() => navigate('/reports/daily')} className="h-11 w-full text-[13px]">
+              عرض تعبئات اليوم
+            </PillButton>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="mb-4 text-lg font-extrabold text-ink">تسجيل تعبئة وقود</h1>
-
-      {success && (
-        <Card data-testid="fillup-success" className="mb-4 border-s-4 border-ok bg-ok-100 p-4">
-          <p className="text-[13px] font-bold text-ok">
-            تم تسجيل التعبئة بنجاح.
-            {success.isException && ' (كاستثناء، بانتظار اعتماد المشرف)'}
-          </p>
-        </Card>
-      )}
 
       <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp)} className="space-y-3">
         <Card className="p-3.5">
@@ -242,10 +340,37 @@ export function RecordFillUpPage() {
 
         <Card className="p-3.5">
           <label className={fieldLabelClass}>المركبة</label>
-          <VehicleSearchSelect
-            value={fillUpForm.watch('vehicleId')}
-            onChange={(id) => fillUpForm.setValue('vehicleId', id, { shouldValidate: true })}
-          />
+          {showNewVehicleForm ? (
+            <VehicleCreateForm
+              onCreated={(vehicle) => {
+                fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
+                setNewlyCreatedVehicleLabel(vehicle.currentPlate);
+                setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
+                setShowNewVehicleForm(false);
+              }}
+              onCancel={() => setShowNewVehicleForm(false)}
+            />
+          ) : (
+            <>
+              <VehicleSearchSelect
+                value={fillUpForm.watch('vehicleId')}
+                onChange={(id, label) => {
+                  fillUpForm.setValue('vehicleId', id, { shouldValidate: true });
+                  setSelectedVehicleLabel(formatLicensePlate(label));
+                }}
+                initialLabel={newlyCreatedVehicleLabel}
+              />
+              {canCreateVehicle && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewVehicleForm(true)}
+                  className="mt-1.5 text-[11.5px] font-bold text-accent-dark"
+                >
+                  مركبة جديدة؟ إضافة مركبة جديدة
+                </button>
+              )}
+            </>
+          )}
           {fillUpForm.formState.errors.vehicleId && (
             <p className={fieldErrorClass}>{fillUpForm.formState.errors.vehicleId.message}</p>
           )}
@@ -258,6 +383,7 @@ export function RecordFillUpPage() {
               onCreated={(driver) => {
                 fillUpForm.setValue('driverId', driver.id, { shouldValidate: true });
                 setNewlyCreatedDriverLabel(driver.fullName);
+                setSelectedDriverLabel(driver.fullName);
                 setShowNewDriverForm(false);
               }}
               onCancel={() => setShowNewDriverForm(false)}
@@ -266,7 +392,10 @@ export function RecordFillUpPage() {
             <>
               <DriverSearchSelect
                 value={fillUpForm.watch('driverId')}
-                onChange={(id) => fillUpForm.setValue('driverId', id, { shouldValidate: true })}
+                onChange={(id, label) => {
+                  fillUpForm.setValue('driverId', id, { shouldValidate: true });
+                  setSelectedDriverLabel(label);
+                }}
                 initialLabel={newlyCreatedDriverLabel}
               />
               {hasPermission('drivers:create') && (

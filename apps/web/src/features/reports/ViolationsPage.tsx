@@ -176,8 +176,12 @@ export function ViolationsPage() {
                 ) : null}
 
                 {canApprove && !row.approvedById && (
+                  // Distinct from the desktop table's copy below — both
+                  // render simultaneously in the DOM (one hidden via CSS
+                  // per viewport), so a shared testid queried without
+                  // scoping to a specific row/table would match both.
                   <PillButton
-                    data-testid="approve-exception-button"
+                    data-testid="approve-exception-button-mobile"
                     size="sm"
                     onClick={() => approveMutation.mutate(row.fillUpTransactionId)}
                     disabled={approveMutation.isPending}
@@ -245,7 +249,7 @@ export function ViolationsPage() {
                     <td className="px-[18px] py-3">
                       {!row.approvedById && (
                         <PillButton
-                          data-testid="approve-exception-button"
+                          data-testid="approve-exception-button-desktop"
                           size="sm"
                           onClick={() => approveMutation.mutate(row.fillUpTransactionId)}
                           disabled={approveMutation.isPending}

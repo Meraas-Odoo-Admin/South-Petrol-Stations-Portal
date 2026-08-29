@@ -99,3 +99,62 @@ export const APPROVAL_STATUS_LABELS: Record<string, string> = {
 // Dictionary's "لم يسرِ بعد" — a pending correction hasn't taken effect
 // yet; the old value is still the one in force everywhere in the system.
 export const CHANGE_NOT_YET_EFFECTIVE = 'لم يسرِ بعد';
+
+// VehicleChangeRequest.changeType — was previously duplicated locally in
+// ChangeRequestsQueuePage.tsx and VehicleDetailPage.tsx instead of living
+// here with every other enum's dictionary entry (verification-fix item 10:
+// not a leak, since both call sites already showed correct Arabic text,
+// just an inconsistent source of truth).
+export const VEHICLE_CHANGE_TYPE_LABELS: Record<string, string> = {
+  CHASSIS_CHANGE: 'رقم الشاصي',
+  BOOKLET_CHANGE: 'رقم كتيب المركبة',
+};
+
+export function vehicleChangeTypeLabel(changeType: string | null | undefined): string {
+  if (!changeType) return '—';
+  return VEHICLE_CHANGE_TYPE_LABELS[changeType] ?? changeType;
+}
+
+// SystemSetting rows (apps/api/prisma/seed.ts's SYSTEM_SETTINGS) — the
+// naming-dictionary rule (1b) applies here too: SettingsAdminPage used to
+// render setting.description and setting.key directly, which are literal
+// English developer text and literal snake_case-ish DB keys
+// ("PLACEHOLDER — max fill-ups per driver per week...",
+// "fillup.max_per_week_per_driver"). Four of these settings are
+// placeholder values pending client confirmation (docs/OPEN_ITEMS.md
+// #19/#20) — the Arabic description says so explicitly rather than
+// presenting them as settled, same as the English placeholder text did.
+export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description: string }> = {
+  'fillup.max_per_week': {
+    label: 'الحد الأسبوعي لعدد التعبئات',
+    description: 'أقصى عدد تعبئات مسموح به لكل مركبة خلال الأسبوع.',
+  },
+  'fillup.min_gap_days': {
+    label: 'أقل فاصل زمني بين تعبئتين',
+    description: 'عدد الأيام التي يجب أن تمضي قبل السماح بتعبئة جديدة للمركبة نفسها.',
+  },
+  'fillup.max_per_week_per_driver': {
+    label: 'الحد الأسبوعي لعدد تعبئات السائق',
+    description: 'أقصى عدد تعبئات مسموح به للسائق أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  },
+  'fillup.min_gap_days_per_driver': {
+    label: 'أقل فاصل زمني بين تعبئتين لنفس السائق',
+    description: 'عدد الأيام بين تعبئتين للسائق نفسه، على أي من مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  },
+  'fillup.week_window_mode': {
+    label: 'طريقة حساب الأسبوع',
+    description: '"متجدد" يحسب آخر سبعة أيام تلقائيًا، أو "ثابت" يبدأ من يوم محدَّد كل أسبوع.',
+  },
+  'fillup.week_start_day': {
+    label: 'يوم بداية الأسبوع',
+    description: 'يُستخدم فقط عند اختيار طريقة الحساب "ثابت" — رقم مبدئي بانتظار تأكيد العميل.',
+  },
+  'fillup.max_liters_per_week_per_driver': {
+    label: 'الحد الأسبوعي للترات السائق',
+    description: 'أقصى مجموع لترات مسموح به للسائق أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  },
+};
+
+export function systemSettingLabel(key: string): { label: string; description: string } {
+  return SYSTEM_SETTING_LABELS[key] ?? { label: key, description: '' };
+}

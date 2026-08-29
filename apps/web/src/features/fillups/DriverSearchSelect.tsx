@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
+import { PortalDropdown } from '../../components/PortalDropdown';
 
 interface DriverOption {
   id: string;
@@ -29,6 +30,7 @@ interface DriverSearchSelectProps {
 export function DriverSearchSelect({ value, onChange, initialLabel }: DriverSearchSelectProps) {
   const [query, setQuery] = useState(initialLabel ?? '');
   const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: drivers, isLoading } = useQuery({
     queryKey: ['drivers', 'search-pool'],
@@ -56,6 +58,7 @@ export function DriverSearchSelect({ value, onChange, initialLabel }: DriverSear
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         data-testid="driver-search-input"
         value={query}
         onChange={(e) => {
@@ -65,13 +68,17 @@ export function DriverSearchSelect({ value, onChange, initialLabel }: DriverSear
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="ابحث باسم السائق"
-        className="w-72 rounded border border-slate-300 px-2 py-1"
+        className="h-11 w-full rounded-sm border border-line bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
       />
-      {open && (
-        <ul className="absolute z-10 mt-1 max-h-48 w-72 overflow-auto rounded border border-slate-300 bg-white shadow">
-          {isLoading && <li className="px-2 py-1 text-sm text-slate-500">...جارٍ التحميل</li>}
+      <PortalDropdown
+        anchorRef={inputRef}
+        open={open}
+        className="max-h-48 overflow-auto rounded-sm border border-line bg-surface shadow-md"
+      >
+        <ul>
+          {isLoading && <li className="px-3 py-2 text-[12.5px] text-ink-soft">...جارٍ التحميل</li>}
           {!isLoading && filtered.length === 0 && (
-            <li className="px-2 py-1 text-sm text-slate-500">لا توجد نتائج</li>
+            <li className="px-3 py-2 text-[12.5px] text-ink-soft">لا توجد نتائج</li>
           )}
           {filtered.map((driver) => (
             <li key={driver.id}>
@@ -84,14 +91,14 @@ export function DriverSearchSelect({ value, onChange, initialLabel }: DriverSear
                   setQuery(driver.fullName);
                   setOpen(false);
                 }}
-                className="block w-full px-2 py-1 text-start text-sm hover:bg-slate-100"
+                className="block w-full px-3 py-2 text-start text-[12.5px] hover:bg-surface-alt"
               >
                 {driver.fullName}
               </button>
             </li>
           ))}
         </ul>
-      )}
+      </PortalDropdown>
     </div>
   );
 }

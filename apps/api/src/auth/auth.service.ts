@@ -185,6 +185,13 @@ export class AuthService {
       );
     });
 
+    // mustChangePassword just flipped to false — without this, PermissionsGuard
+    // keeps 403ing every other endpoint for up to CACHE_TTL_MS (the RBAC
+    // cache doesn't know yet), even though this same request just issues a
+    // fresh access token below that the frontend immediately uses to
+    // navigate away from the change-password screen.
+    this.rbac.invalidate(userId);
+
     // The instructions also require the mustChangePassword frontend flow
     // to "proceed normally" right after this call succeeds — which isn't
     // possible if THIS session's own refresh token was just revoked above

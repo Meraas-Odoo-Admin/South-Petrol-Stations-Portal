@@ -3,16 +3,24 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
-import { CodeText } from '../../components/design/CodeText';
+import { systemSettingLabel } from '../../lib/labels';
 import type { SystemSettingRow } from './types';
 
 // Item 7 + the "MOST IMPORTANT" ask. Matches 2i's settings-card pattern:
 // each tunable number is its own surface-alt card with a numeral display
-// box, an Arabic label paired with its literal DB key (CodeText), and a
-// plain-language description underneath — not a table row. 2i mocks only
-// 2 settings ending in one shared save button; this scales to 7 by giving
-// each card its own save (editing 7 independent keys via one shared commit
-// would be worse UX, not closer to the mockup's intent).
+// box, an Arabic label and a plain-language Arabic description underneath
+// — not a table row. 2i mocks only 2 settings ending in one shared save
+// button; this scales to 7 by giving each card its own save (editing 7
+// independent keys via one shared commit would be worse UX, not closer to
+// the mockup's intent).
+//
+// Verification-fix item 5: this used to render setting.description and
+// setting.key directly — literal English developer text ("PLACEHOLDER —
+// max fill-ups...") and a literal DB key (CodeText-wrapped, but still a
+// DB field name on screen either way, which 1b's naming-dictionary rule
+// forbids regardless of font). systemSettingLabel() is this screen's
+// version of the same labels.ts dictionary every enum already goes
+// through — no DB key is shown at all now, same as every other screen.
 export function SettingsAdminPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Record<string, string>>({});
@@ -54,14 +62,11 @@ export function SettingsAdminPage() {
           {data.map((setting) => {
             const current = editing[setting.key] ?? setting.value;
             const dirty = current !== setting.value;
+            const { label, description } = systemSettingLabel(setting.key);
             return (
               <Card key={setting.key} className="p-4">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[12.5px] font-bold text-ink">{setting.description ?? setting.key}</span>
-                </div>
-                <div className="mt-1">
-                  <CodeText>{setting.key}</CodeText>
-                </div>
+                <span className="text-[12.5px] font-bold text-ink">{label}</span>
+                {description && <p className="mt-1 text-[11px] leading-[1.6] text-ink-soft">{description}</p>}
                 <div className="mt-3 flex items-center gap-2">
                   <input
                     value={current}

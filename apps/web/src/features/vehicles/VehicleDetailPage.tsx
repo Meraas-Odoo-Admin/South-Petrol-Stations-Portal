@@ -6,7 +6,7 @@ import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../auth/AuthProvider';
 import { maskIdentityNumber } from '../../lib/masking';
 import { formatLicensePlate } from '../../lib/libyanFormats';
-import { usageTypeLabel, fuelTypeLabel } from '../../lib/labels';
+import { usageTypeLabel, fuelTypeLabel, vehicleChangeTypeLabel } from '../../lib/labels';
 import { Pagination } from '../../components/Pagination';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
@@ -117,7 +117,7 @@ export function VehicleDetailPage() {
                 <ChangeRequestForm
                   vehicleId={vehicle.id}
                   changeType={openChangeForm}
-                  label={openChangeForm === 'CHASSIS_CHANGE' ? 'رقم الشاصي' : 'رقم كتيب المركبة'}
+                  label={vehicleChangeTypeLabel(openChangeForm)}
                   onDone={() => setOpenChangeForm(null)}
                 />
               ) : (
@@ -199,7 +199,12 @@ export function VehicleDetailPage() {
         </Card>
 
         <div className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
-          <StandingExceptionsSection vehicleId={vehicle.id} />
+          <StandingExceptionsSection
+            vehicleId={vehicle.id}
+            vehicleLabel={formatLicensePlate(vehicle.currentPlate)}
+            contextDriverId={primaryDriver?.driverId}
+            contextDriverLabel={primaryDriver?.driver.fullName}
+          />
         </div>
 
         <Card className={mobileTab === 'history' ? '' : 'hidden sm:!block'}>
