@@ -79,7 +79,7 @@ export function ChangePasswordPage() {
   }
 
   const fieldInputClass =
-    'mt-2 h-13 w-full rounded-sm bg-surface-alt px-3.5 text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none focus:ring-2 focus:ring-accent';
+    'mt-2 h-[52px] w-full rounded-sm bg-surface-alt px-3.5 text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none focus:ring-2 focus:ring-accent';
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
@@ -187,8 +187,7 @@ export function ChangePasswordPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="mt-1 flex h-13.5 items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
-            style={{ height: 54 }}
+            className="mt-1 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
           >
             {isSubmitting ? '...جارٍ الحفظ' : 'حفظ والمتابعة'}
           </button>

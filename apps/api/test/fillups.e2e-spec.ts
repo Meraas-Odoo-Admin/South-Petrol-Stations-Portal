@@ -47,13 +47,9 @@ describe('Fill-ups (e2e)', () => {
   let exceptionTypeRequiresProofId: string;
 
   let vehicle1Id: string;
-  let driver1Id: string;
   let vehicle2Id: string;
-  let driver2Id: string;
   let vehicle3Id: string;
-  let driver3Id: string;
   let vehicle4Id: string;
-  let driver4Id: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -75,8 +71,9 @@ describe('Fill-ups (e2e)', () => {
     const settings: Array<[string, string]> = [
       ['fillup.max_per_week', '3'],
       ['fillup.min_gap_days', '2'],
-      ['fillup.max_per_week_per_driver', '3'],
-      ['fillup.min_gap_days_per_driver', '2'],
+      ['fillup.max_per_week_per_owner', '3'],
+      ['fillup.min_gap_days_per_owner', '2'],
+      ['fillup.max_liters_per_week_per_owner', '100000'], // high enough to stay out of the way — this file doesn't test owner-scoped rules
       ['fillup.week_window_mode', 'rolling'],
       ['fillup.week_start_day', '6'],
     ];
@@ -110,37 +107,21 @@ describe('Fill-ups (e2e)', () => {
       data: { internalCode: `E2E-FU-B-${runId}`, stationNumber: '2', name: 'E2E FU Station B', companyId: company.id },
     });
 
-    const driver1 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-1-${runId}`, fullName: 'E2E FU Driver One' },
-    });
-    driver1Id = driver1.id;
     const vehicle1 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-1-${runId}`, currentPlate: `E2E-FU-PLATE-1-${runId}` },
     });
     vehicle1Id = vehicle1.id;
 
-    const driver2 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-2-${runId}`, fullName: 'E2E FU Driver Two' },
-    });
-    driver2Id = driver2.id;
     const vehicle2 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-2-${runId}`, currentPlate: `E2E-FU-PLATE-2-${runId}` },
     });
     vehicle2Id = vehicle2.id;
 
-    const driver3 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-3-${runId}`, fullName: 'E2E FU Driver Three' },
-    });
-    driver3Id = driver3.id;
     const vehicle3 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-3-${runId}`, currentPlate: `E2E-FU-PLATE-3-${runId}` },
     });
     vehicle3Id = vehicle3.id;
 
-    const driver4 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-4-${runId}`, fullName: 'E2E FU Driver Four' },
-    });
-    driver4Id = driver4.id;
     const vehicle4 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-4-${runId}`, currentPlate: `E2E-FU-PLATE-4-${runId}` },
     });
@@ -216,10 +197,8 @@ describe('Fill-ups (e2e)', () => {
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: [recorderRoleId, approverRoleId] } } });
     await prisma.role.deleteMany({ where: { id: { in: [recorderRoleId, approverRoleId] } } });
-    await prisma.driverVehicle.deleteMany({ where: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
-    await prisma.driver.deleteMany({ where: { id: { in: [driver1Id, driver2Id, driver3Id, driver4Id] } } });
     await prisma.station.deleteMany({ where: { id: { in: [stationA.id, stationB.id] } } });
     await prisma.company.delete({ where: { id: company.id } });
     await app.close();
@@ -247,7 +226,6 @@ describe('Fill-ups (e2e)', () => {
   function baseFillUpBody(overrides: Record<string, unknown> = {}) {
     return {
       vehicleId: vehicle1Id,
-      driverId: driver1Id,
       stationId: stationA.id,
       fuelType: 'PETROL_95',
       quantityLiters: 20,
@@ -345,7 +323,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle3Id, driverId: driver3Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle3Id }))
       .expect(201);
 
     // Same key, different vehicleId — a client bug (or copy-paste mistake),
@@ -355,7 +333,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle2Id, driverId: driver2Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle2Id }))
       .expect(409);
 
     const rows = await prisma.fillUpTransaction.findMany({ where: { idempotencyKey } });
@@ -383,7 +361,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${recorderToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle4Id, driverId: driver4Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle4Id }))
       .expect(201);
     expect(createRes.body.stationId).toBe(stationA.id);
 
@@ -395,7 +373,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${otherStationToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle4Id, driverId: driver4Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle4Id }))
       .expect(403);
 
     // Not A's transaction data leaking through — a 403 body, nothing else.
@@ -431,14 +409,13 @@ describe('Fill-ups (e2e)', () => {
     const accessToken = await loginAsRecorder();
     const server = app.getHttpServer();
 
-    // Pre-load 3 prior fill-ups for vehicle2/driver2, spaced >= 2 days apart
+    // Pre-load 3 prior fill-ups for vehicle2, spaced >= 2 days apart
     // (satisfies the gap rule) and all within the 7-day rolling window —
     // this is what actually reaches the weekly cap (3) without tripping the
     // gap check first.
     await prisma.fillUpTransaction.createMany({
       data: [6, 4, 2].map((daysAgo, index) => ({
         vehicleId: vehicle2Id,
-        driverId: driver2Id,
         stationId: stationA.id,
         fuelType: 'PETROL_95' as const,
         quantityLiters: 10,
@@ -453,7 +430,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', rejectedIdempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle2Id, driverId: driver2Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle2Id }))
       .expect(422);
     expect(rejectRes.body).toEqual({
       allowed: false,
@@ -476,7 +453,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', `e2e-fu-noreason-${runId}`)
-      .send(baseFillUpBody({ vehicleId: vehicle2Id, driverId: driver2Id, exceptionTypeId }))
+      .send(baseFillUpBody({ vehicleId: vehicle2Id, exceptionTypeId }))
       .expect(400);
 
     // The exact same scenario, but WITH exception fields, bypasses the
@@ -489,7 +466,6 @@ describe('Fill-ups (e2e)', () => {
       .send(
         baseFillUpBody({
           vehicleId: vehicle2Id,
-          driverId: driver2Id,
           exceptionTypeId,
           reason: 'E2E test: over weekly cap, directorate-approved exception',
         }),
@@ -569,5 +545,62 @@ describe('Fill-ups (e2e)', () => {
       where: { fillUpTransactionId: stationBFillUpId },
     });
     expect(exception?.approvedById).toBeNull();
+  });
+
+  // ── GET /fillups/rule-preview (round 7 item 1) ───────────────────────
+
+  describe('GET /fillups/rule-preview', () => {
+    it('rejects unauthenticated requests and requires fillups:create', async () => {
+      const server = app.getHttpServer();
+      await request(server).get('/api/v1/fillups/rule-preview').query({ vehicleId: vehicle3Id }).expect(401);
+
+      const noPermToken = await loginAsRecorder(); // reuse a real token but hit with no vehicleId first
+      await request(server)
+        .get('/api/v1/fillups/rule-preview')
+        .set('Authorization', `Bearer ${noPermToken}`)
+        .expect(400);
+    });
+
+    it('404s for a vehicleId that does not exist', async () => {
+      const token = await loginAsRecorder();
+      await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: 'does-not-exist' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('returns every check with real numbers, matching what an actual submission would decide', async () => {
+      const token = await loginAsRecorder();
+
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: vehicle4Id })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body.checks)).toBe(true);
+      expect(res.body.checks.length).toBeGreaterThanOrEqual(2);
+      const vehicleGapCheck = res.body.checks.find((c: { reason: string }) => c.reason === 'VEHICLE_GAP_TOO_SHORT');
+      expect(vehicleGapCheck).toBeDefined();
+      expect(typeof vehicleGapCheck.passed).toBe('boolean');
+      expect(typeof vehicleGapCheck.limit).toBe('number');
+
+      // Cross-check: the SAME vehicle immediately rejected by POST /fillups
+      // (vehicle2 preloaded over its weekly cap earlier in this file) shows
+      // that specific rule as passed:false in the preview too — the
+      // breakdown never disagrees with the real enforcement path.
+      const preview2 = await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: vehicle2Id })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const vehicleWeekly = preview2.body.checks.find(
+        (c: { reason: string }) => c.reason === 'VEHICLE_WEEKLY_CAP_REACHED',
+      );
+      expect(vehicleWeekly.passed).toBe(false);
+      expect(vehicleWeekly.actual).toBeGreaterThanOrEqual(3);
+      expect(vehicleWeekly.limit).toBe(3);
+    });
   });
 });

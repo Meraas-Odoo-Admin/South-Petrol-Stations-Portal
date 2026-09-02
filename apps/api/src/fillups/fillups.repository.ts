@@ -31,14 +31,14 @@ export class FillUpsRepository implements FillUpHistoryReader {
     return rows.map((r) => ({ ...r, quantityLiters: Number(r.quantityLiters) }));
   }
 
-  async getRecentForDriver(
-    driverId: string,
+  async getRecentForOwner(
+    ownerId: string,
     before: Date,
     lookbackDays: number,
   ): Promise<FillUpHistoryRecord[]> {
     const rows = await this.prisma.fillUpTransaction.findMany({
       where: {
-        driverId,
+        vehicle: { ownerId },
         occurredAt: { gte: new Date(before.getTime() - lookbackDays * DAY_MS), lt: before },
       },
       orderBy: { occurredAt: 'desc' },
@@ -55,13 +55,15 @@ export class StandingExceptionsRepository implements StandingExceptionReader {
 
   async findActiveCovering(params: {
     vehicleId: string;
-    driverId: string;
+    ownerId: string | null;
     rule: RuleFailureReason;
     at: Date;
   }): Promise<{ id: string } | null> {
     const grant = await this.prisma.standingException.findFirst({
       where: {
-        OR: [{ vehicleId: params.vehicleId }, { driverId: params.driverId }],
+        OR: params.ownerId
+          ? [{ vehicleId: params.vehicleId }, { ownerId: params.ownerId }]
+          : [{ vehicleId: params.vehicleId }],
         rules: { has: params.rule },
         revokedAt: null,
         AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gte: params.at } }] }],

@@ -60,6 +60,43 @@ export function normalizePlateSearchTerm(raw: string): string {
   return raw.replace(/\s+/g, '');
 }
 
+// Live "as you type" formatting for a plate search/entry field. Real plates
+// have a 1- OR 2-digit city code (seed data has both: '5-...', '8-...',
+// '15-...'), which is genuinely ambiguous to auto-detect from digits alone
+// with no lookup table of valid city codes. An earlier version of this
+// guessed "1-digit code" as soon as a 2nd digit arrived and auto-inserted
+// the dash right there — which made it IMPOSSIBLE to type a 2-digit code at
+// all (the 2nd digit landed after the dash before the user could type a
+// 3rd). Fixed: while there's no separator yet, just show the digits as
+// typed (both "5" and "15" pass through untouched) — the user types the
+// dash themselves to mark where the code ends, exactly like
+// formatLicensePlate's own regex already accepts either shape. Once a
+// separator IS present, this only cleans up stray characters around it.
+export function formatPlateAsTyped(raw: string): string {
+  if (/[-\s]/.test(raw)) {
+    return raw.replace(/[^\d\s-]/g, '');
+  }
+  return raw.replace(/\D/g, '').slice(0, 9);
+}
+
+// Best-effort normalization for when the user leaves the field without
+// having typed a separator — search matching (VehicleSearchSelect) needs
+// the dash to `contains`-match a stored "5-1658968"-shaped plate, so a
+// plain run of digits with no dash at all would silently find nothing.
+// Assumes the common 1-digit-code case (most seed plates) as a fallback;
+// a genuine 2-digit code still needs the user to type the dash themselves
+// while typing, same as formatPlateAsTyped above.
+export function formatPlateOnBlur(raw: string): string {
+  if (/[-\s]/.test(raw)) {
+    return formatPlateAsTyped(raw);
+  }
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length <= 1) {
+    return digits;
+  }
+  return `${digits.slice(0, 1)} - ${digits.slice(1, 8)}`;
+}
+
 export function formatLicensePlate(raw: string): string {
   const match = /^(\d{1,2})[-\s]?(\d{1,7})$/.exec(raw);
   if (!match) {

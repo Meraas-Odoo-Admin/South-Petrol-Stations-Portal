@@ -9,7 +9,19 @@ import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { vehicleChangeTypeLabel } from '../../lib/labels';
+import { diffValues } from '../../lib/textDiff';
 import type { VehicleChangeRequestEntry } from './types-change-requests';
+
+// Round 4 feedback item 7: consequences of approving are spelled out
+// (which reports are affected, that the old value is kept in the record),
+// not just an approve/reject pair with no context on what approval does.
+// Generic across change types — the consequences are the same shape
+// whether it's a chassis or booklet-number correction.
+const APPROVAL_CONSEQUENCES = [
+  'ستُحدَّث هوية المركبة في كل الشاشات فور الاعتماد.',
+  'التقارير الصادرة سابقًا لا تتغيّر — يسري التصحيح على ما يُصدر بعد الاعتماد فقط.',
+  'يبقى الرقم القديم محفوظًا في سجل المركبة، ولا يُحذف.',
+];
 
 const STATUS_VARIANT: Record<VehicleChangeRequestEntry['status'], 'accent' | 'ok' | 'danger'> = {
   PENDING: 'accent',
@@ -86,7 +98,9 @@ export function ChangeRequestsQueuePage() {
 
       {data && (
         <div className="space-y-4">
-          {data.map((r) => (
+          {data.map((r) => {
+            const diff = diffValues(r.currentValue, r.requestedValue);
+            return (
             <Card key={r.id} className="p-5">
               <div className="flex items-start justify-between">
                 <div>
@@ -112,11 +126,20 @@ export function ChangeRequestsQueuePage() {
                   </div>
                 </div>
                 <div className="rotate-90 text-center text-ink-faint sm:rotate-0">←</div>
-                <div className="rounded-sm bg-accent-100 px-3.5 py-3">
-                  <div className="text-[10.5px] text-accent-dark">المقترح</div>
+                <div className="rounded-sm border border-accent bg-accent-100 px-3.5 py-3">
+                  <div className="text-[10.5px] text-accent-dark">المقترح — يختلف في الخانات المظللة</div>
                   <div className="mt-1.5">
                     <LtrText>
-                      <span className="font-mono text-[14px] font-bold text-ink">{r.requestedValue}</span>
+                      <span className="font-mono text-[14px] font-bold text-ink">
+                        {diff.prefix}
+                        <mark
+                          className="rounded-sm bg-accent px-0.5 text-white"
+                          data-testid="change-request-diff-highlight"
+                        >
+                          {diff.newChanged}
+                        </mark>
+                        {diff.suffix}
+                      </span>
                     </LtrText>
                   </div>
                 </div>
@@ -134,41 +157,56 @@ export function ChangeRequestsQueuePage() {
               )}
 
               {r.status === 'PENDING' && (
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <PillButton
-                    size="sm"
-                    onClick={() => approveMutation.mutate(r.id)}
-                    disabled={approveMutation.isPending}
-                    className="!bg-primary !text-white !border-0 !shadow-none"
-                  >
-                    اعتماد التصحيح
-                  </PillButton>
-                  {rejectingId === r.id ? (
-                    <div className="flex w-full flex-1 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-                      <input
-                        value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        placeholder="سبب الرفض"
-                        className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
-                      />
-                      <PillButton
-                        size="sm"
-                        variant="danger"
-                        onClick={() => rejectReason.trim() && rejectMutation.mutate({ id: r.id, reason: rejectReason })}
-                        disabled={rejectMutation.isPending || !rejectReason.trim()}
-                      >
-                        تأكيد الرفض
-                      </PillButton>
-                    </div>
-                  ) : (
-                    <PillButton size="sm" variant="danger" onClick={() => setRejectingId(r.id)}>
-                      رفض بسبب
+                <>
+                  <div className="mt-4 rounded-sm bg-surface-alt p-3.5">
+                    <p className="mb-1.5 text-[11.5px] font-bold text-ink">ما يتأثر بالاعتماد</p>
+                    <ul className="space-y-1">
+                      {APPROVAL_CONSEQUENCES.map((c) => (
+                        <li key={c} className="flex gap-1.5 text-[11.5px] text-ink-soft">
+                          <span className="text-ink-faint">•</span>
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <PillButton
+                      size="sm"
+                      onClick={() => approveMutation.mutate(r.id)}
+                      disabled={approveMutation.isPending}
+                      className="!bg-primary !text-white !border-0 !shadow-none"
+                    >
+                      اعتماد التصحيح
                     </PillButton>
-                  )}
-                </div>
+                    {rejectingId === r.id ? (
+                      <div className="flex w-full flex-1 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+                        <input
+                          value={rejectReason}
+                          onChange={(e) => setRejectReason(e.target.value)}
+                          placeholder="سبب الرفض"
+                          className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                        />
+                        <PillButton
+                          size="sm"
+                          variant="danger"
+                          onClick={() => rejectReason.trim() && rejectMutation.mutate({ id: r.id, reason: rejectReason })}
+                          disabled={rejectMutation.isPending || !rejectReason.trim()}
+                        >
+                          تأكيد الرفض
+                        </PillButton>
+                      </div>
+                    ) : (
+                      <PillButton size="sm" variant="danger" onClick={() => setRejectingId(r.id)}>
+                        رفض مع ذكر السبب
+                      </PillButton>
+                    )}
+                  </div>
+                </>
               )}
             </Card>
-          ))}
+            );
+          })}
           {data.length === 0 && (
             <Card className="p-6 text-center text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
           )}

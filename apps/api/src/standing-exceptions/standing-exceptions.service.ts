@@ -15,13 +15,13 @@ export class StandingExceptionsService {
   ) {}
 
   async create(dto: CreateStandingExceptionDto, actorId: string) {
-    if (!dto.driverId && !dto.vehicleId) {
-      throw new BadRequestException('At least one of driverId or vehicleId is required.');
+    if (!dto.ownerId && !dto.vehicleId) {
+      throw new BadRequestException('At least one of ownerId or vehicleId is required.');
     }
-    if (dto.driverId) {
-      const driver = await this.prisma.driver.findUnique({ where: { id: dto.driverId } });
-      if (!driver) {
-        throw new NotFoundException('Driver not found.');
+    if (dto.ownerId) {
+      const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: dto.ownerId } });
+      if (!owner) {
+        throw new NotFoundException('Vehicle owner not found.');
       }
     }
     if (dto.vehicleId) {
@@ -34,7 +34,7 @@ export class StandingExceptionsService {
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.standingException.create({
         data: {
-          driverId: dto.driverId,
+          ownerId: dto.ownerId,
           vehicleId: dto.vehicleId,
           rules: dto.rules,
           reason: dto.reason,
@@ -50,7 +50,7 @@ export class StandingExceptionsService {
           entityType: 'StandingException',
           entityId: created.id,
           newValue: {
-            driverId: created.driverId,
+            ownerId: created.ownerId,
             vehicleId: created.vehicleId,
             rules: created.rules,
             reason: created.reason,
@@ -99,14 +99,14 @@ export class StandingExceptionsService {
     const activeOnly = query.activeOnly === 'true';
     return this.prisma.standingException.findMany({
       where: {
-        driverId: query.driverId || undefined,
+        ownerId: query.ownerId || undefined,
         vehicleId: query.vehicleId || undefined,
         ...(activeOnly
           ? { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] }
           : {}),
       },
       include: {
-        driver: { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true } },
         vehicle: { select: { id: true, internalCode: true, currentPlate: true } },
         grantedBy: { select: { id: true, fullName: true, username: true } },
         revokedBy: { select: { id: true, fullName: true, username: true } },

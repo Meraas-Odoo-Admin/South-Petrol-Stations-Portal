@@ -1,6 +1,8 @@
 # Fuel Tracking System
 
 Fuel fill-up tracking system for stations under Sabha Security Directorate's oversight.
+User-facing app name (Arabic UI): **ضبط الوقود** ("Fuel Control") — see `apps/web/src/lib/appInfo.ts`.
+The repo/package name (`@fuel-tracking/*`) is unrelated and intentionally left as-is.
 
 For business context, the full data model, and the security architecture, see
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). For standing engineering

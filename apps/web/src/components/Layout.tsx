@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../features/auth/AuthProvider';
 import { apiClient } from '../lib/apiClient';
 import { roleLabel } from '../lib/labels';
+import { APP_NAME } from '../lib/appInfo';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
 // artboard 2a ("تنقّل الهاتف — نمط مقصود، لا قائمة سطح مكتب ملتفّة"): the
@@ -34,7 +35,6 @@ const ICONS = {
   dashboard: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z',
   fillup: 'M4 21V8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v13M2 21h14m3-13 2.5 2.5a1.5 1.5 0 0 1 .5 1.1V18a1.5 1.5 0 0 1-3 0v-3.5M8 8V4M4 12h8',
   vehicles: 'M3 13l1.6-5A2 2 0 0 1 6.5 6.5h11a2 2 0 0 1 1.9 1.5L21 13v6a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z',
-  drivers: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0',
   violations: 'M12 9v4m0 4h.01M10.3 3.9 2.4 18a1.8 1.8 0 0 0 1.6 2.7h16a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z',
   changeRequests: 'M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M9 15h3l8-8a2 2 0 0 0-3-3l-8 8v3Z',
   reports: 'M8 7h8M8 12h8M8 17h5M4 4h16v16H4V4Z',
@@ -99,12 +99,6 @@ export function Layout() {
       show: hasPermission('vehicles:read'),
     },
     {
-      to: '/drivers',
-      label: 'السائقون',
-      icon: <Icon d={ICONS.drivers} />,
-      show: hasPermission('drivers:read'),
-    },
-    {
       to: '/reports/violations',
       label: 'المخالفات والاستثناءات',
       icon: <Icon d={ICONS.violations} />,
@@ -140,11 +134,11 @@ export function Layout() {
 
   // Bottom bar: the four things done most often, per 2a — capped at 4,
   // "بحث" always occupies the last available slot and deep-links into the
-  // vehicles directory (its search box accepts plate, booklet, chassis, or
-  // driver name — see 5a), matching the earlier decision that search is
-  // not its own destination.
+  // vehicles directory (its search box accepts plate, booklet, or chassis
+  // — see 5a), matching the earlier decision that search is not its own
+  // destination.
   const bottomBarCandidates: NavItem[] = navItems.filter((i) =>
-    ['/fillups/new', '/vehicles', '/drivers', '/reports/violations', '/reports/dashboard'].includes(i.to),
+    ['/fillups/new', '/vehicles', '/reports/violations', '/reports/dashboard'].includes(i.to),
   );
   const bottomBarItems = bottomBarCandidates.slice(0, hasPermission('vehicles:read') ? 3 : 4);
   const showSearchTab = hasPermission('vehicles:read');
@@ -166,7 +160,7 @@ export function Layout() {
           pass, not something a glance at the source would catch. */}
       <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-surface-alt bg-surface lg:flex">
         <div className="px-5 py-6">
-          <p className="text-[17px] font-extrabold text-primary">ضابط</p>
+          <p className="text-[17px] font-extrabold text-primary">{APP_NAME}</p>
           <p className="text-[10.5px] font-medium text-ink-faint">مديرية أمن سبها</p>
         </div>
         <nav className="flex-1 space-y-0.5 px-3">
@@ -174,7 +168,7 @@ export function Layout() {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/vehicles' || item.to === '/drivers' || item.to === '/stations'}
+              end={item.to === '/vehicles' || item.to === '/stations'}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[12.5px] font-bold transition ${
                   isActive ? 'bg-primary text-white shadow-sm' : 'text-ink-soft hover:bg-surface-alt'
@@ -219,7 +213,7 @@ export function Layout() {
           <Icon d={ICONS.menu} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-extrabold text-ink">{stationName ?? 'ضابط'}</p>
+          <p className="truncate text-[12.5px] font-extrabold text-ink">{stationName ?? APP_NAME}</p>
           <p className="truncate text-[10.5px] text-ink-faint">
             {roleName}
             {user?.fullName ? ` · ${user.fullName}` : ''}
@@ -234,7 +228,18 @@ export function Layout() {
           duplicated data-testid nodes breaking any page-level selector).
           Found via the runtime-verification screenshot pass, not by
           reading the source. */}
-      <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-4 lg:min-h-screen lg:flex-1 lg:p-6">
+      {/* pb-20 (not pb-4): the fixed bottom nav below is ~58px tall and
+          floats over the last 58px of ANY scroll position, not just the
+          initial viewport — min-h above only guarantees a short page fills
+          the screen, it doesn't stop a genuinely tall page's own content
+          from ending underneath the nav where it's unreachable/unclickable
+          no matter how far the user scrolls. Found via round 8's e2e run:
+          the mobile wizard's inline vehicle-create sub-form is tall enough
+          that its own save button landed in that dead zone and Playwright
+          (correctly) refused to click through the nav sitting on top of
+          it — a real bug, not a flaky test. lg:p-6 (desktop, no fixed
+          nav) is unaffected. */}
+      <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-20 lg:min-h-screen lg:flex-1 lg:p-6">
         <Outlet />
       </main>
 
@@ -244,7 +249,7 @@ export function Layout() {
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.to === '/vehicles' || item.to === '/drivers'}
+            end={item.to === '/vehicles'}
             className={({ isActive }) =>
               `relative flex flex-col items-center gap-0.5 py-2 text-[10.5px] font-bold ${
                 isActive ? 'text-primary' : 'text-ink-faint'
@@ -303,7 +308,7 @@ export function Layout() {
             </div>
 
             <NavGroup title="التسجيل والمتابعة" items={navItems.filter((i) => ['/fillups/new', '/reports/daily', '/reports/violations', '/reports/dashboard'].includes(i.to))} onNavigate={setSheetOpen} />
-            <NavGroup title="السجلات" items={navItems.filter((i) => ['/vehicles', '/drivers', '/stations', '/vehicles/change-requests'].includes(i.to))} onNavigate={setSheetOpen} />
+            <NavGroup title="السجلات" items={navItems.filter((i) => ['/vehicles', '/stations', '/vehicles/change-requests'].includes(i.to))} onNavigate={setSheetOpen} />
             <NavGroup title="الإدارة" items={navItems.filter((i) => i.to === '/admin')} onNavigate={setSheetOpen} />
 
             <div className="mt-3 space-y-0.5 border-t border-surface-alt pt-3">

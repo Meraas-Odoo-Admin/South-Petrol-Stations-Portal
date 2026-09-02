@@ -12,6 +12,7 @@ import { maskIdentityNumber } from '../../lib/masking';
 import { formatLicensePlate } from '../../lib/libyanFormats';
 import { Pagination } from '../../components/Pagination';
 import { StationSelect } from '../../components/StationSelect';
+import { DateField } from '../../components/DateField';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
@@ -19,6 +20,7 @@ import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { TriggerDetail } from '../fillups/RecordFillUpPage';
+import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { RULE_VIOLATION_MESSAGES } from '../fillups/ruleViolationMessages';
 import type { RuleFailureReason } from '@fuel-tracking/shared-types';
 
@@ -115,11 +117,11 @@ export function ViolationsPage() {
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">من تاريخ</label>
-            <input type="date" value={from} onChange={(e) => resetPageAnd(setFrom)(e.target.value)} className={selectClass} />
+            <DateField value={from} onChange={resetPageAnd(setFrom)} inputClassName={`w-36 pe-8 ${selectClass}`} />
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">إلى تاريخ</label>
-            <input type="date" value={to} onChange={(e) => resetPageAnd(setTo)(e.target.value)} className={selectClass} />
+            <DateField value={to} onChange={resetPageAnd(setTo)} inputClassName={`w-36 pe-8 ${selectClass}`} />
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">الحالة</label>
@@ -148,7 +150,9 @@ export function ViolationsPage() {
               <Card key={row.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-[13px] font-extrabold text-ink">{row.fillUpTransaction.driver.fullName}</p>
+                    <p className="text-[13px] font-extrabold text-ink">
+                      {row.fillUpTransaction.vehicle.owner?.fullName ?? '—'}
+                    </p>
                     <p className="mt-0.5 text-[11.5px] text-ink-soft">
                       <LtrText>{formatLicensePlate(row.fillUpTransaction.vehicle.currentPlate)}</LtrText>
                       {' — '}
@@ -207,7 +211,7 @@ export function ViolationsPage() {
                 <th className="px-[18px] py-2.5 text-start">التاريخ</th>
                 <th className="px-[18px] py-2.5 text-start">المحطة</th>
                 <th className="px-[18px] py-2.5 text-start">المركبة</th>
-                <th className="px-[18px] py-2.5 text-start">السائق</th>
+                <th className="px-[18px] py-2.5 text-start">المالك</th>
                 <th className="px-[18px] py-2.5 text-start">رقم الهوية</th>
                 <th className="px-[18px] py-2.5 text-start">نوع الاستثناء</th>
                 <th className="px-[18px] py-2.5 text-start">سبب المخالفة (تشخيص النظام)</th>
@@ -225,9 +229,18 @@ export function ViolationsPage() {
                   <td className="px-[18px] py-3">
                     <LtrText>{formatLicensePlate(row.fillUpTransaction.vehicle.currentPlate)}</LtrText>
                   </td>
-                  <td className="px-[18px] py-3 font-medium text-ink">{row.fillUpTransaction.driver.fullName}</td>
+                  <td className="px-[18px] py-3 font-medium text-ink">
+                    {row.fillUpTransaction.vehicle.owner?.fullName ?? '—'}
+                  </td>
                   <td className="px-[18px] py-3">
-                    <LtrText>{maskIdentityNumber(row.fillUpTransaction.driver.identityNumber, permissions)}</LtrText>
+                    {row.fillUpTransaction.vehicle.owner ? (
+                      <OwnerIdentityReveal
+                        ownerId={row.fillUpTransaction.vehicle.owner.id}
+                        maskedValue={maskIdentityNumber(row.fillUpTransaction.vehicle.owner.identityNumber, permissions)}
+                      />
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-[18px] py-3">{row.exceptionType.name}</td>
                   <td className="px-[18px] py-3">

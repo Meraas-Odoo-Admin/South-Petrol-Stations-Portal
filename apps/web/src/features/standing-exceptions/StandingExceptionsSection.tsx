@@ -3,53 +3,51 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../auth/AuthProvider';
 import { Card, CardHeader } from '../../components/design/Card';
+import { DateField } from '../../components/DateField';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { LtrText } from '../../components/LtrText';
+import { formatLicensePlate } from '../../lib/libyanFormats';
 import { RULE_VIOLATION_MESSAGES } from '../fillups/ruleViolationMessages';
 import { STANDING_EXCEPTION_RULES, type StandingExceptionEntry } from './types';
 
 interface StandingExceptionsSectionProps {
   // Exactly one of these is set by the host page — this page's own
   // subject, and the ONLY thing the listing query filters by (Prisma ANDs
-  // driverId+vehicleId together, so passing both here would silently hide
-  // driver-only/vehicle-only grants that don't happen to match both).
-  driverId?: string;
+  // ownerId+vehicleId together, so passing both here would silently hide
+  // owner-only/vehicle-only grants that don't happen to match both).
+  ownerId?: string;
   vehicleId?: string;
   // Optional context for the grant form's scope selector only — e.g. the
-  // driver page passes the driver's primary vehicle here so "السائق
-  // ومركبة معيّنة" / "المركبة وحدها" are choosable, never used for listing.
-  driverLabel?: string;
+  // vehicle page passes its own owner here so "المالك ومركبة معيّنة" /
+  // "المالك وحده" are choosable, never used for listing.
+  ownerLabel?: string;
   contextVehicleId?: string;
   contextVehicleLabel?: string;
   vehicleLabel?: string;
-  contextDriverId?: string;
-  contextDriverLabel?: string;
+  contextOwnerId?: string;
+  contextOwnerLabel?: string;
 }
 
-type Scope = 'driver_and_vehicle' | 'driver_only' | 'vehicle_only';
+type Scope = 'owner_and_vehicle' | 'owner_only' | 'vehicle_only';
 
 // Interim design, not from the original client spec — flagged in the
-// final report. Shown directly on the driver/vehicle's own profile page
-// (not a separate list nobody checks), which is exactly what this
-// component is embedded into on both detail pages.
+// final report. Shown directly on the vehicle's own profile page (not a
+// separate list nobody checks), which is exactly what this component is
+// embedded into.
 //
-// Verification-fix item 7: the grant panel previously had no scope
-// selector at all (always granted against whichever single ID the host
-// page passed in) and used raw HTML controls throughout. Artboard 6d
-// draws three scope tiles ("driver+vehicle" / "driver only" / "vehicle
-// only") with a live echo sentence — the "driver+vehicle" and "vehicle
-// only" tiles need the OTHER entity's id, which the host page now passes
-// in as context (e.g. the driver's primary vehicle) when one exists.
+// Round 6: re-scoped from driver to vehicle owner (see
+// docs/DESIGN_owner_based_fillups.md) — the scope tiles are now "owner +
+// vehicle" / "owner only" / "vehicle only" instead of driver-based.
 export function StandingExceptionsSection({
-  driverId,
-  driverLabel,
+  ownerId,
+  ownerLabel,
   vehicleId,
   vehicleLabel,
   contextVehicleId,
   contextVehicleLabel,
-  contextDriverId,
-  contextDriverLabel,
+  contextOwnerId,
+  contextOwnerLabel,
 }: StandingExceptionsSectionProps) {
   const { hasPermission } = useAuth();
   const canManage = hasPermission('standing_exceptions:manage');
@@ -58,14 +56,14 @@ export function StandingExceptionsSection({
   // The grant form's own working set of ids — defaults to whichever entity
   // this page is about, plus its context counterpart, so all three scope
   // tiles have something to grant against.
-  const effectiveDriverId = driverId ?? contextDriverId;
-  const effectiveDriverLabel = driverLabel ?? contextDriverLabel;
+  const effectiveOwnerId = ownerId ?? contextOwnerId;
+  const effectiveOwnerLabel = ownerLabel ?? contextOwnerLabel;
   const effectiveVehicleId = vehicleId ?? contextVehicleId;
   const effectiveVehicleLabel = vehicleLabel ?? contextVehicleLabel;
 
   const [showGrantForm, setShowGrantForm] = useState(false);
   const [scope, setScope] = useState<Scope>(
-    effectiveDriverId && effectiveVehicleId ? 'driver_and_vehicle' : effectiveDriverId ? 'driver_only' : 'vehicle_only',
+    effectiveOwnerId && effectiveVehicleId ? 'owner_and_vehicle' : effectiveOwnerId ? 'owner_only' : 'vehicle_only',
   );
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
   const [reason, setReason] = useState('');
@@ -73,13 +71,13 @@ export function StandingExceptionsSection({
   const [noExpiry, setNoExpiry] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const queryKey = ['standing-exceptions', driverId ?? '', vehicleId ?? ''];
+  const queryKey = ['standing-exceptions', ownerId ?? '', vehicleId ?? ''];
   const { data, isLoading } = useQuery({
     queryKey,
     queryFn: async () =>
       (
         await apiClient.get<StandingExceptionEntry[]>('/standing-exceptions', {
-          params: { driverId, vehicleId, activeOnly: 'true' },
+          params: { ownerId, vehicleId, activeOnly: 'true' },
         })
       ).data,
   });
@@ -87,8 +85,8 @@ export function StandingExceptionsSection({
   const grantMutation = useMutation({
     mutationFn: () =>
       apiClient.post('/standing-exceptions', {
-        driverId: scope !== 'vehicle_only' ? effectiveDriverId : undefined,
-        vehicleId: scope !== 'driver_only' ? effectiveVehicleId : undefined,
+        ownerId: scope !== 'vehicle_only' ? effectiveOwnerId : undefined,
+        vehicleId: scope !== 'owner_only' ? effectiveVehicleId : undefined,
         rules: selectedRules,
         reason,
         expiresAt: noExpiry ? undefined : expiresAt || undefined,
@@ -127,20 +125,30 @@ export function StandingExceptionsSection({
     grantMutation.mutate();
   }
 
+  function describeEntryScope(entry: StandingExceptionEntry): string {
+    if (entry.ownerId && entry.vehicleId) {
+      return `هذا المالك، على مركبة ${entry.vehicle ? formatLicensePlate(entry.vehicle.currentPlate) : ''} فقط`;
+    }
+    if (entry.ownerId) {
+      return 'هذا المالك، على كل مركباته';
+    }
+    return `المركبة ${entry.vehicle ? formatLicensePlate(entry.vehicle.currentPlate) : ''}، بغض النظر عن مالكها`;
+  }
+
   const vehicleLabelNode = <LtrText>{effectiveVehicleLabel ?? 'هذه'}</LtrText>;
   const scopeSentence =
-    scope === 'driver_and_vehicle' ? (
-      <>سيُطبَّق على: {effectiveDriverLabel ?? 'هذا السائق'} عند تعبئة المركبة {vehicleLabelNode} فقط.</>
-    ) : scope === 'driver_only' ? (
-      <>سيُطبَّق على: {effectiveDriverLabel ?? 'هذا السائق'} على كل مركباته.</>
+    scope === 'owner_and_vehicle' ? (
+      <>سيُطبَّق على: {effectiveOwnerLabel ?? 'هذا المالك'} عند تعبئة المركبة {vehicleLabelNode} فقط.</>
+    ) : scope === 'owner_only' ? (
+      <>سيُطبَّق على: {effectiveOwnerLabel ?? 'هذا المالك'} على كل مركباته.</>
     ) : (
-      <>سيُطبَّق على أي سائق يقود المركبة {vehicleLabelNode}.</>
+      <>سيُطبَّق على المركبة {vehicleLabelNode}، بغض النظر عن مالكها.</>
     );
 
   return (
-    <Card>
+    <Card className={data && data.length > 0 ? 'border-2 border-accent' : ''}>
       <CardHeader
-        title="استثناءات دائمة (مستمرة)"
+        title={data && data.length > 0 ? 'استثناءات مستمرة سارية' : 'استثناءات دائمة (مستمرة)'}
         action={
           canManage &&
           !showGrantForm && (
@@ -162,6 +170,7 @@ export function StandingExceptionsSection({
           <ul className="mb-3 space-y-2">
             {data.map((entry) => (
               <li key={entry.id} className="rounded-sm bg-accent-100 p-3.5 text-[12.5px]">
+                <p className="mb-1.5 font-bold text-accent-dark">النطاق: {describeEntryScope(entry)}</p>
                 <div className="mb-1.5 flex flex-wrap gap-1.5">
                   {entry.rules.map((rule) => (
                     <StatusPill key={rule} variant="accent">
@@ -192,31 +201,31 @@ export function StandingExceptionsSection({
 
         {showGrantForm && (
           <Card className="border border-line p-4">
-            {(effectiveDriverId && effectiveVehicleId) && (
+            {(effectiveOwnerId && effectiveVehicleId) && (
               <div className="mb-4">
                 <p className="mb-2 text-[13px] font-bold text-ink">على مَن يُطبَّق؟</p>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setScope('driver_and_vehicle')}
+                    onClick={() => setScope('owner_and_vehicle')}
                     className={`flex flex-col items-center justify-center gap-0.5 rounded-sm py-3 text-center ${
-                      scope === 'driver_and_vehicle' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
+                      scope === 'owner_and_vehicle' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
                     }`}
                   >
-                    <span className={`text-[12px] font-extrabold ${scope === 'driver_and_vehicle' ? 'text-primary-dark' : 'text-ink-soft'}`}>
-                      السائق ومركبة معيّنة
+                    <span className={`text-[12px] font-extrabold ${scope === 'owner_and_vehicle' ? 'text-primary-dark' : 'text-ink-soft'}`}>
+                      المالك ومركبة معيّنة
                     </span>
-                    <span className={`text-[10px] ${scope === 'driver_and_vehicle' ? 'text-primary-dark' : 'text-ink-faint'}`}>الأضيق نطاقًا</span>
+                    <span className={`text-[10px] ${scope === 'owner_and_vehicle' ? 'text-primary-dark' : 'text-ink-faint'}`}>الأضيق نطاقًا</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setScope('driver_only')}
+                    onClick={() => setScope('owner_only')}
                     className={`flex flex-col items-center justify-center gap-0.5 rounded-sm py-3 text-center ${
-                      scope === 'driver_only' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
+                      scope === 'owner_only' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
                     }`}
                   >
-                    <span className={`text-[12px] font-bold ${scope === 'driver_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>السائق وحده</span>
-                    <span className={`text-[10px] ${scope === 'driver_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>كل مركباته</span>
+                    <span className={`text-[12px] font-bold ${scope === 'owner_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>المالك وحده</span>
+                    <span className={`text-[10px] ${scope === 'owner_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>كل مركباته</span>
                   </button>
                   <button
                     type="button"
@@ -226,7 +235,7 @@ export function StandingExceptionsSection({
                     }`}
                   >
                     <span className={`text-[12px] font-bold ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>المركبة وحدها</span>
-                    <span className={`text-[10px] ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>أي سائق</span>
+                    <span className={`text-[10px] ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>أي مالك</span>
                   </button>
                 </div>
                 <div className="mt-2.5 rounded-sm bg-primary-100 px-3 py-2.5 text-[12px] font-semibold text-primary-dark">
@@ -281,13 +290,7 @@ export function StandingExceptionsSection({
             <div className="mb-4">
               <label className="mb-1.5 block text-[13px] font-bold text-ink">تاريخ الانتهاء</label>
               <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={expiresAt}
-                  disabled={noExpiry}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className="h-11 flex-1 rounded-sm border border-line bg-surface-alt px-3.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
-                />
+                <DateField value={expiresAt} onChange={setExpiresAt} disabled={noExpiry} className="flex-1" />
                 <button
                   type="button"
                   onClick={() => setNoExpiry((s) => !s)}

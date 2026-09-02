@@ -25,10 +25,10 @@ export class StandingExceptionsController {
   }
 
   // Gated on vehicles:read, not standing_exceptions:manage — "visible
-  // directly on the driver/vehicle's own profile page" means anyone who
+  // directly on the owner/vehicle's own profile page" means anyone who
   // can already view that profile should see active grants on it, not
   // just whoever can grant/revoke them. Every seeded role that can reach a
-  // driver/vehicle detail page holds vehicles:read.
+  // vehicle detail page holds vehicles:read.
   @RequirePermission('vehicles:read')
   @Get()
   findAll(@Query() query: FindStandingExceptionsQueryDto) {

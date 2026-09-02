@@ -11,7 +11,7 @@ const fixtures = loadFixtures();
 // suite genuinely hit 429s from its own login volume, which manifested as
 // "stuck on /login" failures with no obvious cause from the UI alone).
 
-test('supervisor session: no dashboard link, sees own station daily report (masked driver identity), and can export it', async ({
+test('supervisor session: no dashboard link, sees own station daily report (masked owner identity), and can export it', async ({
   page,
 }) => {
   await loginAs(page, fixtures.supervisorUsername, fixtures.supervisorPassword);
@@ -29,14 +29,23 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   await expect(page.locator('aside').getByRole('link', { name: 'المخالفات' })).toBeVisible();
 
   // Masking: §8's rule, operationalized as reports:view_all_stations —
-  // supervisor1 lacks it, so only the last 4 digits render.
-  await page.goto(`/drivers/${fixtures.driverId}`);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(fixtures.driverFullName);
-  const last4 = fixtures.driverIdentityNumber.slice(-4);
-  const maskedField = page.getByTestId('driver-identity-number');
+  // supervisor1 lacks it, so only the last 4 digits render. Round 6: the
+  // driver detail page this used to check is gone — the owner's identity
+  // number on the vehicle detail page is the equivalent surface now (see
+  // docs/DESIGN_owner_based_fillups.md).
+  await page.goto(`/vehicles/${fixtures.vehicleId}`);
+  const last4 = fixtures.ownerIdentityNumber.slice(-4);
+  const maskedField = page.getByTestId('vehicle-owner-identity-number');
   await expect(maskedField).toContainText('*');
   await expect(maskedField).toContainText(last4);
-  await expect(maskedField).not.toHaveText(fixtures.driverIdentityNumber);
+  await expect(maskedField).not.toHaveText(fixtures.ownerIdentityNumber);
+
+  // Round 7 item 2: the reveal-toggle ported from the old drivers-list
+  // pattern to POST /owners/:id/reveal-identity — supervisor1 holds
+  // owners:reveal_identity (seed.ts), so clicking through shows the real
+  // value even though the passive display above stays masked.
+  await maskedField.getByTestId('owner-identity-reveal-toggle').click();
+  await expect(maskedField).toHaveText(fixtures.ownerIdentityNumber);
 
   // Export: their own station is auto-selected in a disabled <select>
   // (GET /stations-backed StationSelect, not a free-text input — see this
@@ -54,9 +63,16 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   ]);
   expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
   expect(await download.path()).toBeTruthy();
+
+  // Round 7 item 3: owner-search filter — searching by the owner's ID
+  // number (same "search by ID, not name" precedent as the old driver
+  // field) narrows the results table to just that owner's fill-ups.
+  await page.getByTestId('owner-search-input').fill(fixtures.ownerIdentityNumber);
+  await page.getByTestId('owner-search-option').first().click();
+  await expect(page.locator('tbody tr').first()).toContainText(fixtures.ownerFullName);
 });
 
-test('directorate_admin session: dashboard link visible, and the same driver\'s identityNumber renders unmasked', async ({
+test('directorate_admin session: dashboard link visible, and the same owner\'s identityNumber renders unmasked', async ({
   page,
 }) => {
   await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
@@ -66,6 +82,6 @@ test('directorate_admin session: dashboard link visible, and the same driver\'s 
   // المحطات"), otherwise ambiguous alongside the sidebar's exact-text link.
   await expect(page.getByRole('link', { name: 'لوحة المتابعة', exact: true })).toBeVisible();
 
-  await page.goto(`/drivers/${fixtures.driverId}`);
-  await expect(page.getByTestId('driver-identity-number')).toHaveText(fixtures.driverIdentityNumber);
+  await page.goto(`/vehicles/${fixtures.vehicleId}`);
+  await expect(page.getByTestId('vehicle-owner-identity-number')).toHaveText(fixtures.ownerIdentityNumber);
 });

@@ -28,17 +28,10 @@ const PERMISSIONS = [
   {
     key: 'reports:view',
     description:
-      'View per-station reports (daily report, violations list, driver/vehicle history)',
-  },
-  { key: 'drivers:manage', description: 'Create/update ANY existing driver record — full registry edit rights' },
-  {
-    key: 'drivers:create',
-    description:
-      'Create a new driver record only (no edit rights on existing records) — narrower than drivers:manage, for roles that only need the inline "no match, add a new driver" flow (item 10)',
+      'View per-station reports (daily report, violations list, owner/vehicle history)',
   },
   { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
-  { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes, driver associations' },
-  { key: 'drivers:read', description: 'Look up the driver registry (read-only)' },
+  { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes' },
   { key: 'vehicles:read', description: 'Look up the vehicle registry (read-only)' },
   { key: 'fillups:create', description: 'Record a fill-up, including one submitted with an exception' },
   // Seeded for role-table completeness (docs/IMPLEMENTATION_PLAN.md §5 lists
@@ -67,12 +60,12 @@ const PERMISSIONS = [
   },
   {
     key: 'standing_exceptions:manage',
-    description: 'Grant/revoke a standing (ongoing) rule exemption for a driver and/or vehicle',
+    description: 'Grant/revoke a standing (ongoing) rule exemption for a vehicle owner and/or vehicle',
   },
   {
-    key: 'drivers:reveal_identity',
+    key: 'owners:reveal_identity',
     description:
-      'Reveal a driver\'s unmasked national/administrative ID on demand (audited — action REVEAL_NATIONAL_ID)',
+      "Reveal a vehicle owner's unmasked national/administrative ID on demand (audited — action REVEAL_NATIONAL_ID). Round 6: replaces drivers:reveal_identity now that the owner, not the driver, carries the identity number that matters for fill-up rules.",
   },
 ];
 
@@ -91,25 +84,12 @@ const PERMISSIONS = [
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   station_employee: [
     'stations:read',
-    'drivers:read',
     'vehicles:read',
     'fillups:create',
-    // Added so the "no match, add a new driver" flow reachable inline
-    // from the fill-up recording screen actually works for the role that
-    // records fill-ups in the first place — item 10, station-level driver
-    // creation. Originally granted the full drivers:manage tier, which was
-    // a real over-grant (it also gates PATCH /drivers/:id — edit rights on
-    // ANY existing driver record, not just creating new ones). Narrowed to
-    // the create-only permission per explicit correction — this role gets
-    // no path to edit an existing driver's record.
-    'drivers:create',
   ],
   station_supervisor: [
     'stations:read',
     'stations:manage',
-    'drivers:manage',
-    'drivers:create',
-    'drivers:read',
     'owners:manage',
     'vehicles:manage',
     'vehicles:read',
@@ -119,7 +99,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:update',
     'fillups:approve_exception',
     'standing_exceptions:manage',
-    'drivers:reveal_identity',
+    'owners:reveal_identity',
     // Supervisors review what their station recorded — same reasoning as
     // fillups:approve_exception (employees record, supervisors review).
     'reports:view',
@@ -130,9 +110,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:manage',
     'reports:view_all_stations',
     'reports:view',
-    'drivers:manage',
-    'drivers:create',
-    'drivers:read',
     'owners:manage',
     'vehicles:manage',
     'vehicles:read',
@@ -142,7 +119,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     // reports:view_all_stations for this role, but directorate_admin
     // already holds manage-tier permissions in every other domain beyond
     // what that table lists (companies:manage-adjacent reads,
-    // stations:manage, drivers:manage, owners:manage, vehicles:manage) —
+    // stations:manage, owners:manage, vehicles:manage) —
     // the table is "Example permissions", not an exhaustive spec (see the
     // M3 review report). Withholding fillups:* alone would have been the
     // inconsistent choice, not this.
@@ -150,7 +127,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:update',
     'fillups:approve_exception',
     'standing_exceptions:manage',
-    'drivers:reveal_identity',
+    'owners:reveal_identity',
     'settings:manage',
     'audit:view',
     'exception_types:manage',
@@ -173,20 +150,21 @@ const SYSTEM_SETTINGS = [
     description: 'Minimum days between two fill-ups for the same vehicle',
   },
   // PLACEHOLDER values (same numbers as the vehicle-level defaults) — the
-  // aggregate per-driver cap is a confirmed requirement (docs/OPEN_ITEMS.md:
+  // aggregate per-owner cap is a confirmed requirement (docs/OPEN_ITEMS.md:
   // "Multi-vehicle drivers need both a per-vehicle cap and an aggregate
-  // per-driver cap") but the actual numbers, and even whether the two caps
-  // should be independent, are NOT confirmed. Change these rows, not code,
-  // once the client answers.
+  // per-driver cap", re-confirmed round 6 as per-OWNER instead of
+  // per-driver — see docs/DESIGN_owner_based_fillups.md) but the actual
+  // numbers, and even whether the two caps should be independent, are NOT
+  // confirmed. Change these rows, not code, once the client answers.
   {
-    key: 'fillup.max_per_week_per_driver',
+    key: 'fillup.max_per_week_per_owner',
     value: '3',
-    description: 'PLACEHOLDER — max fill-ups per driver per week, across all their vehicles',
+    description: 'PLACEHOLDER — max fill-ups per vehicle owner per week, across all their vehicles',
   },
   {
-    key: 'fillup.min_gap_days_per_driver',
+    key: 'fillup.min_gap_days_per_owner',
     value: '2',
-    description: 'PLACEHOLDER — minimum days between two fill-ups for the same driver, across all their vehicles',
+    description: 'PLACEHOLDER — minimum days between two fill-ups for the same vehicle owner, across all their vehicles',
   },
   {
     key: 'fillup.week_window_mode',
@@ -202,12 +180,36 @@ const SYSTEM_SETTINGS = [
     description: 'PLACEHOLDER, unused while week_window_mode=rolling — 0=Sunday..6=Saturday',
   },
   // NEW — not in the original client questionnaire either; a reasonable
-  // placeholder like the two driver-level caps above, pending real numbers.
+  // placeholder like the two owner-level caps above, pending real numbers.
+  // Round 6: re-scoped from per-driver to per-owner (docs/OPEN_ITEMS.md #20,
+  // docs/DESIGN_owner_based_fillups.md).
   {
-    key: 'fillup.max_liters_per_week_per_driver',
+    key: 'fillup.max_liters_per_week_per_owner',
     value: '300',
     description:
-      'PLACEHOLDER — max total liters a single driver (by national/administrative ID) can be issued per week, across all their vehicles',
+      'PLACEHOLDER — max total liters a single vehicle owner (by national/administrative ID) can be issued per week, across all their vehicles',
+  },
+  // Round 4 client feedback: cost = quantityLiters × price-per-liter, shown
+  // read-only on the fill-up form. The client gave exactly ONE real number
+  // (بنزين 95 at 0.15 LYD/liter) — diesel/kerosene are NOT confirmed and
+  // must not be guessed at (see docs/OPEN_ITEMS.md). These two placeholder
+  // values are deliberately implausible-looking round numbers, not a
+  // considered estimate, so an admin editing settings notices they still
+  // need real figures rather than assuming 0.10/0.05 are meaningful.
+  {
+    key: 'fillup.price_per_liter.PETROL_95',
+    value: '0.15',
+    description: 'LYD per liter for بنزين 95 — confirmed by the client (round 4 feedback).',
+  },
+  {
+    key: 'fillup.price_per_liter.DIESEL',
+    value: '0.10',
+    description: 'PLACEHOLDER — not confirmed by the client. Do not treat as a real price.',
+  },
+  {
+    key: 'fillup.price_per_liter.KEROSENE',
+    value: '0.05',
+    description: 'PLACEHOLDER — not confirmed by the client. Do not treat as a real price.',
   },
 ];
 
@@ -223,8 +225,8 @@ const SYSTEM_SETTINGS = [
 // multi-driver association with exactly one primary, and both a
 // with-history and a clean (zero-fill-up) vehicle/driver.
 const SEED_OWNERS = [
-  { key: 'O1', fullName: 'عبدالسلام محمد الزنتاني', nationalId: '119700000011', phone: '091-1000011' },
-  { key: 'O2', fullName: 'فاطمة علي المصراتي', nationalId: '219750000012', phone: '092-1000012' },
+  { key: 'O1', identityType: 'NATIONAL_ID', identityNumber: '119700000011', fullName: 'عبدالسلام محمد الزنتاني', phone: '091-1000011' },
+  { key: 'O2', identityType: 'NATIONAL_ID', identityNumber: '219750000012', fullName: 'فاطمة علي المصراتي', phone: '092-1000012' },
 ] as const;
 
 const SEED_DRIVERS = [
@@ -379,41 +381,37 @@ const EXCEPTION_TYPES = [
 // yet another shape of partial data) never blocks the rest of the seed.
 async function cleanupPlaywrightFixtures(): Promise<void> {
   try {
-    const [pwVehicles, pwDrivers, pwStations, pwCompanies, pwUsers] = await Promise.all([
+    const [pwVehicles, pwOwners, pwStations, pwCompanies, pwUsers] = await Promise.all([
       prisma.vehicle.findMany({ where: { internalCode: { startsWith: 'PW-VEH-' } } }),
-      prisma.driver.findMany({ where: { fullName: { startsWith: 'PW Test Driver ' } } }),
+      prisma.vehicleOwner.findMany({ where: { fullName: { startsWith: 'PW Test Owner ' } } }),
       prisma.station.findMany({ where: { internalCode: { startsWith: 'PW-STN-' } } }),
       prisma.company.findMany({ where: { name: { startsWith: 'PW Test Co ' } } }),
       prisma.user.findMany({ where: { username: { startsWith: 'pw_needschange_' } } }),
     ]);
     const vehicleIds = pwVehicles.map((v) => v.id);
-    const driverIds = pwDrivers.map((d) => d.id);
+    const ownerIds = pwOwners.map((o) => o.id);
     const stationIds = pwStations.map((s) => s.id);
     const companyIds = pwCompanies.map((c) => c.id);
     const userIds = pwUsers.map((u) => u.id);
 
-    if (!vehicleIds.length && !driverIds.length && !stationIds.length && !companyIds.length && !userIds.length) {
+    if (!vehicleIds.length && !ownerIds.length && !stationIds.length && !companyIds.length && !userIds.length) {
       return;
     }
 
     const fillUpFilter = {
       OR: [
         { vehicleId: { in: vehicleIds } },
-        { driverId: { in: driverIds } },
         { stationId: { in: stationIds } },
       ],
     };
     await prisma.exception.deleteMany({ where: { fillUpTransaction: fillUpFilter } });
     await prisma.fillUpTransaction.deleteMany({ where: fillUpFilter });
-    await prisma.driverVehicle.deleteMany({
-      where: { OR: [{ vehicleId: { in: vehicleIds } }, { driverId: { in: driverIds } }] },
-    });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicleChassisHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicleBookletHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicleChangeRequest.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
-    await prisma.driver.deleteMany({ where: { id: { in: driverIds } } });
+    await prisma.vehicleOwner.deleteMany({ where: { id: { in: ownerIds } } });
     await prisma.userStationScope.deleteMany({
       where: { OR: [{ stationId: { in: stationIds } }, { userId: { in: userIds } }] },
     });
@@ -425,7 +423,7 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 
     console.log(
-      `  🧹 Cleaned up Playwright e2e fixtures: ${vehicleIds.length} vehicles, ${driverIds.length} drivers, ${stationIds.length} stations, ${companyIds.length} companies, ${userIds.length} throwaway users.`,
+      `  🧹 Cleaned up Playwright e2e fixtures: ${vehicleIds.length} vehicles, ${ownerIds.length} owners, ${stationIds.length} stations, ${companyIds.length} companies, ${userIds.length} throwaway users.`,
     );
   } catch (error) {
     console.warn('  ⚠ Playwright fixture cleanup failed (non-fatal, continuing seed):', error);
@@ -577,16 +575,21 @@ async function main() {
   }
 
   // ── Owners ────────────────────────────────────────────────────────
-  // VehicleOwner.nationalId has no unique constraint (unlike Driver's
-  // (identityType, identityNumber)), so idempotency is a manual
-  // find-then-create rather than a real upsert.
+  // Round 6: VehicleOwner now has (identityType, identityNumber) unique,
+  // same shape as Driver — a real upsert instead of the old manual
+  // find-then-create.
   const ownersByKey = new Map<string, { id: string }>();
   for (const spec of SEED_OWNERS) {
-    const owner =
-      (await prisma.vehicleOwner.findFirst({ where: { nationalId: spec.nationalId } })) ??
-      (await prisma.vehicleOwner.create({
-        data: { fullName: spec.fullName, nationalId: spec.nationalId, phone: spec.phone },
-      }));
+    const owner = await prisma.vehicleOwner.upsert({
+      where: { identityType_identityNumber: { identityType: spec.identityType, identityNumber: spec.identityNumber } },
+      create: {
+        identityType: spec.identityType,
+        identityNumber: spec.identityNumber,
+        fullName: spec.fullName,
+        phone: spec.phone,
+      },
+      update: {},
+    });
     ownersByKey.set(spec.key, owner);
   }
 
@@ -667,9 +670,13 @@ async function main() {
     // history without blocking a new one.
     for (const [index, fillUpSpec] of spec.fillUps.entries()) {
       const idempotencyKey = `SEED-FILLUP-${spec.key}-${index}`;
+      // Round 6: fill-ups no longer require a driver — rule evaluation and
+      // history are keyed to the vehicle/owner instead (see
+      // docs/DESIGN_owner_based_fillups.md). driverId is still written when
+      // a historical driver association exists, purely as legacy
+      // attribution, never as a requirement to seed the fill-up at all.
       const primaryDriverKey = spec.drivers[0]?.key;
-      if (!primaryDriverKey) continue; // no driver to attribute the fill-up to
-      const driver = driversByKey.get(primaryDriverKey)!;
+      const driver = primaryDriverKey ? driversByKey.get(primaryDriverKey) : undefined;
       const station = stationsByKey.get(fillUpSpec.stationKey)!;
       const occurredAt = new Date(Date.now() - fillUpSpec.daysAgo * 24 * 60 * 60 * 1000);
 
@@ -677,7 +684,7 @@ async function main() {
         where: { idempotencyKey },
         create: {
           vehicleId: vehicle.id,
-          driverId: driver.id,
+          driverId: driver?.id,
           stationId: station.id,
           fuelType: fillUpSpec.fuelType,
           quantityLiters: fillUpSpec.quantityLiters,

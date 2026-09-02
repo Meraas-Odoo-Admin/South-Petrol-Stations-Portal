@@ -97,24 +97,12 @@ export class ReportsController {
       .send(buffer);
   }
 
-  // drivers:read, not reports:view — this is "this driver's history" shown
-  // inline on the driver detail page (gated on drivers:read to reach the
-  // page at all), not a directorate-level report. station_employee holds
-  // drivers:read but not reports:view; it used to 403 here despite the
-  // page around it loading fine, a real bug (station scoping is still
-  // enforced inside getDriverHistory regardless of which permission gates
-  // the route, so this doesn't widen what any role can actually see).
-  @RequirePermission('drivers:read')
-  @Get('drivers/:driverId/history')
-  getDriverHistory(
-    @Param('driverId') driverId: string,
-    @Query() query: HistoryQueryDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ) {
-    return this.reports.getDriverHistory(driverId, query, actor.id);
-  }
-
-  // vehicles:read, same reasoning as getDriverHistory above.
+  // vehicles:read — "this vehicle's history" shown inline on the vehicle
+  // detail page (gated on vehicles:read to reach the page at all), not a
+  // directorate-level report. Round 6: the equivalent driver-history
+  // endpoint was removed along with the rest of the Driver management
+  // surface (see docs/DESIGN_owner_based_fillups.md) — history is
+  // vehicle/owner-scoped now, not driver-scoped.
   @RequirePermission('vehicles:read')
   @Get('vehicles/:vehicleId/history')
   getVehicleHistory(

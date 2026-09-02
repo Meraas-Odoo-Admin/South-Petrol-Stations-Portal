@@ -179,30 +179,37 @@ enum IdentityType {
   ADMINISTRATIVE_ID // بديل معتمد لدى الطوارق وقبائل أخرى — equally valid per client confirmation
 }
 
+// Round 6: no longer required on a fill-up, and has no active create/edit UI
+// (see docs/DESIGN_owner_based_fillups.md) — kept only so historical
+// FillUpTransaction/DriverVehicle rows recorded before this change keep
+// their driver attribution. Not written to going forward.
 model Driver {
-  id                 String              @id @default(cuid())
-  identityType       IdentityType
-  identityNumber     String // immutable together with identityType after creation, like User.username
-  fullName           String
-  phone              String? // TBD — see docs/OPEN_ITEMS.md #7. Nullable until confirmed.
-  vehicles           DriverVehicle[]
-  fillUps            FillUpTransaction[]
-  standingExceptions StandingException[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id             String              @id @default(cuid())
+  identityType   IdentityType
+  identityNumber String // immutable together with identityType after creation, like User.username
+  fullName       String
+  phone          String? // TBD — see docs/OPEN_ITEMS.md #7. Nullable until confirmed.
+  vehicles       DriverVehicle[]
+  fillUps        FillUpTransaction[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@unique([identityType, identityNumber])
 }
 
 model VehicleOwner {
-  id         String    @id @default(cuid())
-  fullName   String
-  nationalId String?
-  phone      String?
-  address    String?
-  vehicles   Vehicle[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                 String               @id @default(cuid())
+  identityType       IdentityType
+  identityNumber     String // immutable together with identityType after creation, like Driver.identityNumber/User.username
+  fullName           String
+  phone              String?
+  address            String?
+  vehicles           Vehicle[]
+  standingExceptions StandingException[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@unique([identityType, identityNumber])
 }
 
 enum VehicleUsageType {
@@ -335,8 +342,13 @@ model FillUpTransaction {
   id                  String             @id @default(cuid())
   vehicleId           String
   vehicle             Vehicle            @relation(fields: [vehicleId], references: [id])
-  driverId            String
-  driver              Driver             @relation(fields: [driverId], references: [id])
+  // Nullable since round 6: fill-ups no longer require driver identity (see
+  // docs/DESIGN_owner_based_fillups.md) — rule evaluation and standing
+  // exceptions are scoped to the vehicle's owner instead. Kept (not
+  // dropped) so historical fill-ups recorded before this change keep their
+  // driver attribution.
+  driverId            String?
+  driver              Driver?            @relation(fields: [driverId], references: [id])
   stationId           String
   station             Station            @relation(fields: [stationId], references: [id])
   fuelType            FuelType
@@ -371,17 +383,19 @@ model FillUpTransaction {
 // Interim design, NOT from the original client questionnaire — flagged to
 // the client for confirmation (see docs/OPEN_ITEMS.md). A supervisor/admin
 // grants an ongoing exemption from one or more specific rule codes to a
-// driver, a vehicle, or both, instead of the requester needing a fresh
-// one-time Exception every single time. Fully audited (grant + revoke),
-// visible on the driver/vehicle's own profile, never a blanket "exempt
-// from everything" — `rules` lists exactly which RuleFailureReason codes
-// (plus the new LITERS_PER_PERSON_CAP_REACHED) this grant covers.
+// vehicle owner, a vehicle, or both, instead of the requester needing a
+// fresh one-time Exception every single time. Fully audited (grant +
+// revoke), visible on the owner/vehicle's own profile, never a blanket
+// "exempt from everything" — `rules` lists exactly which RuleFailureReason
+// codes (plus the new LITERS_PER_PERSON_CAP_REACHED) this grant covers.
+// Round 6: re-scoped from driverId to ownerId — see
+// docs/DESIGN_owner_based_fillups.md.
 model StandingException {
-  id        String   @id @default(cuid())
-  driverId  String?
-  driver    Driver?  @relation(fields: [driverId], references: [id])
+  id        String        @id @default(cuid())
+  ownerId   String?
+  owner     VehicleOwner? @relation(fields: [ownerId], references: [id])
   vehicleId String?
-  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
+  vehicle   Vehicle?      @relation(fields: [vehicleId], references: [id])
   rules     String[] // RuleFailureReason codes this grant covers
 
   reason      String
@@ -396,7 +410,7 @@ model StandingException {
 
   coveredFillUps FillUpTransaction[]
 
-  @@index([driverId])
+  @@index([ownerId])
   @@index([vehicleId])
 }
 

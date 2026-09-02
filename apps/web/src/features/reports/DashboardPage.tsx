@@ -1,12 +1,25 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import type { DashboardResponse } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
+import { DateField } from '../../components/DateField';
 import { useAuth } from '../auth/AuthProvider';
 import { PageHeader } from '../../components/design/PageHeader';
 import { Card, CardHeader } from '../../components/design/Card';
 import { KpiCard } from '../../components/design/KpiCard';
 import { CodeText } from '../../components/design/CodeText';
+import { fuelTypeLabel } from '../../lib/labels';
 
 function isoDateDaysAgo(days: number): string {
   const date = new Date();
@@ -61,20 +74,18 @@ export function DashboardPage() {
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="mb-1 block text-[11px] font-bold text-ink-soft">من</label>
-              <input
-                type="date"
+              <DateField
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                onChange={setFromDate}
+                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-8 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-bold text-ink-soft">إلى</label>
-              <input
-                type="date"
+              <DateField
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                onChange={setToDate}
+                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-8 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
           </div>
@@ -91,6 +102,67 @@ export function DashboardPage() {
             <KpiCard label="إجمالي اللترات" value={data.totalLiters} />
             <KpiCard label="نسبة المخالفات" value={`${(data.exceptionRate * 100).toFixed(1)}%`} variant="danger" />
           </div>
+
+          {data.daily.length > 0 && (
+            <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader title="اتجاه حجم التعبئات" subtitle="عدد التعبئات يوميًا خلال النطاق المحدَّد" />
+                <div className="h-56 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.daily} margin={{ left: -12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={10} />
+                      <YAxis allowDecimals={false} fontSize={11} />
+                      <Tooltip formatter={(value) => [`${value}`, 'تعبئات']} />
+                      <Line type="monotone" dataKey="totalFillUps" stroke="#0d5c52" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              <Card>
+                <CardHeader title="نسبة المخالفات عبر الوقت" subtitle="نسبة المخالفات إلى إجمالي التعبئات كل يوم" />
+                <div className="h-56 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={data.daily.map((d) => ({
+                        date: d.date,
+                        rate: d.totalFillUps > 0 ? Math.round((d.exceptionCount / d.totalFillUps) * 1000) / 10 : 0,
+                      }))}
+                      margin={{ left: -12 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={10} />
+                      <YAxis allowDecimals={false} fontSize={11} unit="%" />
+                      <Tooltip formatter={(value) => [`${value}%`, 'نسبة المخالفات']} />
+                      <Line type="monotone" dataKey="rate" stroke="#c2410c" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {data.byFuelType.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader title="التوزيع حسب نوع الوقود" />
+              <div className="h-56 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data.byFuelType.map((f) => ({ label: fuelTypeLabel(f.fuelType), totalLiters: f.totalLiters }))}
+                    layout="vertical"
+                    margin={{ left: 8, right: 24 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" fontSize={11} />
+                    <YAxis type="category" dataKey="label" width={70} fontSize={12} />
+                    <Tooltip formatter={(value) => [`${value} لتر`, '']} labelFormatter={() => ''} />
+                    <Bar dataKey="totalLiters" fill="#e8a53d" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          )}
 
           <Card>
             <CardHeader title="حسب المحطة" subtitle="مرتبة بنسبة المخالفات" />

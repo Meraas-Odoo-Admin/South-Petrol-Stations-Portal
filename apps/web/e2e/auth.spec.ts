@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { loadFixtures } from './helpers';
+import { loadFixtures, submitLogin } from './helpers';
 
 const fixtures = loadFixtures();
 
 // POST /auth/login is throttled to 5/min per app instance — each test in
 // this suite logs in exactly once, deliberately, to stay well under that
-// budget across the whole run (see global-setup.ts's own note).
+// budget across the whole run (see global-setup.ts's own note). submitLogin
+// retries the whole form submission if that budget is still exceeded
+// anyway (e.g. global-setup's own fixture-provisioning logins landed close
+// to these), rather than let a 429 look like a broken redirect.
 
 test('login with a seeded user succeeds and lands on the home page', async ({ page }) => {
-  await page.goto('/login');
-  await page.locator('input[name="username"]').fill(fixtures.adminUsername);
-  await page.locator('input[name="password"]').fill(fixtures.adminPassword);
-  await page.getByRole('button', { name: 'دخول' }).click();
+  await submitLogin(page, fixtures.adminUsername, fixtures.adminPassword);
 
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('مرحبًا،');
@@ -20,10 +20,7 @@ test('login with a seeded user succeeds and lands on the home page', async ({ pa
 test('a user with mustChangePassword: true is redirected to /change-password and cannot navigate elsewhere until it succeeds', async ({
   page,
 }) => {
-  await page.goto('/login');
-  await page.locator('input[name="username"]').fill(fixtures.needsChangeUsername);
-  await page.locator('input[name="password"]').fill(fixtures.needsChangePassword);
-  await page.getByRole('button', { name: 'دخول' }).click();
+  await submitLogin(page, fixtures.needsChangeUsername, fixtures.needsChangePassword);
 
   await expect(page).toHaveURL('/change-password');
 

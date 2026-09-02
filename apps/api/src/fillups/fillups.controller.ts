@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -95,5 +96,23 @@ export class FillUpsController {
   @Get('exception-types')
   listExceptionTypes() {
     return this.fillups.listActiveExceptionTypes();
+  }
+
+  @RequirePermission('fillups:create')
+  @Get('fuel-prices')
+  getFuelPrices() {
+    return this.fillups.getFuelPrices();
+  }
+
+  // Round 7 item 1: pre-submit rule-review breakdown — see
+  // FillUpsService.previewRules for why this is gated the same as
+  // getFuelPrices/listExceptionTypes rather than vehicles:read.
+  @RequirePermission('fillups:create')
+  @Get('rule-preview')
+  previewRules(@Query('vehicleId') vehicleId: string) {
+    if (!vehicleId) {
+      throw new BadRequestException('vehicleId is required.');
+    }
+    return this.fillups.previewRules(vehicleId);
   }
 }

@@ -36,7 +36,6 @@ describe('Standing exceptions (e2e)', () => {
   let company: { id: string };
   let station: { id: string };
   let vehicleId: string;
-  let driverId: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -57,9 +56,9 @@ describe('Standing exceptions (e2e)', () => {
     const settings: Array<[string, string]> = [
       ['fillup.max_per_week', '3'],
       ['fillup.min_gap_days', '2'],
-      ['fillup.max_per_week_per_driver', '3'],
-      ['fillup.min_gap_days_per_driver', '2'],
-      ['fillup.max_liters_per_week_per_driver', '1000'],
+      ['fillup.max_per_week_per_owner', '3'],
+      ['fillup.min_gap_days_per_owner', '2'],
+      ['fillup.max_liters_per_week_per_owner', '1000'],
       ['fillup.week_window_mode', 'rolling'],
       ['fillup.week_start_day', '6'],
     ];
@@ -72,10 +71,6 @@ describe('Standing exceptions (e2e)', () => {
       data: { internalCode: `E2E-SE-A-${runId}`, stationNumber: '1', name: 'E2E SE Station', companyId: company.id },
     });
 
-    const driver = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-se-1-${runId}`, fullName: 'E2E SE Driver' },
-    });
-    driverId = driver.id;
     const vehicle = await prisma.vehicle.create({
       data: { internalCode: `E2E-SE-VEH-1-${runId}`, currentPlate: `E2E-SE-PLATE-1-${runId}` },
     });
@@ -87,7 +82,6 @@ describe('Standing exceptions (e2e)', () => {
     await prisma.fillUpTransaction.create({
       data: {
         vehicleId,
-        driverId,
         stationId: station.id,
         fuelType: 'PETROL_95',
         quantityLiters: 20,
@@ -172,7 +166,6 @@ describe('Standing exceptions (e2e)', () => {
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: [granterRoleId, recorderRoleId] } } });
     await prisma.role.deleteMany({ where: { id: { in: [granterRoleId, recorderRoleId] } } });
-    await prisma.driver.delete({ where: { id: driverId } });
     await prisma.vehicle.delete({ where: { id: vehicleId } });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.company.delete({ where: { id: company.id } });
@@ -202,7 +195,6 @@ describe('Standing exceptions (e2e)', () => {
       .set('Idempotency-Key', idempotencyKey)
       .send({
         vehicleId,
-        driverId,
         stationId: station.id,
         fuelType: 'PETROL_95',
         quantityLiters: 15,

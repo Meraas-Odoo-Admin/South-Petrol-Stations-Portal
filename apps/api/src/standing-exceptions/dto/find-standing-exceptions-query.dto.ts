@@ -5,7 +5,7 @@ export class FindStandingExceptionsQueryDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  driverId?: string;
+  ownerId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

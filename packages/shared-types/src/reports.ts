@@ -12,33 +12,51 @@ export type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
 export interface DailyReportQuery {
   stationId?: string;
   date?: string; // YYYY-MM-DD
-  driverId?: string;
+  ownerId?: string;
   fuelType?: FuelType;
 }
 
 export interface DailyReportResponse {
   stationId: string | null; // null = all stations combined
   date: string;
-  driverId: string | null;
+  ownerId: string | null;
   fuelType: FuelType | null;
   totalFillUps: number;
   totalLiters: number;
   exceptionsPending: number;
   exceptionsApproved: number;
+  // Round 4 feedback item 9: a live "showing X of Y after filters" line and
+  // an actual results table, not KPI tiles alone — totalBeforeFilters is
+  // the same station+date scope with owner/fuelType filters NOT applied,
+  // so the line can say how much the optional filters narrowed the set.
+  totalBeforeFilters: number;
+  rows: FillUpHistoryEntry[];
 }
 
 // ── GET /reports/violations, /reports/drivers/:id/history,
 //    /reports/vehicles/:id/history ───────────────────────────────────────
 
+// identityNumber is NOT masked by the API — masking is applied client-side
+// only, using MeResponse.permissions (see lib/masking.ts). This is the
+// UI-only masking rule from docs/IMPLEMENTATION_PLAN.md §8.
+export interface FillUpOwnerSummary {
+  id: string;
+  identityType: IdentityType;
+  identityNumber: string;
+  fullName: string;
+}
+
 export interface FillUpVehicleSummary {
   id: string;
   internalCode: string;
   currentPlate: string;
+  owner: FillUpOwnerSummary | null;
 }
 
-// identityNumber is NOT masked by the API — masking is applied client-side
-// only, using MeResponse.permissions (see lib/masking.ts). This is the
-// UI-only masking rule from docs/IMPLEMENTATION_PLAN.md §8.
+// Legacy-only (round 6): null on every fill-up recorded after fill-ups
+// stopped requiring driver identity — see
+// docs/DESIGN_owner_based_fillups.md. Kept so historical rows still render
+// their driver attribution.
 export interface FillUpDriverSummary {
   id: string;
   identityType: IdentityType;
@@ -89,7 +107,7 @@ export interface ExceptionSummary {
 export interface FillUpHistoryEntry {
   id: string;
   vehicleId: string;
-  driverId: string;
+  driverId: string | null;
   stationId: string;
   fuelType: FuelType;
   quantityLiters: string;
@@ -99,9 +117,14 @@ export interface FillUpHistoryEntry {
   idempotencyKey: string;
   createdAt: string;
   vehicle: FillUpVehicleSummary;
-  driver: FillUpDriverSummary;
+  driver: FillUpDriverSummary | null;
   station: FillUpStationSummary;
   exception: ExceptionSummary | null;
+  // Set when a standing exception (not a one-time submitted exception)
+  // auto-allowed this fill-up — distinct status from a plain compliant
+  // row or a one-time exception (round 4 feedback, driver/vehicle detail
+  // history tables' per-row status pill).
+  standingExceptionId: string | null;
 }
 
 export type ViolationStatus = 'pending' | 'approved' | 'all';
@@ -143,6 +166,19 @@ export interface DashboardStationBreakdown {
   exceptionCount: number;
 }
 
+export interface DashboardFuelTypeBreakdown {
+  fuelType: FuelType;
+  totalFillUps: number;
+  totalLiters: number;
+}
+
+export interface DashboardDailyPoint {
+  date: string; // YYYY-MM-DD
+  totalFillUps: number;
+  totalLiters: number;
+  exceptionCount: number;
+}
+
 export interface DashboardResponse {
   from: string;
   to: string;
@@ -150,6 +186,11 @@ export interface DashboardResponse {
   totalLiters: number;
   exceptionRate: number;
   perStation: DashboardStationBreakdown[];
+  // Round 4 feedback item 9: chart-backed views, computed from the same
+  // filtered range as everything else on this page — never a separate
+  // hardcoded number.
+  byFuelType: DashboardFuelTypeBreakdown[];
+  daily: DashboardDailyPoint[];
 }
 
 // ── Export ────────────────────────────────────────────────────────────────

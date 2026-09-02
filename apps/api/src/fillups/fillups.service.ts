@@ -24,12 +24,11 @@ type ExistingFillUp = Prisma.FillUpTransactionGetPayload<{
 }>;
 
 // A reused Idempotency-Key is only a valid retry if it describes the SAME
-// fill-up. A different vehicleId/driverId/etc under the same key is a
-// client bug (key collision or a copy-paste mistake), not a retry — it
-// must never silently resolve to the wrong transaction.
+// fill-up. A different vehicleId/etc under the same key is a client bug
+// (key collision or a copy-paste mistake), not a retry — it must never
+// silently resolve to the wrong transaction.
 function payloadMatchesExisting(dto: CreateFillUpDto, existing: ExistingFillUp): boolean {
   if (dto.vehicleId !== existing.vehicleId) return false;
-  if (dto.driverId !== existing.driverId) return false;
   if (dto.stationId !== existing.stationId) return false;
   if (dto.fuelType !== existing.fuelType) return false;
   if (!existing.quantityLiters.equals(dto.quantityLiters)) return false;
@@ -58,6 +57,22 @@ export class FillUpsService {
     // SystemSettingsService/FillUpsRepository/StandingExceptionsRepository
     // are the real Prisma-backed implementations of those interfaces.
     this.ruleEngine = new FillUpRuleEngine(this.settings, this.repo, this.standingExceptionsRepo);
+  }
+
+  // Round 7 item 1: the fill-up form's pre-submit rule-review screen —
+  // returns every applicable rule's real actual/limit numbers, computed by
+  // the SAME rule engine a real submission uses (FillUpRuleEngine.
+  // evaluateWithChecks), never a separate client-side estimate. Gated on
+  // fillups:create (not vehicles:read) since it's part of the fill-up
+  // recording flow specifically, same reasoning as getFuelPrices/
+  // listExceptionTypes below.
+  async previewRules(vehicleId: string) {
+    const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found.');
+    }
+    const { checks } = await this.ruleEngine.evaluateWithChecks(vehicleId, vehicle.ownerId, new Date());
+    return { checks };
   }
 
   // Human-readable snapshot of the specific prior fill-up that triggered a
@@ -107,7 +122,7 @@ export class FillUpsService {
     if (existing) {
       if (!payloadMatchesExisting(dto, existing)) {
         throw new ConflictException(
-          'This Idempotency-Key was already used for a different fill-up (mismatched vehicle, driver, station, fuel type, quantity, or occurredAt). Use a new key for a new submission.',
+          'This Idempotency-Key was already used for a different fill-up (mismatched vehicle, station, fuel type, quantity, or occurredAt). Use a new key for a new submission.',
         );
       }
       return { status: 'existing' as const, transaction: existing };
@@ -116,10 +131,6 @@ export class FillUpsService {
     const vehicle = await this.prisma.vehicle.findUnique({ where: { id: dto.vehicleId } });
     if (!vehicle) {
       throw new NotFoundException('Vehicle not found.');
-    }
-    const driver = await this.prisma.driver.findUnique({ where: { id: dto.driverId } });
-    if (!driver) {
-      throw new NotFoundException('Driver not found.');
     }
     const station = await this.prisma.station.findUnique({ where: { id: dto.stationId } });
     if (!station) {
@@ -132,7 +143,7 @@ export class FillUpsService {
     );
 
     if (!exceptionModeFieldsPresent) {
-      const ruleResult = await this.ruleEngine.evaluate(dto.vehicleId, dto.driverId, occurredAt);
+      const ruleResult = await this.ruleEngine.evaluate(dto.vehicleId, vehicle.ownerId, occurredAt);
       if (!ruleResult.allowed) {
         return {
           status: 'rejected' as const,
@@ -145,7 +156,6 @@ export class FillUpsService {
         const created = await tx.fillUpTransaction.create({
           data: {
             vehicleId: dto.vehicleId,
-            driverId: dto.driverId,
             stationId: dto.stationId,
             fuelType: dto.fuelType,
             quantityLiters: dto.quantityLiters,
@@ -195,7 +205,7 @@ export class FillUpsService {
     // prior fill-up triggered it (item 8). Never trust a client-supplied
     // diagnostic for this — always re-derive it server-side, same as any
     // other authoritative check.
-    const diagnostic = await this.ruleEngine.evaluate(dto.vehicleId, dto.driverId, occurredAt);
+    const diagnostic = await this.ruleEngine.evaluate(dto.vehicleId, vehicle.ownerId, occurredAt);
     const triggerReason = diagnostic.allowed ? null : diagnostic.reason;
     const triggerDetail = diagnostic.allowed ? null : await this.describeTrigger(diagnostic.trigger);
 
@@ -225,7 +235,6 @@ export class FillUpsService {
       const created = await tx.fillUpTransaction.create({
         data: {
           vehicleId: dto.vehicleId,
-          driverId: dto.driverId,
           stationId: dto.stationId,
           fuelType: dto.fuelType,
           quantityLiters: dto.quantityLiters,
@@ -325,6 +334,21 @@ export class FillUpsService {
         include: FILL_UP_WITH_EXCEPTION_INCLUDE,
       });
     });
+  }
+
+  // Round 4 feedback, item 3: an auto-calculated read-only cost field
+  // (quantity × price-per-liter) on the fill-up form. Per CLAUDE.md rule 4,
+  // the price itself is a SystemSetting, not a hardcoded constant — gated
+  // on fillups:create (same reasoning as exception-types above) rather
+  // than settings:manage, since any station employee who can record a
+  // fill-up needs to see the price, not just admins.
+  async getFuelPrices(): Promise<Record<'PETROL_95' | 'DIESEL' | 'KEROSENE', number>> {
+    const [petrol95, diesel, kerosene] = await Promise.all([
+      this.settings.getNumber('fillup.price_per_liter.PETROL_95'),
+      this.settings.getNumber('fillup.price_per_liter.DIESEL'),
+      this.settings.getNumber('fillup.price_per_liter.KEROSENE'),
+    ]);
+    return { PETROL_95: petrol95, DIESEL: diesel, KEROSENE: kerosene };
   }
 
   // The frontend's "submit as exception" flow needs to know which

@@ -9,6 +9,8 @@ import { PlateChangeDto } from './dto/plate-change.dto';
 import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
 import { RejectVehicleChangeRequestDto } from './dto/reject-change-request.dto';
 import { FindChangeRequestsQueryDto } from './dto/find-change-requests-query.dto';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
+import { resolveWeekWindowStrategy } from '../fillups/rule-engine/week-window.strategy';
 
 // The single field on Vehicle that a given changeType targets, and the
 // parallel history table/column it's tracked in once a value has been
@@ -39,14 +41,60 @@ export class VehiclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly settings: SystemSettingsService,
   ) {}
 
-  async create(dto: CreateVehicleDto, actorId: string) {
-    const existingByCode = await this.prisma.vehicle.findUnique({
-      where: { internalCode: dto.internalCode },
+  // Round 4 feedback item 5: the vehicle detail page shows "X من Y تعبئات
+  // مسموح بها هذا الأسبوع" — reuses the exact same week-window logic the
+  // rule engine itself uses (rolling vs fixed, per fillup.week_window_mode)
+  // rather than a second, possibly-diverging notion of "this week".
+  async getWeeklyUsage(vehicleId: string) {
+    const [maxPerWeek, weekWindowMode, weekStartDay] = await Promise.all([
+      this.settings.getNumber('fillup.max_per_week'),
+      this.settings.getString('fillup.week_window_mode'),
+      this.settings.getNumber('fillup.week_start_day'),
+    ]);
+    const now = new Date();
+    const windowStart = resolveWeekWindowStrategy(weekWindowMode).windowStart(now, weekStartDay);
+    const used = await this.prisma.fillUpTransaction.count({
+      where: { vehicleId, occurredAt: { gte: windowStart, lte: now } },
     });
-    if (existingByCode) {
-      throw new ConflictException('internalCode is already in use.');
+    return { used, max: maxPerWeek, windowStart: windowStart.toISOString() };
+  }
+
+  // Round 5 feedback: "the internal code field shouldn't be something the
+  // user types — find the existing generation logic and reuse it." There
+  // wasn't one (confirmed — CreateVehicleDto.internalCode was a plain
+  // required text field with no generator anywhere), so this is new. Uses
+  // vehicle count as the starting point, then probes forward past any
+  // already-taken code (possible if a caller explicitly supplied one
+  // outside this sequence, e.g. VEH-SEED-* fixtures) rather than trusting
+  // count+1 to be free — cheap since collisions should be rare in practice.
+  private async generateInternalCode(): Promise<string> {
+    const count = await this.prisma.vehicle.count();
+    for (let offset = 0; offset < 20; offset++) {
+      const candidate = `V-${String(count + 1 + offset).padStart(6, '0')}`;
+      const existing = await this.prisma.vehicle.findUnique({ where: { internalCode: candidate } });
+      if (!existing) {
+        return candidate;
+      }
+    }
+    throw new Error('Could not generate a unique vehicle internal code after 20 attempts.');
+  }
+
+  async create(dto: CreateVehicleDto, actorId: string) {
+    const internalCode = dto.internalCode?.trim() || (await this.generateInternalCode());
+
+    // Only re-check uniqueness for an explicitly-supplied code —
+    // generateInternalCode() above already confirmed its own candidate is
+    // free, and re-checking it here would just be a redundant query.
+    if (dto.internalCode?.trim()) {
+      const existingByCode = await this.prisma.vehicle.findUnique({
+        where: { internalCode },
+      });
+      if (existingByCode) {
+        throw new ConflictException('internalCode is already in use.');
+      }
     }
 
     const existingByPlate = await this.prisma.vehicle.findUnique({
@@ -82,7 +130,7 @@ export class VehiclesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const vehicle = await tx.vehicle.create({ data: dto });
+      const vehicle = await tx.vehicle.create({ data: { ...dto, internalCode } });
 
       // Seed the plate history with the vehicle's initial plate so
       // plate-change always has a current (validTo: null) row to close.
@@ -140,18 +188,18 @@ export class VehiclesService {
   // internally by update/changePlate/addDriver/etc (no reason to pay for
   // plate history + driver joins on every internal call). This is only for
   // GET /vehicles/:id, the actual detail page — plate history (oldest
-  // first, so "history" reads chronologically) and driver associations
-  // (with isPrimary) were previously not returned by the API at all, so
-  // the vehicle detail page had nowhere to source them from (item 6).
+  // first, so "history" reads chronologically) was previously not
+  // returned by the API at all, so the vehicle detail page had nowhere to
+  // source it from (item 6). Round 6: `drivers` dropped from this include
+  // — the owner (with identityType/identityNumber) is now the identity
+  // that matters, not a driver association (see
+  // docs/DESIGN_owner_based_fillups.md).
   async findOneDetailed(id: string) {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id },
       include: {
-        owner: { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true, identityType: true, identityNumber: true } },
         plateHistory: { orderBy: { validFrom: 'asc' } },
-        drivers: {
-          include: { driver: { select: { id: true, fullName: true, identityType: true, identityNumber: true } } },
-        },
       },
     });
     if (!vehicle) {
@@ -244,71 +292,11 @@ export class VehiclesService {
     });
   }
 
-  async addDriver(vehicleId: string, driverId: string, isPrimary: boolean, actorId: string) {
-    await this.findOne(vehicleId);
-    const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
-    if (!driver) {
-      throw new NotFoundException('Driver not found.');
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      // Invariant: at most one DriverVehicle row with isPrimary: true per
-      // vehicleId. Enforced here, not at the DB level — Prisma's schema
-      // doesn't support partial unique indexes without hand-written SQL,
-      // and a service-layer demotion inside this transaction is enough.
-      // Only runs when the incoming row is itself becoming primary; a
-      // non-primary upsert must not touch anyone else's isPrimary flag.
-      if (isPrimary) {
-        await tx.driverVehicle.updateMany({
-          where: { vehicleId, isPrimary: true },
-          data: { isPrimary: false },
-        });
-      }
-
-      // Re-adding an existing (driverId, vehicleId) pair is intentionally
-      // an update-in-place (e.g. to flip isPrimary), not a rejected
-      // duplicate — don't "fix" this into a conflict error later.
-      await tx.driverVehicle.upsert({
-        where: { driverId_vehicleId: { driverId, vehicleId } },
-        create: { driverId, vehicleId, isPrimary },
-        update: { isPrimary },
-      });
-
-      await this.audit.log(
-        {
-          userId: actorId,
-          action: 'ADD_VEHICLE_DRIVER',
-          entityType: 'Vehicle',
-          entityId: vehicleId,
-          newValue: { driverId, isPrimary },
-        },
-        tx,
-      );
-    });
-
-    return this.findOne(vehicleId);
-  }
-
-  async removeDriver(vehicleId: string, driverId: string, actorId: string) {
-    await this.findOne(vehicleId);
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.driverVehicle.deleteMany({ where: { vehicleId, driverId } });
-
-      await this.audit.log(
-        {
-          userId: actorId,
-          action: 'REMOVE_VEHICLE_DRIVER',
-          entityType: 'Vehicle',
-          entityId: vehicleId,
-          oldValue: { driverId },
-        },
-        tx,
-      );
-    });
-
-    return this.findOne(vehicleId);
-  }
+  // Round 6: driver-vehicle association endpoints removed — fill-ups no
+  // longer need driver identity, and the Driver management UI is gone
+  // (see docs/DESIGN_owner_based_fillups.md). DriverVehicle rows already
+  // in the database are left alone (historical), just no longer written
+  // to from here.
 
   // ── Chassis/registration-booklet change requests (anti-fraud) ────────
   //

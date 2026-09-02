@@ -7,14 +7,18 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 
-// M2 (docs/IMPLEMENTATION_PLAN.md §11): Drivers, Owners, Vehicles CRUD, the
-// driver-vehicle association, and plate history tracking. The one explicit
-// acceptance bar the plan states is that changing a vehicle's plate must not
-// orphan its history — proven below as a service/e2e-level test, independent
-// of FillUpTransaction (which doesn't exist until M3). Extend this test in
-// M3 once FillUpTransaction exists, to also prove a real fill-up row created
-// under the old plate survives a plate change untouched.
-describe('Drivers/Owners/Vehicles (e2e)', () => {
+// M2 (docs/IMPLEMENTATION_PLAN.md §11): Owners, Vehicles CRUD and plate
+// history tracking. The one explicit acceptance bar the plan states is that
+// changing a vehicle's plate must not orphan its history — proven below as
+// a service/e2e-level test, independent of FillUpTransaction (which didn't
+// exist until M3). Extended in M3 once FillUpTransaction existed.
+//
+// Round 6: the Driver CRUD and driver-vehicle association blocks that used
+// to live here were removed along with the Driver management endpoints
+// (see docs/DESIGN_owner_based_fillups.md) — fill-ups no longer require
+// driver identity, and VehicleOwner now carries the identityType/
+// identityNumber pair that used to be Driver-only.
+describe('Owners/Vehicles (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
@@ -45,8 +49,6 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
   let managerRoleId: string;
 
   // Fixtures shared across the success-path tests below.
-  let driverId: string;
-  let secondDriverId: string;
   let ownerId: string;
   let vehicleId: string;
 
@@ -66,21 +68,6 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
 
     prisma = moduleRef.get(PrismaService);
 
-    const driversManagePermission = await prisma.permission.upsert({
-      where: { key: 'drivers:manage' },
-      create: { key: 'drivers:manage' },
-      update: {},
-    });
-    // POST /drivers is gated on drivers:create (narrower than :manage, item
-    // 1's RBAC fix) — a role that only holds :manage no longer covers
-    // creating a NEW driver, only editing existing ones. This fixture's
-    // manager role needs both, same as the real station_supervisor/
-    // directorate_admin roles in seed.ts.
-    const driversCreatePermission = await prisma.permission.upsert({
-      where: { key: 'drivers:create' },
-      create: { key: 'drivers:create' },
-      update: {},
-    });
     const ownersPermission = await prisma.permission.upsert({
       where: { key: 'owners:manage' },
       create: { key: 'owners:manage' },
@@ -91,14 +78,9 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       create: { key: 'vehicles:manage' },
       update: {},
     });
-    // GET /drivers and GET /vehicles are gated on :read, not :manage, as of
-    // M3 — holding :manage alone no longer satisfies them (PermissionsGuard
-    // checks the exact permission string, not a tier hierarchy).
-    const driversReadPermission = await prisma.permission.upsert({
-      where: { key: 'drivers:read' },
-      create: { key: 'drivers:read' },
-      update: {},
-    });
+    // GET /vehicles is gated on :read, not :manage, as of M3 — holding
+    // :manage alone no longer satisfies it (PermissionsGuard checks the
+    // exact permission string, not a tier hierarchy).
     const vehiclesReadPermission = await prisma.permission.upsert({
       where: { key: 'vehicles:read' },
       create: { key: 'vehicles:read' },
@@ -110,11 +92,8 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     managerRoleId = managerRole.id;
     await prisma.rolePermission.createMany({
       data: [
-        { roleId: managerRole.id, permissionId: driversManagePermission.id },
-        { roleId: managerRole.id, permissionId: driversCreatePermission.id },
         { roleId: managerRole.id, permissionId: ownersPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesManagePermission.id },
-        { roleId: managerRole.id, permissionId: driversReadPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesReadPermission.id },
       ],
     });
@@ -136,14 +115,12 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
 
   afterAll(async () => {
     if (vehicleId) {
-      await prisma.driverVehicle.deleteMany({ where: { vehicleId } });
       await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId } });
       await prisma.vehicle.deleteMany({ where: { id: vehicleId } });
     }
     if (ownerId) {
       await prisma.vehicleOwner.deleteMany({ where: { id: ownerId } });
     }
-    await prisma.driver.deleteMany({ where: { id: { in: [driverId, secondDriverId].filter(Boolean) } } });
 
     const allUserIds = [managerUserId, noPermUserId];
     await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
@@ -175,10 +152,8 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
 
   // ── 401: unauthenticated ─────────────────────────────────────────────
 
-  it('rejects unauthenticated requests to every driver/owner/vehicle endpoint', async () => {
+  it('rejects unauthenticated requests to every owner/vehicle endpoint', async () => {
     const server = app.getHttpServer();
-    await request(server).post('/api/v1/drivers').send({}).expect(401);
-    await request(server).get('/api/v1/drivers').expect(401);
     await request(server).post('/api/v1/owners').send({}).expect(401);
     await request(server).get('/api/v1/owners').expect(401);
     await request(server).post('/api/v1/vehicles').send({}).expect(401);
@@ -187,17 +162,11 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
 
   // ── 403: authenticated but lacking the required permission ─────────────
 
-  it('blocks an actor without drivers:manage/owners:manage/vehicles:manage from every endpoint', async () => {
+  it('blocks an actor without owners:manage/vehicles:manage from every endpoint', async () => {
     const accessToken = await loginAsNoPerm();
     const server = app.getHttpServer();
     const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
 
-    await auth(request(server).post('/api/v1/drivers')).send({
-      identityType: 'NATIONAL_ID',
-      identityNumber: `should-not-exist-${runId}`,
-      fullName: 'Should Not Exist',
-    }).expect(403);
-    await auth(request(server).get('/api/v1/drivers')).expect(403);
     await auth(request(server).post('/api/v1/owners')).send({ fullName: 'Nope' }).expect(403);
     await auth(request(server).get('/api/v1/owners')).expect(403);
     await auth(request(server).post('/api/v1/vehicles')).send({
@@ -205,72 +174,6 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       currentPlate: `should-not-exist-${runId}`,
     }).expect(403);
     await auth(request(server).get('/api/v1/vehicles')).expect(403);
-  });
-
-  // ── Driver CRUD ──────────────────────────────────────────────────────
-
-  it('lets a properly-permissioned actor create, list, fetch, and update a driver', async () => {
-    const accessToken = await loginAsManager();
-    const server = app.getHttpServer();
-
-    const createRes = await request(server)
-      .post('/api/v1/drivers')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({
-        identityType: 'NATIONAL_ID',
-        identityNumber: `1${numericId11}`,
-        fullName: 'E2E DOV Driver One',
-      })
-      .expect(201);
-    driverId = createRes.body.id;
-    expect(createRes.body.fullName).toBe('E2E DOV Driver One');
-
-    const listRes = await request(server)
-      .get('/api/v1/drivers')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(200);
-    expect(listRes.body.map((d: { id: string }) => d.id)).toContain(driverId);
-
-    const getRes = await request(server)
-      .get(`/api/v1/drivers/${driverId}`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(200);
-    expect(getRes.body.identityNumber).toBe(`1${numericId11}`);
-
-    const updateRes = await request(server)
-      .patch(`/api/v1/drivers/${driverId}`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ fullName: 'E2E DOV Driver One (renamed)', phone: '0910000000' })
-      .expect(200);
-    expect(updateRes.body.fullName).toBe('E2E DOV Driver One (renamed)');
-    expect(updateRes.body.phone).toBe('0910000000');
-  });
-
-  it('rejects creating a driver with a duplicate (identityType, identityNumber) pair', async () => {
-    const accessToken = await loginAsManager();
-
-    await request(app.getHttpServer())
-      .post('/api/v1/drivers')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({
-        identityType: 'NATIONAL_ID',
-        identityNumber: `1${numericId11}`, // same pair as the driver created above
-        fullName: 'Duplicate Attempt',
-      })
-      .expect(409);
-  });
-
-  it('rejects a PATCH /drivers/:id body that tries to change identityType/identityNumber, since they are immutable', async () => {
-    const accessToken = await loginAsManager();
-
-    // whitelist + forbidNonWhitelisted: UpdateDriverDto has no
-    // identityType/identityNumber fields at all, so sending them is a 400,
-    // not a silent no-op.
-    await request(app.getHttpServer())
-      .patch(`/api/v1/drivers/${driverId}`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ identityNumber: `9${numericId11}` })
-      .expect(400);
   });
 
   // ── Owner CRUD ───────────────────────────────────────────────────────
@@ -282,7 +185,12 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     const createRes = await request(server)
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ fullName: 'E2E DOV Owner One', phone: '0920000000' })
+      .send({
+        fullName: 'E2E DOV Owner One',
+        identityType: 'NATIONAL_ID',
+        identityNumber: `1${numericId11}`,
+        phone: '0920000000',
+      })
       .expect(201);
     ownerId = createRes.body.id;
 
@@ -298,6 +206,33 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .send({ address: 'Sabha' })
       .expect(200);
     expect(updateRes.body.address).toBe('Sabha');
+  });
+
+  it('rejects creating an owner with a duplicate (identityType, identityNumber) pair', async () => {
+    const accessToken = await loginAsManager();
+
+    await request(app.getHttpServer())
+      .post('/api/v1/owners')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        fullName: 'Duplicate Attempt',
+        identityType: 'NATIONAL_ID',
+        identityNumber: `1${numericId11}`, // same pair as the owner created above
+      })
+      .expect(409);
+  });
+
+  it('rejects a PATCH /owners/:id body that tries to change identityType/identityNumber, since they are immutable', async () => {
+    const accessToken = await loginAsManager();
+
+    // whitelist + forbidNonWhitelisted: UpdateOwnerDto has no
+    // identityType/identityNumber fields at all, so sending them is a 400,
+    // not a silent no-op.
+    await request(app.getHttpServer())
+      .patch(`/api/v1/owners/${ownerId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ identityNumber: `9${numericId11}` })
+      .expect(400);
   });
 
   // ── Vehicle CRUD + search ────────────────────────────────────────────
@@ -332,6 +267,32 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .expect(409);
   });
 
+  // Round 5 feedback item 3: internalCode is no longer something a station
+  // employee types on the create-vehicle form — VehiclesService.create()
+  // assigns the next "V-######" code itself when the field is omitted.
+  it('auto-generates a "V-######" internalCode when none is supplied, and it is a real usable unique code', async () => {
+    const accessToken = await loginAsManager();
+    const server = app.getHttpServer();
+
+    const res = await request(server)
+      .post('/api/v1/vehicles')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ currentPlate: `12-${randomDigits(7)}` })
+      .expect(201);
+
+    expect(res.body.internalCode).toMatch(/^V-\d{6}$/);
+
+    // The generated code is real and immediately unique — creating another
+    // vehicle with no internalCode gets a DIFFERENT one, not a collision.
+    const secondRes = await request(server)
+      .post('/api/v1/vehicles')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ currentPlate: `12-${randomDigits(7)}` })
+      .expect(201);
+    expect(secondRes.body.internalCode).toMatch(/^V-\d{6}$/);
+    expect(secondRes.body.internalCode).not.toBe(res.body.internalCode);
+  });
+
   it('finds the vehicle by searching internalCode, currentPlate, or chassisNumber', async () => {
     const accessToken = await loginAsManager();
     const server = app.getHttpServer();
@@ -355,7 +316,11 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
     const secondOwnerRes = await request(app.getHttpServer())
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ fullName: 'E2E DOV Owner Two' })
+      .send({
+        fullName: 'E2E DOV Owner Two',
+        identityType: 'NATIONAL_ID',
+        identityNumber: `2${numericId11}`,
+      })
       .expect(201);
     const secondOwnerId = secondOwnerRes.body.id;
 
@@ -383,71 +348,6 @@ describe('Drivers/Owners/Vehicles (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ currentPlate: `9-${plateSeqB}` })
       .expect(400);
-  });
-
-  // ── Driver-vehicle association ──────────────────────────────────────
-
-  it('associates and removes a driver from a vehicle', async () => {
-    const accessToken = await loginAsManager();
-    const server = app.getHttpServer();
-
-    const secondDriverRes = await request(server)
-      .post('/api/v1/drivers')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({
-        identityType: 'ADMINISTRATIVE_ID',
-        identityNumber: `9${numericId11}`,
-        fullName: 'E2E DOV Driver Two',
-      })
-      .expect(201);
-    secondDriverId = secondDriverRes.body.id;
-
-    const addRes = await request(server)
-      .post(`/api/v1/vehicles/${vehicleId}/drivers`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ driverId: secondDriverId, isPrimary: true })
-      .expect(201);
-    expect(addRes.body.id).toBe(vehicleId);
-
-    const associations = await prisma.driverVehicle.findMany({ where: { vehicleId } });
-    expect(associations.map((a) => a.driverId)).toContain(secondDriverId);
-    expect(associations.find((a) => a.driverId === secondDriverId)?.isPrimary).toBe(true);
-
-    await request(server)
-      .delete(`/api/v1/vehicles/${vehicleId}/drivers/${secondDriverId}`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(200);
-
-    const afterRemoval = await prisma.driverVehicle.findMany({ where: { vehicleId } });
-    expect(afterRemoval.map((a) => a.driverId)).not.toContain(secondDriverId);
-  });
-
-  it('demotes the previous primary driver when a new driver is assigned isPrimary: true, so at most one primary remains', async () => {
-    const accessToken = await loginAsManager();
-    const server = app.getHttpServer();
-
-    // driverId and secondDriverId were both created in earlier tests and
-    // have no association with this vehicle at this point (the prior test
-    // removed secondDriverId's association again after asserting it).
-    await request(server)
-      .post(`/api/v1/vehicles/${vehicleId}/drivers`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ driverId, isPrimary: true })
-      .expect(201);
-
-    await request(server)
-      .post(`/api/v1/vehicles/${vehicleId}/drivers`)
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ driverId: secondDriverId, isPrimary: true })
-      .expect(201);
-
-    const associations = await prisma.driverVehicle.findMany({ where: { vehicleId } });
-    const primaryRows = associations.filter((a) => a.isPrimary);
-    expect(primaryRows).toHaveLength(1);
-    expect(primaryRows[0]?.driverId).toBe(secondDriverId);
-
-    const driverARow = associations.find((a) => a.driverId === driverId);
-    expect(driverARow?.isPrimary).toBe(false);
   });
 
   // ── Plate change: the M2 "done means" acceptance bar ────────────────

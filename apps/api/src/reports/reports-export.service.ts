@@ -23,7 +23,15 @@ type ExceptionExportRow = Prisma.ExceptionGetPayload<{
     exceptionType: true;
     fillUpTransaction: {
       include: {
-        vehicle: { select: { id: true; internalCode: true; currentPlate: true } };
+        vehicle: {
+          select: {
+            id: true;
+            internalCode: true;
+            currentPlate: true;
+            owner: { select: { id: true; identityType: true; identityNumber: true; fullName: true } };
+          };
+        };
+        // Legacy-only (round 6) — see FILL_UP_HISTORY_INCLUDE's comment.
         driver: { select: { id: true; identityType: true; identityNumber: true; fullName: true } };
         station: { select: { id: true; internalCode: true; name: true } };
       };
@@ -157,7 +165,7 @@ export class ReportsExportService {
       { header: 'Date', key: 'date', width: 20 },
       { header: 'Station', key: 'station', width: 20 },
       { header: 'Vehicle', key: 'vehicle', width: 18 },
-      { header: 'Driver', key: 'driver', width: 24 },
+      { header: 'Owner', key: 'owner', width: 24 },
       { header: 'Exception Type', key: 'exceptionType', width: 20 },
       { header: 'Reason', key: 'reason', width: 30 },
       { header: 'Status', key: 'status', width: 12 },
@@ -186,14 +194,14 @@ export class ReportsExportService {
         { header: 'Date', width: 110 },
         { header: 'Station', width: 90 },
         { header: 'Vehicle', width: 90 },
-        { header: 'Driver', width: 130 },
+        { header: 'Owner', width: 130 },
         { header: 'Exception Type', width: 110 },
         { header: 'Status', width: 70 },
         { header: 'Reason', width: 200 },
       ],
       rows.map((row) => {
         const plain = this.violationRowToPlainObject(row);
-        return [plain.date, plain.station, plain.vehicle, plain.driver, plain.exceptionType, plain.status, plain.reason];
+        return [plain.date, plain.station, plain.vehicle, plain.owner, plain.exceptionType, plain.status, plain.reason];
       }),
       doc.y,
     );
@@ -201,21 +209,25 @@ export class ReportsExportService {
     return pdfToBuffer(doc);
   }
 
-  // Deliberately excludes driver.identityNumber (and identityType), even
+  // Deliberately excludes owner.identityNumber (and identityType), even
   // though the underlying query fetches it (ReportsService's
-  // FILL_UP_HISTORY_INCLUDE is shared with the driver/vehicle history JSON
-  // endpoints, which DO need it). §8's masking rule is UI-only for the JSON
-  // endpoints because there's a frontend downstream to apply it — an
+  // FILL_UP_HISTORY_INCLUDE is shared with the vehicle-history JSON
+  // endpoint, which DOES need it). §8's masking rule is UI-only for the
+  // JSON endpoint because there's a frontend downstream to apply it — an
   // exported file has no such step; whoever opens it sees exactly what's
-  // written here, permanently. driver.fullName is fine to keep (not the
+  // written here, permanently. owner.fullName is fine to keep (not the
   // sensitive part); the identity number itself never reaches either
   // export format. Do not add it back without re-deciding this.
+  //
+  // Round 6: "Owner" replaces "Driver" as the export column — falls back
+  // to the legacy driver.fullName only for pre-round-6 fill-ups that have
+  // no vehicle owner set at all.
   private violationRowToPlainObject(row: ExceptionExportRow) {
     return {
       date: row.fillUpTransaction.occurredAt.toISOString(),
       station: row.fillUpTransaction.station.internalCode,
       vehicle: row.fillUpTransaction.vehicle.currentPlate,
-      driver: row.fillUpTransaction.driver.fullName,
+      owner: row.fillUpTransaction.vehicle.owner?.fullName ?? row.fillUpTransaction.driver?.fullName ?? '—',
       exceptionType: row.exceptionType.name,
       reason: row.reason,
       status: row.approvedById ? 'approved' : 'pending',

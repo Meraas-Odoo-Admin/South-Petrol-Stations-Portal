@@ -12,7 +12,7 @@ const FIXTURES_PATH = path.join(__dirname, '.fixtures.json');
 // ('ChangeMe123!', mustChangePassword: true) so this suite leaves no
 // lasting change to the shared dev-seed users. There are no DELETE
 // endpoints anywhere in this codebase (by design — see CLAUDE.md/M1-M4),
-// so the company/station/driver/vehicle/fill-up/throwaway-user fixtures
+// so the company/station/owner/vehicle/fill-up/throwaway-user fixtures
 // created below are NOT cleaned up; they're harmless leftover test data,
 // same as every backend e2e spec's fixtures that predate a delete path.
 const TEMP_PASSWORD = 'PwTemp123!';
@@ -23,9 +23,9 @@ interface Fixtures {
   stationId: string;
   stationInternalCode: string;
   stationName: string;
-  driverId: string;
-  driverFullName: string;
-  driverIdentityNumber: string;
+  ownerId: string;
+  ownerFullName: string;
+  ownerIdentityNumber: string;
   vehicleId: string;
   vehicleCurrentPlate: string;
   supervisorUsername: string;
@@ -88,9 +88,30 @@ async function main() {
 
   // sysadmin1 has every permission and unrestrictedStationAccess — used
   // purely as the fixture-provisioning actor, never logged into by the
-  // actual tests.
+  // actual tests. On a genuinely fresh seed (mustChangePassword: true,
+  // the actual seeded default — this only went unnoticed before because a
+  // long-lived dev DB usually already has it cleared from a prior run)
+  // every API call below would 403 under the server-side mustChangePassword
+  // gate, since sysadmin1's own token is used for all of this script's
+  // fixture-provisioning calls. Same TEMP_PASSWORD/restore pattern as
+  // supervisor1/admin1 below, just done first since sysadmin1's own token
+  // is needed immediately after login.
   const sysadmin = await login('sysadmin1', SEEDED_PASSWORD);
-  const sysadminHeaders = auth(sysadmin.accessToken);
+  let sysadminAccessToken = sysadmin.accessToken;
+  if (sysadmin.mustChangePassword) {
+    // change-password returns a fresh accessToken directly (see
+    // AuthController.changePassword) — reuse it instead of logging in
+    // again, since /auth/login is throttled to 5/min and this script
+    // already spends several of that budget's slots before the actual
+    // test bodies get to log in at all.
+    const changeRes = await axios.post<{ accessToken: string }>(
+      `${API_BASE}/auth/change-password`,
+      { currentPassword: SEEDED_PASSWORD, newPassword: TEMP_PASSWORD },
+      { headers: auth(sysadmin.accessToken) },
+    );
+    sysadminAccessToken = changeRes.data.accessToken;
+  }
+  const sysadminHeaders = auth(sysadminAccessToken);
 
   const company = await axios.post(
     `${API_BASE}/companies`,
@@ -109,29 +130,28 @@ async function main() {
     { headers: sysadminHeaders },
   );
 
-  const driverIdentityNumber = `1${numericId11}`;
-  const driver = await axios.post(
-    `${API_BASE}/drivers`,
+  const ownerIdentityNumber = `1${numericId11}`;
+  const owner = await axios.post(
+    `${API_BASE}/owners`,
     {
       identityType: 'NATIONAL_ID',
-      identityNumber: driverIdentityNumber,
-      fullName: `PW Test Driver ${runId}`,
+      identityNumber: ownerIdentityNumber,
+      fullName: `PW Test Owner ${runId}`,
     },
     { headers: sysadminHeaders },
   );
 
   const vehicle = await axios.post(
     `${API_BASE}/vehicles`,
-    { internalCode: `PW-VEH-${runId}`, currentPlate: `5-${plateSeq}` },
+    { internalCode: `PW-VEH-${runId}`, currentPlate: `5-${plateSeq}`, ownerId: owner.data.id },
     { headers: sysadminHeaders },
   );
 
-  // Fill-up history at this station, for the driver-detail-page test.
+  // Fill-up history at this station, for the vehicle-detail-page test.
   await axios.post(
     `${API_BASE}/fillups`,
     {
       vehicleId: vehicle.data.id,
-      driverId: driver.data.id,
       stationId: station.data.id,
       fuelType: 'PETROL_95',
       quantityLiters: 20,
@@ -220,9 +240,9 @@ async function main() {
     stationId: station.data.id,
     stationInternalCode: station.data.internalCode,
     stationName: station.data.name,
-    driverId: driver.data.id,
-    driverFullName: driver.data.fullName,
-    driverIdentityNumber,
+    ownerId: owner.data.id,
+    ownerFullName: owner.data.fullName,
+    ownerIdentityNumber,
     vehicleId: vehicle.data.id,
     vehicleCurrentPlate: vehicle.data.currentPlate,
     supervisorUsername: 'supervisor1',

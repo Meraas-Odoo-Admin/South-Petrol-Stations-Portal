@@ -8,8 +8,6 @@ import { HomePage } from './features/home/HomePage';
 import { DashboardPage } from './features/reports/DashboardPage';
 import { DailyReportPage } from './features/reports/DailyReportPage';
 import { ViolationsPage } from './features/reports/ViolationsPage';
-import { DriverDetailPage } from './features/drivers/DriverDetailPage';
-import { DriversListPage } from './features/drivers/DriversListPage';
 import { VehicleDetailPage } from './features/vehicles/VehicleDetailPage';
 import { VehiclesListPage } from './features/vehicles/VehiclesListPage';
 import { ChangeRequestsQueuePage } from './features/vehicles/ChangeRequestsQueuePage';
@@ -28,9 +26,12 @@ import { StationsAdminPage } from './features/admin/StationsAdminPage';
 // not under a separate /exceptions route).
 //
 // Item 11: the standalone /lookup route is retired — its search
-// functionality is now embedded directly in VehiclesListPage/
-// DriversListPage (search box on each list), so a separate "search" nav
-// destination nobody thought to visit no longer exists.
+// functionality is now embedded directly in VehiclesListPage (search box
+// on the list), so a separate "search" nav destination nobody thought to
+// visit no longer exists.
+//
+// Round 6: /drivers and /drivers/:driverId removed along with the rest of
+// the Driver management surface (see docs/DESIGN_owner_based_fillups.md).
 //
 // /admin/* (item 7) has no top-level permission gate of its own here —
 // each AdminLayout tab and its target page individually checks the
@@ -59,8 +60,6 @@ function App() {
               <Route path="/reports/violations" element={<ViolationsPage />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
               <Route path="/stations" element={<StationsListPage />} />
-              <Route path="/drivers" element={<DriversListPage />} />
-              <Route path="/drivers/:driverId" element={<DriverDetailPage />} />
               <Route path="/vehicles" element={<VehiclesListPage />} />
               <Route path="/vehicles/:vehicleId" element={<VehicleDetailPage />} />
               <Route path="/vehicles/change-requests" element={<ChangeRequestsQueuePage />} />

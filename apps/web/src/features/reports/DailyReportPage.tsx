@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { DailyReportResponse, FuelType, ReportExportFormat } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { downloadBlob } from '../../lib/download';
 import { useAuth } from '../auth/AuthProvider';
 import { StationSelect } from '../../components/StationSelect';
-import { DriverSearchSelect } from '../fillups/DriverSearchSelect';
+import { DateField } from '../../components/DateField';
 import { PageHeader } from '../../components/design/PageHeader';
-import { Card } from '../../components/design/Card';
+import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { KpiCard } from '../../components/design/KpiCard';
-import { FUEL_TYPE_LABELS } from '../../lib/labels';
+import { LtrText } from '../../components/LtrText';
+import { CodeText } from '../../components/design/CodeText';
+import { FillUpStatusPill } from '../../components/FillUpStatusPill';
+import { OwnerSearchSelect } from '../../components/OwnerSearchSelect';
+import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
+import { FUEL_TYPE_LABELS, fuelTypeLabel } from '../../lib/labels';
+import { formatLicensePlate } from '../../lib/libyanFormats';
+import { maskIdentityNumber } from '../../lib/masking';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -18,28 +26,37 @@ function todayIso(): string {
 
 const selectClass =
   'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+const tintedSelectClass =
+  'h-9 rounded-sm bg-accent-100 px-3 text-[12.5px] font-bold text-accent-dark focus:outline-none focus:ring-2 focus:ring-accent';
 
+// Round 4 feedback item 9, matches design/feedback-2026-08-29/
+// 10-design-target-daily-report.png: active (non-default) filters are
+// visibly tinted, a live "تعرض X من أصل Y" line states how much the
+// optional filters narrowed the set, KPI tiles + a fuel-type breakdown
+// chart + the results table are all computed from the SAME filtered
+// response the backend returns — never a separately hardcoded number.
 export function DailyReportPage() {
   const { user, hasPermission } = useAuth();
   const canViewAllStations = hasPermission('reports:view_all_stations');
+  const permissions = user?.permissions ?? [];
   const ownStation = user?.stationScope[0] ?? null;
 
   const [stationId, setStationId] = useState(canViewAllStations ? '' : (ownStation?.stationId ?? ''));
   const [date, setDate] = useState(todayIso());
-  const [driverId, setDriverId] = useState('');
-  const [driverLabel, setDriverLabel] = useState('');
   const [fuelType, setFuelType] = useState<FuelType | ''>('');
+  const [ownerId, setOwnerId] = useState('');
+  const [ownerLabel, setOwnerLabel] = useState('');
   const [exporting, setExporting] = useState<ReportExportFormat | null>(null);
 
   const exportParams = {
     stationId: stationId || undefined,
     date,
-    driverId: driverId || undefined,
     fuelType: fuelType || undefined,
+    ownerId: ownerId || undefined,
   };
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['reports', 'daily', stationId, date, driverId, fuelType],
+    queryKey: ['reports', 'daily', stationId, date, fuelType, ownerId],
     queryFn: async () => (await apiClient.get<DailyReportResponse>('/reports/daily', { params: exportParams })).data,
   });
 
@@ -55,6 +72,24 @@ export function DailyReportPage() {
       setExporting(null);
     }
   }
+
+  function resetFilters() {
+    setDate(todayIso());
+    setFuelType('');
+    setOwnerId('');
+    setOwnerLabel('');
+  }
+
+  const filtersActive = date !== todayIso() || fuelType !== '' || ownerId !== '';
+  const isNarrowed = data ? data.totalFillUps < data.totalBeforeFilters : false;
+
+  const fuelBreakdown = data
+    ? (Object.keys(FUEL_TYPE_LABELS) as FuelType[]).map((ft) => ({
+        fuelType: ft,
+        label: fuelTypeLabel(ft),
+        count: data.rows.filter((r) => r.fuelType === ft).length,
+      }))
+    : [];
 
   return (
     <div>
@@ -73,6 +108,14 @@ export function DailyReportPage() {
       />
 
       <Card className="mb-4 p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-[11px] font-bold text-ink-soft">المرشحات</p>
+          {filtersActive && (
+            <button type="button" onClick={resetFilters} className="text-[11px] font-bold text-accent-dark">
+              إعادة الضبط
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">المحطة</label>
@@ -84,37 +127,19 @@ export function DailyReportPage() {
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">التاريخ</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={selectClass} />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">السائق (اختياري)</label>
-            {driverId ? (
-              <div className="flex h-9 items-center gap-2 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink">
-                <span>{driverLabel}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDriverId('');
-                    setDriverLabel('');
-                  }}
-                  className="text-ink-faint hover:text-ink"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <DriverSearchSelect
-                value={driverId}
-                onChange={(id, label) => {
-                  setDriverId(id);
-                  setDriverLabel(label);
-                }}
-              />
-            )}
+            <DateField
+              value={date}
+              onChange={setDate}
+              inputClassName={`w-36 pe-8 ${date !== todayIso() ? tintedSelectClass : selectClass}`}
+            />
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">نوع الوقود (اختياري)</label>
-            <select value={fuelType} onChange={(e) => setFuelType(e.target.value as FuelType | '')} className={selectClass}>
+            <select
+              value={fuelType}
+              onChange={(e) => setFuelType(e.target.value as FuelType | '')}
+              className={fuelType ? tintedSelectClass : selectClass}
+            >
               <option value="">الكل</option>
               {Object.entries(FUEL_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -122,6 +147,33 @@ export function DailyReportPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-ink-soft">المالك (اختياري)</label>
+            {ownerId ? (
+              <div className={`flex w-56 items-center justify-between gap-2 ${tintedSelectClass}`}>
+                <span className="truncate">{ownerLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOwnerId('');
+                    setOwnerLabel('');
+                  }}
+                  className="text-accent-dark hover:opacity-70"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <OwnerSearchSelect
+                value={ownerId}
+                onChange={(id, label) => {
+                  setOwnerId(id);
+                  setOwnerLabel(label);
+                }}
+                className={`w-56 ${selectClass}`}
+              />
+            )}
           </div>
         </div>
       </Card>
@@ -134,12 +186,96 @@ export function DailyReportPage() {
       )}
 
       {data && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <KpiCard label="إجمالي التعبئات" value={data.totalFillUps} />
-          <KpiCard label="إجمالي اللترات" value={data.totalLiters} />
-          <KpiCard label="مخالفات قيد الانتظار" value={data.exceptionsPending} variant="accent" />
-          <KpiCard label="مخالفات معتمدة" value={data.exceptionsApproved} />
-        </div>
+        <>
+          {isNarrowed && (
+            <p className="mb-3 text-[12px] font-bold text-ink-soft" data-testid="daily-report-count-line">
+              تعرض {data.totalFillUps} تعبئات من أصل {data.totalBeforeFilters} بعد تطبيق المرشحات
+            </p>
+          )}
+
+          <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <KpiCard label="إجمالي التعبئات" value={data.totalFillUps} />
+            <KpiCard label="إجمالي اللترات" value={data.totalLiters} />
+            <KpiCard label="مخالفات قيد الانتظار" value={data.exceptionsPending} variant="accent" />
+            <KpiCard label="مخالفات معتمدة" value={data.exceptionsApproved} />
+          </div>
+
+          {data.rows.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader title="التوزيع حسب نوع الوقود" />
+              <div className="h-56 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={fuelBreakdown} layout="vertical" margin={{ left: 8, right: 24 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} fontSize={11} />
+                    <YAxis type="category" dataKey="label" width={70} fontSize={12} />
+                    <Tooltip formatter={(value) => [`${value} تعبئة`, '']} labelFormatter={() => ''} />
+                    <Bar dataKey="count" fill="#0d5c52" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader title="نتائج التعبئات" />
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-[12.5px]">
+                <thead>
+                  <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                    <th className="px-[18px] py-2.5 text-start">الوقت</th>
+                    <th className="px-[18px] py-2.5 text-start">المحطة</th>
+                    <th className="px-[18px] py-2.5 text-start">المركبة</th>
+                    <th className="px-[18px] py-2.5 text-start">المالك</th>
+                    <th className="px-[18px] py-2.5 text-start">نوع الوقود</th>
+                    <th className="px-[18px] py-2.5 text-start">الكمية (لتر)</th>
+                    <th className="px-[18px] py-2.5 text-start">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((row) => (
+                    <tr key={row.id} className="border-b border-surface-alt last:border-0">
+                      <td className="px-[18px] py-3">
+                        <CodeText>{new Date(row.occurredAt).toLocaleTimeString('en-GB')}</CodeText>
+                      </td>
+                      <td className="px-[18px] py-3">{row.station.internalCode}</td>
+                      <td className="px-[18px] py-3">
+                        <LtrText>{formatLicensePlate(row.vehicle.currentPlate)}</LtrText>
+                      </td>
+                      <td className="px-[18px] py-3">
+                        {row.vehicle.owner ? (
+                          <>
+                            {row.vehicle.owner.fullName} —{' '}
+                            <OwnerIdentityReveal
+                              ownerId={row.vehicle.owner.id}
+                              maskedValue={maskIdentityNumber(row.vehicle.owner.identityNumber, permissions)}
+                            />
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-[18px] py-3">{fuelTypeLabel(row.fuelType)}</td>
+                      <td className="px-[18px] py-3">
+                        <LtrText>{row.quantityLiters}</LtrText>
+                      </td>
+                      <td className="px-[18px] py-3">
+                        <FillUpStatusPill row={row} />
+                      </td>
+                    </tr>
+                  ))}
+                  {data.rows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-[13px] text-ink-soft">
+                        لا توجد تعبئات مطابقة
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );

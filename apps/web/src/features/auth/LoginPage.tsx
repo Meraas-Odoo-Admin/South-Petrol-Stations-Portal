@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { isAxiosError } from 'axios';
+import { APP_NAME, APP_TAGLINE } from '../../lib/appInfo';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'اسم المستخدم مطلوب'),
@@ -69,7 +70,7 @@ export function LoginPage() {
   }
 
   const inputClass =
-    'h-13 w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   const form = (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-1 flex-col">
@@ -78,7 +79,7 @@ export function LoginPage() {
         أدخل اسم المستخدم الذي سلّمك إياه مشرف محطتك.
       </p>
 
-      <div className="mt-7 flex flex-col gap-4.5">
+      <div className="mt-7 flex flex-col gap-[18px]">
         <div>
           <label className="text-[13px] font-bold text-ink">اسم المستخدم</label>
           <input
@@ -92,7 +93,7 @@ export function LoginPage() {
 
         <div>
           <label className="text-[13px] font-bold text-ink">كلمة المرور</label>
-          <div className="mt-2 flex h-13 items-center gap-2.5 rounded-sm border border-primary bg-primary-100 px-3.5" style={{ height: 52 }}>
+          <div className="mt-2 flex h-[52px] items-center gap-2.5 rounded-sm border border-primary bg-primary-100 px-3.5">
             <input
               type={showPassword ? 'text' : 'password'}
               {...register('password')}
@@ -119,8 +120,7 @@ export function LoginPage() {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-7 flex h-13.5 items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
-        style={{ height: 54 }}
+        className="mt-7 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
       >
         {isSubmitting ? '...جارٍ الدخول' : 'دخول'}
       </button>
@@ -138,8 +138,8 @@ export function LoginPage() {
         <div className="flex flex-col items-center gap-3.5 bg-primary py-9 text-white lg:hidden">
           <BrandMark />
           <div className="text-center">
-            <p className="text-[21px] font-black">ضابط</p>
-            <p className="mt-1 text-[12px] font-medium opacity-90">منظومة ضبط تعبئة الوقود</p>
+            <p className="text-[21px] font-black">{APP_NAME}</p>
+            <p className="mt-1 text-[12px] font-medium opacity-90">{APP_TAGLINE}</p>
           </div>
         </div>
 
@@ -148,7 +148,7 @@ export function LoginPage() {
           <p className="text-[12px] font-extrabold tracking-[0.14em] opacity-70">مديرية أمن سبها</p>
           <div>
             <p className="text-[34px] font-black leading-[1.45]">كل لتر مُسجَّل باسم مركبة وسائق ووقت.</p>
-            <p className="mt-4.5 text-[14px] leading-[1.9] opacity-90">
+            <p className="mt-[18px] text-[14px] leading-[1.9] opacity-90">
               هذه المنظومة تسجّل ولا تحذف. كل إجراء داخلها موثّق باسم من نفّذه ووقته، بما في ذلك دخولك الآن.
             </p>
           </div>
@@ -163,8 +163,8 @@ export function LoginPage() {
           <div className="mb-11 hidden items-center gap-3 lg:flex">
             <BrandMark />
             <div>
-              <p className="text-[18px] font-black text-ink">ضابط</p>
-              <p className="text-[11px] font-medium text-ink-soft">منظومة ضبط تعبئة الوقود</p>
+              <p className="text-[18px] font-black text-ink">{APP_NAME}</p>
+              <p className="text-[11px] font-medium text-ink-soft">{APP_TAGLINE}</p>
             </div>
           </div>
           {form}

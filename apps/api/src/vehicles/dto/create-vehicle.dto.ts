@@ -9,10 +9,19 @@ import {
 } from '../../common/validators/libyan-formats';
 
 export class CreateVehicleDto {
-  @ApiProperty()
+  // Round 5 feedback: no auto-generation existed anywhere for this — it
+  // was a plain required text field, which the client flagged as
+  // something a station employee shouldn't be typing by hand. Now
+  // optional: when omitted, VehiclesService.create() assigns the next
+  // "V-######" sequential code itself (see generateInternalCode there).
+  // Still accepted when explicitly supplied (e.g. a future bulk-import
+  // path, or an admin who wants a specific code) — the uniqueness check
+  // in create() still applies to it either way.
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  internalCode!: string;
+  internalCode?: string;
 
   @ApiProperty({ description: 'City code (1-2 digits) + sequence (1-7 digits), optional hyphen/space separator.' })
   @IsString()

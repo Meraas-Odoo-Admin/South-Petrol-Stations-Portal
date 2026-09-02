@@ -14,7 +14,6 @@ interface QuickLink {
 const QUICK_LINKS: QuickLink[] = [
   { to: '/fillups/new', label: 'تسجيل تعبئة', hint: 'تسجيل عملية تعبئة جديدة لمركبة', permission: 'fillups:create' },
   { to: '/vehicles', label: 'المركبات', hint: 'البحث عن مركبة وعرض سجلها', permission: 'vehicles:read' },
-  { to: '/drivers', label: 'السائقون', hint: 'قائمة السائقين المسجَّلين', permission: 'drivers:read' },
   { to: '/reports/violations', label: 'المخالفات', hint: 'الحالات التي تحتاج قرارك', permission: 'reports:view' },
   { to: '/reports/daily', label: 'التقرير اليومي', hint: 'ملخص تعبئات اليوم', permission: 'reports:view' },
   { to: '/reports/dashboard', label: 'لوحة المتابعة', hint: 'نظرة عامة على المحطات', permission: 'reports:view_all_stations' },

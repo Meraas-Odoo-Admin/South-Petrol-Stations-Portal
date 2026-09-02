@@ -9,7 +9,14 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   workers: 1,
-  timeout: 30_000,
+  // Was 30s — too tight for e2e/helpers.ts's submitLogin, which retries a
+  // throttled (429) /auth/login with a 15s backoff (up to 5 attempts, same
+  // budget as the node-side retry helpers in global-setup.ts/
+  // global-teardown.ts). A single retry alone already exceeds the old
+  // 30s test timeout, which surfaced as a "stuck on /login" test failure
+  // that looked like a login bug but was really the test being killed
+  // mid-retry.
+  timeout: 120_000,
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   reporter: [['list']],

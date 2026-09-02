@@ -8,8 +8,8 @@ import { ArrayMinSize, IsArray, IsDateString, IsIn, IsOptional, IsString, MinLen
 export const STANDING_EXCEPTION_RULES = [
   'VEHICLE_GAP_TOO_SHORT',
   'VEHICLE_WEEKLY_CAP_REACHED',
-  'DRIVER_GAP_TOO_SHORT',
-  'DRIVER_WEEKLY_CAP_REACHED',
+  'OWNER_GAP_TOO_SHORT',
+  'OWNER_WEEKLY_CAP_REACHED',
   'LITERS_PER_PERSON_CAP_REACHED',
 ] as const;
 
@@ -17,7 +17,7 @@ export class CreateStandingExceptionDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  driverId?: string;
+  ownerId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

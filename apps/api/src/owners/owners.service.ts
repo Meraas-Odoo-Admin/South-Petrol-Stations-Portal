@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { UpdateOwnerDto } from './dto/update-owner.dto';
-import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { FindOwnersQueryDto } from './dto/find-owners-query.dto';
 
 @Injectable()
 export class OwnersService {
@@ -13,6 +13,18 @@ export class OwnersService {
   ) {}
 
   async create(dto: CreateOwnerDto, actorId: string) {
+    const existing = await this.prisma.vehicleOwner.findUnique({
+      where: {
+        identityType_identityNumber: {
+          identityType: dto.identityType,
+          identityNumber: dto.identityNumber,
+        },
+      },
+    });
+    if (existing) {
+      throw new ConflictException('An owner with this identity type and number already exists.');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const owner = await tx.vehicleOwner.create({ data: dto });
 
@@ -22,7 +34,7 @@ export class OwnersService {
           action: 'CREATE',
           entityType: 'VehicleOwner',
           entityId: owner.id,
-          newValue: { fullName: owner.fullName },
+          newValue: { identityType: owner.identityType, fullName: owner.fullName },
         },
         tx,
       );
@@ -31,8 +43,17 @@ export class OwnersService {
     });
   }
 
-  findAll(query: PaginationQueryDto) {
+  findAll(query: FindOwnersQueryDto) {
+    const search = query.search?.trim();
     return this.prisma.vehicleOwner.findMany({
+      where: search
+        ? {
+            OR: [
+              { fullName: { contains: search } },
+              { identityNumber: { contains: search } },
+            ],
+          }
+        : undefined,
       skip: query.skip,
       take: query.take,
       orderBy: { createdAt: 'asc' },
@@ -45,6 +66,23 @@ export class OwnersService {
       throw new NotFoundException('Vehicle owner not found.');
     }
     return owner;
+  }
+
+  // Same "reveal is the auditable action, not just holding the permission"
+  // policy as DriversService.revealIdentity — see that file's history for
+  // the original reasoning (round 4 item 10).
+  async revealIdentity(id: string, actorId: string) {
+    const owner = await this.findOne(id);
+    await this.audit.log({
+      userId: actorId,
+      action: 'REVEAL_NATIONAL_ID',
+      entityType: 'VehicleOwner',
+      entityId: id,
+      // Never log the actual national ID (CLAUDE.md rule 10) — just that a
+      // reveal happened.
+      newValue: { revealed: true },
+    });
+    return { identityNumber: owner.identityNumber };
   }
 
   async update(id: string, dto: UpdateOwnerDto, actorId: string) {

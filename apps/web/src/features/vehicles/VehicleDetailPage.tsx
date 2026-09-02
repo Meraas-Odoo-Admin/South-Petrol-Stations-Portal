@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { FillUpHistoryResponse } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
@@ -15,17 +15,18 @@ import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { StandingExceptionsSection } from '../standing-exceptions/StandingExceptionsSection';
+import { FillUpStatusPill } from '../../components/FillUpStatusPill';
+import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { ChangeRequestForm } from './ChangeRequestForm';
 import type { VehicleBasicInfo } from './types';
 
 const TAKE = 20;
 
-type MobileTab = 'identity' | 'plates' | 'drivers' | 'history';
+type MobileTab = 'identity' | 'plates' | 'history';
 
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
   { id: 'identity', label: 'الهوية' },
   { id: 'plates', label: 'سجل اللوحات' },
-  { id: 'drivers', label: 'السائق والمالك' },
   { id: 'history', label: 'سجل التعبئات' },
 ];
 
@@ -37,15 +38,22 @@ export function VehicleDetailPage() {
   const [skip, setSkip] = useState(0);
   const [openChangeForm, setOpenChangeForm] = useState<'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | null>(null);
   // Matches design 5d — mobile gets tabs (identity / plate history /
-  // driver+owner / fill-up history) instead of everything stacked with
-  // scrolling tables. Desktop ignores this entirely: sections stay
-  // permanently visible via the `sm:!block` override below, same
-  // markup/queries as before this pass.
+  // fill-up history) instead of everything stacked with scrolling tables.
+  // Desktop ignores this entirely: sections stay permanently visible via
+  // the `sm:!block` override below, same markup/queries as before this
+  // pass.
   const [mobileTab, setMobileTab] = useState<MobileTab>('identity');
 
   const vehicleQuery = useQuery({
     queryKey: ['vehicles', vehicleId],
     queryFn: async () => (await apiClient.get<VehicleBasicInfo>(`/vehicles/${vehicleId}`)).data,
+    enabled: !!vehicleId,
+  });
+
+  const weeklyUsageQuery = useQuery({
+    queryKey: ['vehicles', vehicleId, 'weekly-usage'],
+    queryFn: async () =>
+      (await apiClient.get<{ used: number; max: number }>(`/vehicles/${vehicleId}/weekly-usage`)).data,
     enabled: !!vehicleId,
   });
 
@@ -68,8 +76,6 @@ export function VehicleDetailPage() {
   }
 
   const vehicle = vehicleQuery.data;
-  const primaryDriver = vehicle.drivers.find((d) => d.isPrimary) ?? vehicle.drivers[0];
-  const otherDrivers = vehicle.drivers.filter((d) => d.driverId !== primaryDriver?.driverId);
 
   return (
     <div>
@@ -107,7 +113,44 @@ export function VehicleDetailPage() {
           <Field label="سنة الصنع" value={vehicle.manufactureYear?.toString() ?? '—'} />
           <Field label="نوع الاستخدام" value={usageTypeLabel(vehicle.usageType)} />
           <Field label="المالك" value={vehicle.owner?.fullName ?? '—'} />
+          <Field
+            label="رقم هوية المالك"
+            value={
+              vehicle.owner ? (
+                <span data-testid="vehicle-owner-identity-number">
+                  <OwnerIdentityReveal
+                    ownerId={vehicle.owner.id}
+                    maskedValue={maskIdentityNumber(vehicle.owner.identityNumber, permissions)}
+                  />
+                </span>
+              ) : (
+                '—'
+              )
+            }
+          />
         </Card>
+
+        {weeklyUsageQuery.data && (
+          <Card className={`${mobileTab === 'identity' ? '' : 'hidden sm:!block'} p-4`}>
+            <p className="mb-2 text-[12.5px] font-bold text-ink">استهلاك هذا الأسبوع</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[22px] font-black text-ink" data-testid="vehicle-weekly-usage">
+                {weeklyUsageQuery.data.used}
+              </span>
+              <span className="text-[12px] text-ink-soft">من {weeklyUsageQuery.data.max} تعبئات مسموح بها</span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-alt">
+              <div
+                className={`h-full rounded-full ${
+                  weeklyUsageQuery.data.used >= weeklyUsageQuery.data.max ? 'bg-danger' : 'bg-primary'
+                }`}
+                style={{
+                  width: `${Math.min(100, (weeklyUsageQuery.data.used / Math.max(1, weeklyUsageQuery.data.max)) * 100)}%`,
+                }}
+              />
+            </div>
+          </Card>
+        )}
 
         {canRequestChange && (
           <Card className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
@@ -133,33 +176,6 @@ export function VehicleDetailPage() {
             </div>
           </Card>
         )}
-
-        <Card className={mobileTab === 'drivers' ? '' : 'hidden sm:!block'}>
-          <CardHeader title="السائق (السائقون)" />
-          <div className="space-y-2 p-4">
-            {vehicle.drivers.length === 0 && <p className="text-[13px] text-ink-soft">لا يوجد سائق مرتبط بهذه المركبة.</p>}
-            {primaryDriver && (
-              <p className="text-[13px]">
-                <span className="text-ink-faint">السائق الأساسي: </span>
-                <Link to={`/drivers/${primaryDriver.driverId}`} className="font-bold text-primary hover:underline">
-                  {primaryDriver.driver.fullName}
-                </Link>
-                {' — '}
-                <LtrText>{maskIdentityNumber(primaryDriver.driver.identityNumber, permissions)}</LtrText>
-              </p>
-            )}
-            {otherDrivers.map((d) => (
-              <p key={d.driverId} className="text-[13px]">
-                <span className="text-ink-faint">سائق آخر: </span>
-                <Link to={`/drivers/${d.driverId}`} className="font-bold text-primary hover:underline">
-                  {d.driver.fullName}
-                </Link>
-                {' — '}
-                <LtrText>{maskIdentityNumber(d.driver.identityNumber, permissions)}</LtrText>
-              </p>
-            ))}
-          </div>
-        </Card>
 
         <Card className={mobileTab === 'plates' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل اللوحات" />
@@ -202,8 +218,8 @@ export function VehicleDetailPage() {
           <StandingExceptionsSection
             vehicleId={vehicle.id}
             vehicleLabel={formatLicensePlate(vehicle.currentPlate)}
-            contextDriverId={primaryDriver?.driverId}
-            contextDriverLabel={primaryDriver?.driver.fullName}
+            contextOwnerId={vehicle.owner?.id}
+            contextOwnerLabel={vehicle.owner?.fullName}
           />
         </div>
 
@@ -219,11 +235,11 @@ export function VehicleDetailPage() {
                   <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                     <th className="px-[18px] py-2.5 text-start">التاريخ</th>
                     <th className="px-[18px] py-2.5 text-start">المحطة</th>
-                    <th className="px-[18px] py-2.5 text-start">السائق</th>
+                    <th className="px-[18px] py-2.5 text-start">المالك</th>
                     <th className="px-[18px] py-2.5 text-start">رقم الهوية</th>
                     <th className="px-[18px] py-2.5 text-start">نوع الوقود</th>
                     <th className="px-[18px] py-2.5 text-start">الكمية (لتر)</th>
-                    <th className="px-[18px] py-2.5 text-start">استثناء</th>
+                    <th className="px-[18px] py-2.5 text-start">الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -233,20 +249,23 @@ export function VehicleDetailPage() {
                         <CodeText>{new Date(row.occurredAt).toLocaleString('en-GB')}</CodeText>
                       </td>
                       <td className="px-[18px] py-3">{row.station.internalCode}</td>
+                      <td className="px-[18px] py-3">{row.vehicle.owner?.fullName ?? '—'}</td>
                       <td className="px-[18px] py-3">
-                        <Link to={`/drivers/${row.driver.id}`} className="font-medium text-primary hover:underline">
-                          {row.driver.fullName}
-                        </Link>
-                      </td>
-                      <td className="px-[18px] py-3">
-                        <LtrText>{maskIdentityNumber(row.driver.identityNumber, permissions)}</LtrText>
+                        {row.vehicle.owner ? (
+                          <OwnerIdentityReveal
+                            ownerId={row.vehicle.owner.id}
+                            maskedValue={maskIdentityNumber(row.vehicle.owner.identityNumber, permissions)}
+                          />
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="px-[18px] py-3">{fuelTypeLabel(row.fuelType)}</td>
                       <td className="px-[18px] py-3">
                         <LtrText>{row.quantityLiters}</LtrText>
                       </td>
                       <td className="px-[18px] py-3">
-                        {row.isException ? <StatusPill variant="accent">نعم</StatusPill> : 'لا'}
+                        <FillUpStatusPill row={row} />
                       </td>
                     </tr>
                   ))}

@@ -11,7 +11,6 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
 import { StationsModule } from './stations/stations.module';
-import { DriversModule } from './drivers/drivers.module';
 import { OwnersModule } from './owners/owners.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
@@ -41,7 +40,6 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     UsersModule,
     CompaniesModule,
     StationsModule,
-    DriversModule,
     OwnersModule,
     VehiclesModule,
     SystemSettingsModule,

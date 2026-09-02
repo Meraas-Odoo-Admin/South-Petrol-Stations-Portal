@@ -2,19 +2,24 @@
 // apps/api/src/fillups/rule-engine/types.ts, and FillUpsService's response
 // shapes — added now that the frontend actually consumes this module (the
 // fill-up recording screen), per the policy note in index.ts.
+//
+// Round 6: fill-ups no longer carry driver identity — rule checks and
+// history are scoped to the vehicle's owner instead (see
+// docs/DESIGN_owner_based_fillups.md). DRIVER_*/driverId renamed to
+// OWNER_*/no explicit ownerId field (the server derives it from the
+// vehicle, the client never submits it).
 
 import type { FuelType } from './reports';
 
 export type RuleFailureReason =
   | 'VEHICLE_GAP_TOO_SHORT'
   | 'VEHICLE_WEEKLY_CAP_REACHED'
-  | 'DRIVER_GAP_TOO_SHORT'
-  | 'DRIVER_WEEKLY_CAP_REACHED'
+  | 'OWNER_GAP_TOO_SHORT'
+  | 'OWNER_WEEKLY_CAP_REACHED'
   | 'LITERS_PER_PERSON_CAP_REACHED';
 
 export interface CreateFillUpRequest {
   vehicleId: string;
-  driverId: string;
   stationId: string;
   fuelType: FuelType;
   quantityLiters: number;
@@ -37,7 +42,7 @@ export interface ExceptionTypeOption {
   isActive: boolean;
 }
 
-// The specific prior fill-up that tripped a DRIVER_*/LITERS_* check (a
+// The specific prior fill-up that tripped an OWNER_*/LITERS_* check (a
 // gap/liters check can fire because of a fill-up on a DIFFERENT vehicle
 // than the one being submitted — this names it instead of leaving the
 // tester to guess). null for a weekly-cap violation (no single triggering
@@ -67,13 +72,15 @@ export interface FillUpExceptionRaw {
 }
 
 // The raw FillUpTransaction row as POST /fillups returns it — flat
-// vehicleId/driverId/stationId, no nested summaries (unlike
+// vehicleId/stationId, no nested summaries (unlike
 // reports.ts's FillUpHistoryEntry, which the reports endpoints build with
-// a deeper include).
+// a deeper include). driverId is legacy-only (null on every fill-up
+// recorded after round 6) — kept in the raw shape only because historical
+// rows still carry it.
 export interface FillUpTransactionRaw {
   id: string;
   vehicleId: string;
-  driverId: string;
+  driverId: string | null;
   stationId: string;
   fuelType: FuelType;
   quantityLiters: string;
@@ -90,3 +97,19 @@ export interface FillUpTransactionRaw {
 export type CreateFillUpResult =
   | { allowed: false; reason: RuleFailureReason; trigger: RuleTriggerDetail | null; requiresException: true }
   | FillUpTransactionRaw;
+
+// GET /fillups/rule-preview?vehicleId=X — round 7 item 1's pre-submit
+// rule-review breakdown. `actual: null` means there's no prior history to
+// compare against (the check trivially passes). Computed by the same
+// FillUpRuleEngine a real submission uses — never a separate client-side
+// estimate.
+export interface RuleCheckDetail {
+  reason: RuleFailureReason;
+  passed: boolean;
+  actual: number | null;
+  limit: number;
+}
+
+export interface RulePreviewResponse {
+  checks: RuleCheckDetail[];
+}

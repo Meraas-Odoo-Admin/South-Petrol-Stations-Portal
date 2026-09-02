@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import {
   formatLicensePlate,
+  formatPlateAsTyped,
+  formatPlateOnBlur,
   LICENSE_PLATE_DISPLAY_EXAMPLE,
   normalizePlateSearchTerm,
 } from '../../lib/libyanFormats';
@@ -25,6 +27,14 @@ interface VehicleSearchSelectProps {
   // component's own onClick handler below. Same gap DriverSearchSelect
   // already had a fix for.
   initialLabel?: string;
+  // Exposes the raw typed text upward — the "مركبة جديدة" button needs to
+  // know whether the user has typed anything yet before it's enabled
+  // (round 4 feedback: it shouldn't be clickable against an empty field).
+  onQueryChange?: (query: string) => void;
+  // Round 5 feedback item 3: an inline "لا توجد نتائج — إضافة مركبة
+  // جديدة" row inside the dropdown itself, not just static text below the
+  // field.
+  onCreateNew?: () => void;
 }
 
 // GET /vehicles?search= ORs internalCode and currentPlate server-side — a
@@ -34,16 +44,23 @@ interface VehicleSearchSelectProps {
 // in the app (formatLicensePlate adds spaces around the dash) so pasting
 // back exactly what's shown on, say, the vehicle detail page still matches
 // the unspaced stored value.
-export function VehicleSearchSelect({ value, onChange, initialLabel }: VehicleSearchSelectProps) {
+export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChange, onCreateNew }: VehicleSearchSelectProps) {
   const [query, setQuery] = useState(initialLabel ? formatLicensePlate(initialLabel) : '');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(normalizePlateSearchTerm(query)), 300);
+    onQueryChange?.(query);
+    // The displayed value stays raw/unformatted while there's no dash yet
+    // (so the user can still type a 2-digit city code) — but the SEARCH
+    // term is always the best-guess formatted one (1-digit-code fallback
+    // when no dash is typed), decoupled from what's shown in the box, so
+    // live matching-as-you-type keeps working for the common case without
+    // fighting the user's ability to type a longer code.
+    const timer = setTimeout(() => setDebounced(normalizePlateSearchTerm(formatPlateOnBlur(query))), 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query]); // eslint intentionally not asked for onQueryChange here — it's an unmemoized callback prop
 
   // Form reset (after a successful submit) clears value externally — mirror
   // that by clearing the picker's own text too. A vehicle resolved from
@@ -77,14 +94,24 @@ export function VehicleSearchSelect({ value, onChange, initialLabel }: VehicleSe
         data-testid="vehicle-search-input"
         value={query}
         onChange={(e) => {
-          setQuery(e.target.value);
+          setQuery(formatPlateAsTyped(e.target.value));
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="ابحث برقم اللوحة أو الرمز الداخلي"
+        onBlur={() => {
+          setQuery((q) => formatPlateOnBlur(q));
+          setTimeout(() => setOpen(false), 150);
+        }}
+        // Round 5 feedback: the placeholder previously repeated the
+        // instructional label text ("ابحث برقم اللوحة أو الرمز الداخلي")
+        // but rendered in the same large/bold plate-numeral styling as a
+        // real typed plate — reading as a rendering mistake, not a hint.
+        // Client's own recommended fix: make the placeholder look like an
+        // example plate shape instead, which both fits the bold styling
+        // naturally and doubles as an implicit format hint.
+        placeholder="8-xxxxxxxx"
         dir="ltr"
-        className="h-11 w-full rounded-sm border border-line bg-surface-alt px-3 text-end text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+        className="h-12 w-full rounded-sm border border-line bg-surface-alt px-3 text-end font-mono text-[20px] font-extrabold text-primary-dark placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent"
       />
       <p className="mt-1 text-[11px] text-ink-soft">
         مثال: <LtrText>{LICENSE_PLATE_DISPLAY_EXAMPLE}</LtrText>
@@ -96,8 +123,24 @@ export function VehicleSearchSelect({ value, onChange, initialLabel }: VehicleSe
       >
         <ul>
           {isFetching && <li className="px-3 py-2 text-[12.5px] text-ink-soft">...جارٍ البحث</li>}
-          {!isFetching && results?.length === 0 && (
+          {!isFetching && results?.length === 0 && !onCreateNew && (
             <li className="px-3 py-2 text-[12.5px] text-ink-soft">لا توجد نتائج</li>
+          )}
+          {!isFetching && results?.length === 0 && onCreateNew && (
+            <li>
+              <button
+                type="button"
+                data-testid="vehicle-create-new-inline"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onCreateNew();
+                  setOpen(false);
+                }}
+                className="block w-full px-3 py-2 text-start text-[12.5px] font-bold text-accent-dark hover:bg-accent-100"
+              >
+                لا توجد نتائج — إضافة مركبة جديدة
+              </button>
+            </li>
           )}
           {results?.map((vehicle) => (
             <li key={vehicle.id}>

@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { OwnersService } from './owners.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { UpdateOwnerDto } from './dto/update-owner.dto';
-import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { FindOwnersQueryDto } from './dto/find-owners-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
@@ -21,7 +21,7 @@ export class OwnersController {
 
   @RequirePermission('owners:manage')
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
+  findAll(@Query() query: FindOwnersQueryDto) {
     return this.owners.findAll(query);
   }
 
@@ -29,6 +29,12 @@ export class OwnersController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.owners.findOne(id);
+  }
+
+  @RequirePermission('owners:reveal_identity')
+  @Post(':id/reveal-identity')
+  revealIdentity(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.owners.revealIdentity(id, actor.id);
   }
 
   @RequirePermission('owners:manage')

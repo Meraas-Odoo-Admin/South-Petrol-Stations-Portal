@@ -7,9 +7,9 @@ import type { ReactNode } from 'react';
 // order regardless of surrounding context — the standard fix for
 // numeric/code-like content in an RTL UI. This is a rendering concern,
 // not something a pure string formatter like formatLicensePlate can fix.
-export function LtrText({ children }: { children: ReactNode }) {
+export function LtrText({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span dir="ltr" className="inline-block">
+    <span dir="ltr" className={`inline-block${className ? ` ${className}` : ''}`}>
       {children}
     </span>
   );

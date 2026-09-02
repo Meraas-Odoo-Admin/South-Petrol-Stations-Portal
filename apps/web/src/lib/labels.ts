@@ -119,8 +119,8 @@ export function vehicleChangeTypeLabel(changeType: string | null | undefined): s
 // naming-dictionary rule (1b) applies here too: SettingsAdminPage used to
 // render setting.description and setting.key directly, which are literal
 // English developer text and literal snake_case-ish DB keys
-// ("PLACEHOLDER — max fill-ups per driver per week...",
-// "fillup.max_per_week_per_driver"). Four of these settings are
+// ("PLACEHOLDER — max fill-ups per owner per week...",
+// "fillup.max_per_week_per_owner"). Four of these settings are
 // placeholder values pending client confirmation (docs/OPEN_ITEMS.md
 // #19/#20) — the Arabic description says so explicitly rather than
 // presenting them as settled, same as the English placeholder text did.
@@ -133,13 +133,13 @@ export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description:
     label: 'أقل فاصل زمني بين تعبئتين',
     description: 'عدد الأيام التي يجب أن تمضي قبل السماح بتعبئة جديدة للمركبة نفسها.',
   },
-  'fillup.max_per_week_per_driver': {
-    label: 'الحد الأسبوعي لعدد تعبئات السائق',
-    description: 'أقصى عدد تعبئات مسموح به للسائق أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  'fillup.max_per_week_per_owner': {
+    label: 'الحد الأسبوعي لعدد تعبئات مالك المركبة',
+    description: 'أقصى عدد تعبئات مسموح به لمالك المركبة أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
   },
-  'fillup.min_gap_days_per_driver': {
-    label: 'أقل فاصل زمني بين تعبئتين لنفس السائق',
-    description: 'عدد الأيام بين تعبئتين للسائق نفسه، على أي من مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  'fillup.min_gap_days_per_owner': {
+    label: 'أقل فاصل زمني بين تعبئتين لنفس مالك المركبة',
+    description: 'عدد الأيام بين تعبئتين لنفس مالك المركبة، على أي من مركباته — رقم مبدئي بانتظار تأكيد العميل.',
   },
   'fillup.week_window_mode': {
     label: 'طريقة حساب الأسبوع',
@@ -149,9 +149,21 @@ export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description:
     label: 'يوم بداية الأسبوع',
     description: 'يُستخدم فقط عند اختيار طريقة الحساب "ثابت" — رقم مبدئي بانتظار تأكيد العميل.',
   },
-  'fillup.max_liters_per_week_per_driver': {
-    label: 'الحد الأسبوعي للترات السائق',
-    description: 'أقصى مجموع لترات مسموح به للسائق أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  'fillup.max_liters_per_week_per_owner': {
+    label: 'الحد الأسبوعي للترات مالك المركبة',
+    description: 'أقصى مجموع لترات مسموح به لمالك المركبة أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+  },
+  'fillup.price_per_liter.PETROL_95': {
+    label: 'سعر لتر بنزين 95',
+    description: 'يُستخدم لحساب تكلفة التعبئة تلقائيًا — مؤكَّد من العميل.',
+  },
+  'fillup.price_per_liter.DIESEL': {
+    label: 'سعر لتر الديزل',
+    description: 'رقم مبدئي بانتظار تأكيد العميل — لا يُعتمد كسعر حقيقي.',
+  },
+  'fillup.price_per_liter.KEROSENE': {
+    label: 'سعر لتر الكاز',
+    description: 'رقم مبدئي بانتظار تأكيد العميل — لا يُعتمد كسعر حقيقي.',
   },
 };
 
