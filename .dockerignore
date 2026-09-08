@@ -1,0 +1,31 @@
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+# Local-only dev artifacts — never belong in a build context or image.
+.certs/
+.certs-disabled/
+apps/web/public/dev-ca.pem
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Playwright output
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/e2e/.fixtures.json
+
+# Not app code — see .gitignore for why these stay untracked too.
+Claude outputs/
+docs/screenshots/verify/
+apps/web/docs/screenshots/
+design/design_handoff_fuel_control_system/
+
+.git/
+.vscode/
+*.log

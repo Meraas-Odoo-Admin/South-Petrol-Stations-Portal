@@ -1,0 +1,84 @@
+# Production-shaped compose file — builds and runs the API, the web app
+# (served + reverse-proxied by nginx), and Postgres together.
+#
+# Run from the REPO ROOT:
+#   docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
+#
+# See infra/DEPLOYMENT.md for the full checklist (required env vars, TLS,
+# backups) before using this for anything real. Every value below that
+# has no default is REQUIRED — compose refuses to start without it
+# (the ${VAR:?message} syntax), rather than silently falling back to a
+# dev-shaped secret.
+
+name: fuel-tracking-prod
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fuel_tracking}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a real password in infra/.env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-fuel_tracking}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fuel_tracking} -d ${POSTGRES_DB:-fuel_tracking}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Not published to the host by default — only the api service needs
+    # to reach it, over the compose-internal network. Add a `ports:`
+    # entry here only if you genuinely need external DB access (e.g. an
+    # ad hoc admin connection), and prefer an SSH tunnel over that.
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fuel_tracking}:${POSTGRES_PASSWORD:?set a real password in infra/.env.prod}@postgres:5432/${POSTGRES_DB:-fuel_tracking}?schema=public
+      # The public origin(s) the web app is actually served from —
+      # comma-separated, no wildcard (see CLAUDE.md rule on CORS). With
+      # the default nginx setup below (web proxies /api/v1 through its
+      # own origin), browser traffic never triggers CORS at all — this
+      # only matters for anything hitting the API directly.
+      CORS_ORIGINS: ${CORS_ORIGINS:?set the real public origin(s) in infra/.env.prod, comma-separated}
+      # Generate a real random secret — never reuse the one committed in
+      # apps/api/.env, which is a local-dev-only value.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?generate a real random secret in infra/.env.prod, e.g. openssl rand -hex 48}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+    # Not published to the host by default — the web service's nginx
+    # reverse-proxies to it over the compose-internal network instead.
+    # Uncomment only for direct access to GET /api/docs (Swagger) or ad
+    # hoc debugging, and put it behind your own auth/allowlist if you do:
+    # ports:
+    #   - "3000:3000"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    # This container serves plain HTTP on port 80 — it does NOT
+    # terminate TLS itself. Put a real reverse proxy / load balancer /
+    # ingress with a real certificate in front of it (see
+    # infra/DEPLOYMENT.md); the app's own Secure-flagged session cookie
+    # (CLAUDE.md rule 9) needs the BROWSER-facing hop to be HTTPS to work
+    # at all, or every login will silently fail to stay logged in.
+
+volumes:
+  postgres-data:

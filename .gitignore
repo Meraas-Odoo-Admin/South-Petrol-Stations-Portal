@@ -20,6 +20,10 @@ generated/
 .certs/
 apps/web/public/dev-ca.pem
 
+# Real production secrets — only infra/.env.prod.example (a template with
+# no real values) is ever committed.
+infra/.env.prod
+
 # Playwright (apps/web/e2e)
 apps/web/test-results/
 apps/web/playwright-report/
