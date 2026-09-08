@@ -1,9 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { apiClient } from '../../lib/apiClient';
-import { usageTypeLabel } from '../../lib/labels';
+import {
+  PROVISIONAL_OWNER_LABEL,
+  PROVISIONAL_OWNER_VARIANT,
+  identityTypeLabel,
+  isProvisionalOwnerIdentity,
+} from '../../lib/labels';
 import { maskIdentityNumber } from '../../lib/masking';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
+import { StatusPill } from '../../components/design/StatusPill';
 import { useAuth } from '../auth/AuthProvider';
 import type { VehicleBasicInfo } from '../vehicles/types';
 
@@ -41,24 +47,37 @@ export function VehiclePreviewCard({ vehicleId, idSuffix = '' }: { vehicleId: st
     <div className="mt-2.5 rounded-sm bg-surface-alt p-3 text-[12px]" data-testid={`vehicle-preview-card${idSuffix}`}>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         <PreviewField label="الطراز" value={data.model ?? '—'} />
-        <PreviewField label="نوع الاستخدام" value={usageTypeLabel(data.usageType)} />
-        <PreviewField
-          label="المالك"
-          value={
-            data.owner ? (
-              <>
-                {data.owner.fullName} (
+        <PreviewField label="نوع المركبة" value={data.vehicleType?.name ?? '—'} />
+      </div>
+
+      {/* Owner gets its own labeled block (name / identity type / identity
+          number each on their own line) rather than crammed into one grid
+          cell alongside brand/usage type — that packed shape read as a
+          rendering mistake, not a deliberate summary. */}
+      <div className="mt-3 border-t border-line/60 pt-2.5">
+        <p className="mb-1.5 text-[11px] font-bold text-ink-faint">بيانات المالك</p>
+        {data.owner ? (
+          <div className="space-y-1">
+            <PreviewField label="الاسم" value={data.owner.fullName} />
+            <PreviewField label="نوع الهوية" value={identityTypeLabel(data.owner.identityType)} />
+            <PreviewField
+              label="رقم الهوية"
+              value={
                 <OwnerIdentityReveal
                   ownerId={data.owner.id}
                   maskedValue={maskIdentityNumber(data.owner.identityNumber, permissions)}
                 />
-                )
-              </>
-            ) : (
-              '—'
-            )
-          }
-        />
+              }
+            />
+            {isProvisionalOwnerIdentity(data.owner.identityType) && (
+              <div className="pt-1" data-testid={`vehicle-preview-owner-provisional${idSuffix}`}>
+                <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="font-bold text-ink">—</p>
+        )}
       </div>
     </div>
   );

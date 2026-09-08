@@ -66,11 +66,43 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Bug found live: this used to hard-cap the list to the first 12
+  // entries (`.slice(0, 12)`) — with an EMPTY search box that's the first
+  // 12 in VEHICLE_BRANDS's own declaration order, and nothing in the UI
+  // hinted the list even continued past that (the dropdown looks fully
+  // scrolled at 12, since the scrollbar thumb is genuinely near the
+  // bottom of a short list). A user browsing without typing anything
+  // could reach the sixth-most-common brand and never suspect there were
+  // another ~100. The list is small enough (~120 entries) to render in
+  // full and let the dropdown's own `max-h-56 overflow-auto` handle
+  // scrolling — same fix for the filtered case, since a broad search term
+  // (a single letter, say) could legitimately match more than 12 too.
+  // Sorted A-Z for display — VEHICLE_BRANDS itself stays organized by
+  // category in source (cars/trucks/heavy equipment/motorcycles, each
+  // with its own sourcing history in that file's comments); scrambling
+  // that grouping to sort the array literal itself would make the
+  // source harder to maintain for no benefit, since the picker doesn't
+  // render category sections anyway — sort where it's actually shown.
+  // Round 18: "أخرى / غير ذلك" is a real VEHICLE_BRANDS row (so it appears
+  // in the dropdown at all) but never a real brand name to save — filtered
+  // out of the normal alphabetical list and rendered once, always last,
+  // with its own click behavior (clear + keep typing) instead of the
+  // normal "select this exact name" behavior every other row has.
+  const OTHER_LABEL = 'أخرى / غير ذلك';
   const results = useMemo(() => {
     const term = value.trim().toLowerCase();
-    if (!term) return VEHICLE_BRANDS.slice(0, 12);
-    return VEHICLE_BRANDS.filter((b) => b.name.toLowerCase().includes(term)).slice(0, 12);
+    const pool = VEHICLE_BRANDS.filter((b) => b.name !== OTHER_LABEL);
+    const matches = term ? pool.filter((b) => b.name.toLowerCase().includes(term)) : pool;
+    return [...matches].sort((a, b) => a.name.localeCompare(b.name));
   }, [value]);
+
+  // Round 18: a small "you picked this" confirmation with the real logo —
+  // same motivation as the fill-up search results getting a logo (client's
+  // own framing: "helps the person make sure it's the same vehicle").
+  const matchedBrand = useMemo(
+    () => VEHICLE_BRANDS.find((b) => b.name.toLowerCase() === value.trim().toLowerCase() && b.name !== OTHER_LABEL),
+    [value],
+  );
 
   return (
     <div className="relative">
@@ -111,21 +143,39 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
             </li>
           ))}
           {results.length === 0 && (
-            <li className="px-3 py-2 text-[12px] text-ink-soft">
-              لا توجد نتائج مطابقة — سيُحفظ ما كتبته كما هو
-            </li>
+            <li className="px-3 py-2 text-[12px] text-ink-soft">لا توجد نتائج مطابقة</li>
           )}
-          {value.trim() && !VEHICLE_BRANDS.some((b) => b.name.toLowerCase() === value.trim().toLowerCase()) && (
-            <li className="border-t border-surface-alt px-3 py-2 text-[11px] text-ink-faint">
-              غير مدرجة في القائمة؟ يمكن حفظ "{value.trim()}" كما هو.
-            </li>
-          )}
+          {/* Round 18: an explicit, always-visible escape hatch — clears
+              the field and keeps the dropdown open for typing, rather than
+              only working if the user already knew free text was quietly
+              accepted. */}
+          <li className="border-t border-surface-alt">
+            <button
+              type="button"
+              data-testid="vehicle-brand-option-other"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange('');
+                inputRef.current?.focus();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-start text-[12.5px] font-bold text-accent-dark hover:bg-accent-100"
+            >
+              {OTHER_LABEL} — أدخل اسم الماركة يدويًا
+            </button>
+          </li>
         </ul>
       </PortalDropdown>
-      <p className="mt-1 text-[10.5px] text-ink-faint">
-        {VEHICLE_BRAND_CATEGORY_LABELS.car} · {VEHICLE_BRAND_CATEGORY_LABELS.truck} ·{' '}
-        {VEHICLE_BRAND_CATEGORY_LABELS.heavy_equipment} · {VEHICLE_BRAND_CATEGORY_LABELS.motorcycle}
-      </p>
+      {matchedBrand ? (
+        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-ink-soft">
+          <BrandGlyph brand={matchedBrand} />
+          تم اختيار: {matchedBrand.name}
+        </p>
+      ) : (
+        <p className="mt-1 text-[10.5px] text-ink-faint">
+          {VEHICLE_BRAND_CATEGORY_LABELS.car} · {VEHICLE_BRAND_CATEGORY_LABELS.truck} ·{' '}
+          {VEHICLE_BRAND_CATEGORY_LABELS.heavy_equipment} · {VEHICLE_BRAND_CATEGORY_LABELS.motorcycle}
+        </p>
+      )}
     </div>
   );
 }

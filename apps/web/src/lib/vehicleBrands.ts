@@ -57,6 +57,41 @@
 // MENA-market omission before this pass), Changan, Dongfeng, FAW, JMC
 // (Chinese truck/pickup brands, same coverage gap category as
 // Sinotruk/Foton/JAC above), Piaggio, CFMoto (motorcycles).
+//
+// Round 12: client gave a direct ~59-name list to check against. Cross-
+// referenced against what was already here (most of it — Hyundai, Kia,
+// BMW, Mercedes, Chevrolet, Toyota, GMC, Lexus, Chery, Ford, Suzuki,
+// Mazda, Opel, Nissan, BYD, Audi, Peugeot, Volkswagen, Ferrari, Haval,
+// Fiat, Genesis, Hummer, Infiniti, Iveco, Isuzu, Jaguar, Jeep, Land Rover,
+// Lincoln, MG, Mitsubishi, Porsche, Bentley, Rolls-Royce, Chrysler, DAF,
+// JAC, MINI, Renault, Dongfeng, Changan, Geely — already existed, nothing
+// to add). Genuinely new:
+// - Real logos sourced this round (simple-icons, same CC0 source/
+//   attribution as the Honda/Ford/Chevrolet/MG set from the earlier
+//   follow-up pass — LICENSE-simple-icons.md already covers the whole
+//   package, not just the icons pulled before): Cadillac, Lamborghini,
+//   Maserati, Subaru. Each SVG's `fill` is the brand's own official hex
+//   from simple-icons' metadata (Cadillac 000000, Lamborghini B6A272,
+//   Maserati 0C2340, Subaru 013C74), matching how the existing
+//   simple-icons-sourced set is patched.
+// - Volvo passenger cars: the file (`volvo.svg`) already existed —
+//   Volvo Trucks/Volvo Construction Equipment used it, but there was no
+//   plain passenger-car "Volvo" entry at all despite the client listing
+//   it. Added, reusing the same logo.
+// - No logo available in EITHER source package (simple-icons has no
+//   coverage; flagged, not guessed at, same as the existing Chery/Haval/
+//   JAC/etc. gaps): Daewoo, GAC, Dodge, Jetour, Range Rover (kept
+//   separate from the existing Land Rover entry — the client listed it
+//   as its own name, and it's commonly treated as its own marque),
+//   Hongqi, Exeed, GWM (kept separate from the existing "Great Wall"
+//   entry — GWM is the same manufacturer's own international brand name,
+//   marketed as a distinct name in many regions, and the client listed
+//   both), Kaiyi, Bestune, Samsung. On Samsung specifically: simple-icons
+//   DOES have a "Samsung" icon, but it's Samsung Electronics' logo, not
+//   Samsung Motors (the Korean car brand, now Renault Korea/Renault
+//   Samsung) — using it would be a real, misleading wrong-brand mark, not
+//   a shortcut, so this one stays without a logo on purpose even though a
+//   same-named icon exists.
 export type VehicleBrandCategory = 'car' | 'truck' | 'heavy_equipment' | 'motorcycle';
 
 export interface VehicleBrandOption {
@@ -86,11 +121,11 @@ export const VEHICLE_BRANDS: VehicleBrandOption[] = [
   { name: 'Jeep', category: 'car', logoSlug: 'jeep' },
   { name: 'Land Rover', category: 'car', logoSlug: 'land-rover' },
   { name: 'Mazda', category: 'car', logoSlug: 'mazda' },
-  { name: 'Chery', category: 'car' },
+  { name: 'Chery', category: 'car', logoSlug: 'chery' },
   { name: 'Geely', category: 'car', logoSlug: 'geely' },
   { name: 'MG', category: 'car', logoSlug: 'mg' },
-  { name: 'Great Wall', category: 'car' },
-  { name: 'Haval', category: 'car' },
+  { name: 'Great Wall', category: 'car', logoSlug: 'gwm' },
+  { name: 'Haval', category: 'car', logoSlug: 'haval' },
   { name: 'BYD', category: 'car', logoSlug: 'byd' },
   { name: 'Chrysler', category: 'car', logoSlug: 'chrysler' },
   { name: 'Citroën', category: 'car', logoSlug: 'citroen' },
@@ -114,34 +149,50 @@ export const VEHICLE_BRANDS: VehicleBrandOption[] = [
   { name: 'RAM', category: 'car', logoSlug: 'ram' },
   { name: 'Hummer', category: 'car', logoSlug: 'hummer' },
   { name: 'Lotus', category: 'car', logoSlug: 'lotus' },
-  { name: 'Lexus', category: 'car' },
-  { name: 'GMC', category: 'car' },
+  { name: 'Lexus', category: 'car', logoSlug: 'lexus' },
+  { name: 'GMC', category: 'car', logoSlug: 'gmc' },
+  { name: 'Volvo', category: 'car', logoSlug: 'volvo' },
+  { name: 'Cadillac', category: 'car', logoSlug: 'cadillac' },
+  { name: 'Lamborghini', category: 'car', logoSlug: 'lamborghini' },
+  { name: 'Maserati', category: 'car', logoSlug: 'maserati' },
+  { name: 'Subaru', category: 'car', logoSlug: 'subaru' },
+  { name: 'Dodge', category: 'car' },
+  { name: 'Daewoo', category: 'car', logoSlug: 'daewoo' },
+  { name: 'GAC', category: 'car' },
+  { name: 'Jetour', category: 'car', logoSlug: 'jetour' },
+  { name: 'Range Rover', category: 'car', logoSlug: 'range-rover' },
+  { name: 'Hongqi', category: 'car' },
+  { name: 'Exeed', category: 'car', logoSlug: 'exeed' },
+  { name: 'GWM', category: 'car', logoSlug: 'gwm' },
+  { name: 'Kaiyi', category: 'car', logoSlug: 'kaiyi' },
+  { name: 'Bestune', category: 'car' },
+  { name: 'Samsung', category: 'car' },
 
   // Trucks/commercial
   { name: 'Mercedes-Benz Trucks', category: 'truck', logoSlug: 'mercedes-benz' },
   { name: 'MAN', category: 'truck', logoSlug: 'man' },
   { name: 'Volvo Trucks', category: 'truck', logoSlug: 'volvo' },
   { name: 'Scania', category: 'truck', logoSlug: 'scania' },
-  { name: 'Sinotruk', category: 'truck' },
-  { name: 'Foton', category: 'truck' },
+  { name: 'Sinotruk', category: 'truck', logoSlug: 'sinotruk' },
+  { name: 'Foton', category: 'truck', logoSlug: 'foton' },
   { name: 'JAC', category: 'truck' },
   { name: 'Isuzu', category: 'truck', logoSlug: 'isuzu' },
-  { name: 'Hino', category: 'truck' },
+  { name: 'Hino', category: 'truck', logoSlug: 'hino' },
   { name: 'DAF', category: 'truck', logoSlug: 'daf' },
   { name: 'Iveco', category: 'truck', logoSlug: 'iveco' },
-  { name: 'Changan', category: 'truck' },
-  { name: 'Dongfeng', category: 'truck' },
+  { name: 'Changan', category: 'truck', logoSlug: 'changan' },
+  { name: 'Dongfeng', category: 'truck', logoSlug: 'dongfeng' },
   { name: 'FAW', category: 'truck' },
-  { name: 'JMC', category: 'truck' },
+  { name: 'JMC', category: 'truck', logoSlug: 'jmc' },
 
   // Heavy machinery/equipment
   { name: 'Caterpillar', category: 'heavy_equipment', logoSlug: 'caterpillar' },
-  { name: 'Komatsu', category: 'heavy_equipment' },
+  { name: 'Komatsu', category: 'heavy_equipment', logoSlug: 'komatsu' },
   { name: 'Volvo Construction Equipment', category: 'heavy_equipment', logoSlug: 'volvo' },
   { name: 'JCB', category: 'heavy_equipment', logoSlug: 'jcb' },
-  { name: 'Liebherr', category: 'heavy_equipment' },
-  { name: 'XCMG', category: 'heavy_equipment' },
-  { name: 'SANY', category: 'heavy_equipment' },
+  { name: 'Liebherr', category: 'heavy_equipment', logoSlug: 'liebherr' },
+  { name: 'XCMG', category: 'heavy_equipment', logoSlug: 'xcmg' },
+  { name: 'SANY', category: 'heavy_equipment', logoSlug: 'sany' },
   { name: 'John Deere', category: 'heavy_equipment', logoSlug: 'john-deere' },
   { name: 'Hitachi Construction Machinery', category: 'heavy_equipment', logoSlug: 'hitachi' },
 
@@ -149,11 +200,19 @@ export const VEHICLE_BRANDS: VehicleBrandOption[] = [
   { name: 'Honda (دراجة)', category: 'motorcycle', logoSlug: 'honda' },
   { name: 'Yamaha', category: 'motorcycle', logoSlug: 'yamaha' },
   { name: 'Suzuki (دراجة)', category: 'motorcycle', logoSlug: 'suzuki' },
-  { name: 'Bajaj', category: 'motorcycle' },
+  { name: 'Bajaj', category: 'motorcycle', logoSlug: 'bajaj' },
   { name: 'TVS', category: 'motorcycle' },
   { name: 'Zongshen', category: 'motorcycle' },
   { name: 'Piaggio', category: 'motorcycle' },
-  { name: 'CFMoto', category: 'motorcycle' },
+  { name: 'CFMoto', category: 'motorcycle', logoSlug: 'cfmoto' },
+
+  // Round 18: explicit escape hatch for a brand genuinely not in this list
+  // — the picker already silently accepted free text typed here, but
+  // nothing told the user that was an option. This entry is never matched
+  // by VehicleBrandLogo's exact-name lookup (no logoSlug, and the picker
+  // treats selecting it as "clear and let them type their own name"
+  // rather than saving the literal string "أخرى" as a brand).
+  { name: 'أخرى / غير ذلك', category: 'car' },
 ];
 
 export const VEHICLE_BRAND_CATEGORY_LABELS: Record<VehicleBrandCategory, string> = {

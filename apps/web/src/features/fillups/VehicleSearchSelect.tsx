@@ -10,11 +10,13 @@ import {
 } from '../../lib/libyanFormats';
 import { LtrText } from '../../components/LtrText';
 import { PortalDropdown } from '../../components/PortalDropdown';
+import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
 
 interface VehicleOption {
   id: string;
   internalCode: string;
   currentPlate: string;
+  model: string | null;
 }
 
 interface VehicleSearchSelectProps {
@@ -153,9 +155,12 @@ export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChan
                   setQuery(formatLicensePlate(vehicle.currentPlate));
                   setOpen(false);
                 }}
-                className="block w-full px-3 py-2 text-start text-[12.5px] hover:bg-surface-alt"
+                className="flex w-full items-center gap-2 px-3 py-2 text-start text-[12.5px] hover:bg-surface-alt"
               >
-                <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText> — {vehicle.internalCode}
+                <VehicleBrandLogo model={vehicle.model} size={24} />
+                <span>
+                  <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText> — {vehicle.internalCode}
+                </span>
               </button>
             </li>
           ))}
