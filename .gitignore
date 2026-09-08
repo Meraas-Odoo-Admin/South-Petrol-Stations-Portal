@@ -15,7 +15,20 @@ pnpm-lock.yaml.bak
 generated/
 .claude/
 
+# Round 20 (LAN phone testing over HTTPS): locally-trusted mkcert
+# certificate + private key — machine-specific, never shared.
+.certs/
+apps/web/public/dev-ca.pem
+
 # Playwright (apps/web/e2e)
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/e2e/.fixtures.json
+
+# Dev-only verification screenshots, working notes, and the client design
+# handoff reference — not app code, no ongoing value once a round is
+# verified and merged.
+docs/screenshots/verify/
+apps/web/docs/screenshots/
+Claude outputs/
+design/design_handoff_fuel_control_system/
