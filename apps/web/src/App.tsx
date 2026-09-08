@@ -17,8 +17,8 @@ import { AdminLayout } from './features/admin/AdminLayout';
 import { UsersAdminPage } from './features/admin/UsersAdminPage';
 import { SettingsAdminPage } from './features/admin/SettingsAdminPage';
 import { ExceptionTypesAdminPage } from './features/admin/ExceptionTypesAdminPage';
+import { VehicleTypesAdminPage } from './features/admin/VehicleTypesAdminPage';
 import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
-import { StationsAdminPage } from './features/admin/StationsAdminPage';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
 // §9. /fillups/new is the recording screen (create only — the exceptions
@@ -68,7 +68,13 @@ function App() {
                 <Route path="users" element={<UsersAdminPage />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
                 <Route path="exception-types" element={<ExceptionTypesAdminPage />} />
-                <Route path="stations" element={<StationsAdminPage />} />
+                <Route path="vehicle-types" element={<VehicleTypesAdminPage />} />
+                {/* Round 19: station create/edit moved onto /stations
+                    itself (StationsListPage, gated on stations:manage) —
+                    "much more logical" than a separate admin surface, per
+                    the client's own framing. Redirect, not a 404, for
+                    anyone with the old URL bookmarked. */}
+                <Route path="stations" element={<Navigate to="/stations" replace />} />
                 <Route path="audit-log" element={<AuditLogAdminPage />} />
               </Route>
             </Route>

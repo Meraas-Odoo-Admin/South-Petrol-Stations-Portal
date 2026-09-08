@@ -19,6 +19,7 @@ import { PageHeader } from '../../components/design/PageHeader';
 import { Card, CardHeader } from '../../components/design/Card';
 import { KpiCard } from '../../components/design/KpiCard';
 import { CodeText } from '../../components/design/CodeText';
+import { InfoHint } from '../../components/InfoHint';
 import { fuelTypeLabel } from '../../lib/labels';
 
 function isoDateDaysAgo(days: number): string {
@@ -73,11 +74,14 @@ export function DashboardPage() {
         actions={
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 block text-[11px] font-bold text-ink-soft">من</label>
+              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink-soft">
+                من
+                <InfoHint text="بداية النطاق الزمني الذي تُحسب عليه كل الأرقام والرسوم في هذه الصفحة." />
+              </label>
               <DateField
                 value={fromDate}
                 onChange={setFromDate}
-                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-8 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
             <div>
@@ -85,7 +89,7 @@ export function DashboardPage() {
               <DateField
                 value={toDate}
                 onChange={setToDate}
-                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-8 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
           </div>
@@ -98,9 +102,22 @@ export function DashboardPage() {
       {data && (
         <>
           <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <KpiCard label="إجمالي التعبئات" value={data.totalFillUps} />
-            <KpiCard label="إجمالي اللترات" value={data.totalLiters} />
-            <KpiCard label="نسبة المخالفات" value={`${(data.exceptionRate * 100).toFixed(1)}%`} variant="danger" />
+            <KpiCard
+              label="إجمالي التعبئات"
+              value={data.totalFillUps}
+              hint="عدد عمليات التعبئة المسجَّلة في كل محطات المديرية خلال النطاق الزمني المحدَّد أعلاه."
+            />
+            <KpiCard
+              label="إجمالي اللترات"
+              value={data.totalLiters}
+              hint="مجموع كمية الوقود (باللتر) المصروفة في كل التعبئات ضمن هذا النطاق، لكل أنواع الوقود مجتمعة."
+            />
+            <KpiCard
+              label="نسبة المخالفات"
+              value={`${(data.exceptionRate * 100).toFixed(1)}%`}
+              variant="danger"
+              hint="نسبة التعبئات التي سُجِّلت كاستثناء (خرقت إحدى قواعد التعبئة) إلى إجمالي التعبئات — رقم مرتفع يستحق المتابعة."
+            />
           </div>
 
           {data.daily.length > 0 && (
@@ -165,7 +182,16 @@ export function DashboardPage() {
           )}
 
           <Card>
-            <CardHeader title="حسب المحطة" subtitle="مرتبة بنسبة المخالفات" />
+            <CardHeader
+              title="حسب المحطة"
+              subtitle="مرتبة بنسبة المخالفات"
+              action={
+                <InfoHint
+                  className="me-1"
+                  text="الصف المظلَّل باللون الأحمر هو المحطة صاحبة أعلى نسبة مخالفات ضمن هذا النطاق الزمني — أول مكان يستحق المراجعة."
+                />
+              }
+            />
             <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-[12.5px]">
               <thead>

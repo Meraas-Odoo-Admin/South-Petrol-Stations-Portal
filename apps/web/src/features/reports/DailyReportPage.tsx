@@ -18,6 +18,7 @@ import { OwnerSearchSelect } from '../../components/OwnerSearchSelect';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { FUEL_TYPE_LABELS, fuelTypeLabel } from '../../lib/labels';
 import { formatLicensePlate } from '../../lib/libyanFormats';
+import { InfoHint } from '../../components/InfoHint';
 import { maskIdentityNumber } from '../../lib/masking';
 
 function todayIso(): string {
@@ -130,7 +131,7 @@ export function DailyReportPage() {
             <DateField
               value={date}
               onChange={setDate}
-              inputClassName={`w-36 pe-8 ${date !== todayIso() ? tintedSelectClass : selectClass}`}
+              inputClassName={`w-36 pe-9 ${date !== todayIso() ? tintedSelectClass : selectClass}`}
             />
           </div>
           <div>
@@ -149,7 +150,10 @@ export function DailyReportPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">المالك (اختياري)</label>
+            <label className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink-soft">
+              المالك (اختياري)
+              <InfoHint text="اكتب اسم مالك المركبة أو رقم هويته (وطني أو إداري) لعرض تعبئاته فقط ضمن هذا اليوم." />
+            </label>
             {ownerId ? (
               <div className={`flex w-56 items-center justify-between gap-2 ${tintedSelectClass}`}>
                 <span className="truncate">{ownerLabel}</span>
@@ -194,10 +198,15 @@ export function DailyReportPage() {
           )}
 
           <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <KpiCard label="إجمالي التعبئات" value={data.totalFillUps} />
-            <KpiCard label="إجمالي اللترات" value={data.totalLiters} />
-            <KpiCard label="مخالفات قيد الانتظار" value={data.exceptionsPending} variant="accent" />
-            <KpiCard label="مخالفات معتمدة" value={data.exceptionsApproved} />
+            <KpiCard label="إجمالي التعبئات" value={data.totalFillUps} hint="عدد التعبئات المطابقة للمرشحات المحدَّدة أعلاه (المحطة والتاريخ ونوع الوقود والمالك)." />
+            <KpiCard label="إجمالي اللترات" value={data.totalLiters} hint="مجموع كمية الوقود باللتر لكل التعبئات المطابقة للمرشحات." />
+            <KpiCard
+              label="مخالفات قيد الانتظار"
+              value={data.exceptionsPending}
+              variant="accent"
+              hint="تعبئات سُجِّلت كاستثناء ولم يعتمدها مشرف بعد — لا تُحتسب ضمن التعبئات المعتمدة حتى تتم الموافقة عليها."
+            />
+            <KpiCard label="مخالفات معتمدة" value={data.exceptionsApproved} hint="استثناءات تمت الموافقة عليها بالفعل (سواء عند التسجيل مباشرة أو لاحقًا من مشرف)." />
           </div>
 
           {data.rows.length > 0 && (

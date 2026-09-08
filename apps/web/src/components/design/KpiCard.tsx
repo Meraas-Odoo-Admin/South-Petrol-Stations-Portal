@@ -1,4 +1,5 @@
 import { LtrText } from '../LtrText';
+import { InfoHint } from '../InfoHint';
 
 // Matches 2d/2h's KPI row: individual rounded cards in a grid (design-
 // system-notes.md: "KPI stats as individual rounded cards in a grid, not
@@ -15,15 +16,20 @@ export function KpiCard({
   label,
   value,
   variant = 'neutral',
+  hint,
 }: {
   label: string;
   value: string | number;
   variant?: keyof typeof VARIANTS;
+  hint?: string;
 }) {
   const v = VARIANTS[variant];
   return (
     <div className={`rounded-md p-4 shadow-sm ${v.card}`}>
-      <div className={`text-[11px] font-medium ${v.label}`}>{label}</div>
+      <div className={`flex items-center gap-1.5 text-[11px] font-medium ${v.label}`}>
+        {label}
+        {hint && <InfoHint text={hint} />}
+      </div>
       <div className={`mt-2 text-end font-mono text-[28px] font-extrabold leading-none ${v.value}`}>
         <LtrText>{value}</LtrText>
       </div>

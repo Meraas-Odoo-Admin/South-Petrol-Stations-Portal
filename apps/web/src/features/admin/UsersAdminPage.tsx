@@ -1,14 +1,14 @@
 import { Fragment, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
-import { roleLabel } from '../../lib/labels';
+import { roleLabel, permissionLabel } from '../../lib/labels';
 import { LtrText } from '../../components/LtrText';
 import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { useStations } from '../stations/useStations';
-import type { AdminRole, AdminUser } from './types';
+import type { AdminPermission, AdminRole, AdminUser } from './types';
 
 // Item 7: no user-management UI existed anywhere before this — accounts
 // could only be created via the seed script or direct API calls. Every
@@ -36,6 +36,10 @@ export function UsersAdminPage() {
   const rolesQuery = useQuery({
     queryKey: ['admin', 'roles'],
     queryFn: async () => (await apiClient.get<AdminRole[]>('/roles')).data,
+  });
+  const permissionsQuery = useQuery({
+    queryKey: ['admin', 'permissions'],
+    queryFn: async () => (await apiClient.get<AdminPermission[]>('/permissions')).data,
   });
   const { data: stations } = useStations();
 
@@ -80,6 +84,24 @@ export function UsersAdminPage() {
       apiClient.delete(`/users/${userId}/station-scope/${stationId}`),
     onSuccess: invalidateUsers,
     onError: () => setError('تعذر إزالة نطاق المحطة.'),
+  });
+  // Round 12: grant/revoke ONE permission directly to this user, independent
+  // of their roles — "given to certain users they pick, it could be given
+  // to certain employees and not for other employees" (the client's own
+  // framing, originally about fillups:record_exception specifically, but
+  // this covers any permission since the mechanism is generic — see
+  // UserPermission's schema comment).
+  const grantPermission = useMutation({
+    mutationFn: ({ userId, permissionId }: { userId: string; permissionId: string }) =>
+      apiClient.post(`/users/${userId}/permissions`, { permissionId }),
+    onSuccess: invalidateUsers,
+    onError: () => setError('تعذر منح الصلاحية.'),
+  });
+  const revokePermission = useMutation({
+    mutationFn: ({ userId, permissionId }: { userId: string; permissionId: string }) =>
+      apiClient.delete(`/users/${userId}/permissions/${permissionId}`),
+    onSuccess: invalidateUsers,
+    onError: () => setError('تعذر سحب الصلاحية.'),
   });
 
   return (
@@ -198,7 +220,7 @@ export function UsersAdminPage() {
                   {expandedUserId === u.id && (
                     <tr className="border-b border-surface-alt bg-paper last:border-0">
                       <td colSpan={5} className="px-[18px] py-4">
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-3 gap-6">
                           <div>
                             <p className="mb-2 text-[12px] font-bold text-ink">الأدوار</p>
                             <div className="space-y-1.5">
@@ -241,6 +263,31 @@ export function UsersAdminPage() {
                                       }
                                     />
                                     <LtrText>{station.internalCode}</LtrText> — {station.name}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="mb-2 text-[12px] font-bold text-ink">صلاحيات إضافية (فردية)</p>
+                            <p className="mb-2 text-[10.5px] text-ink-faint">
+                              تُضاف فوق صلاحيات الأدوار أعلاه، ولا تُلغيها — منح فردي لهذا المستخدم تحديدًا.
+                            </p>
+                            <div className="max-h-64 space-y-1.5 overflow-y-auto">
+                              {permissionsQuery.data?.map((permission) => {
+                                const held = u.directPermissions.some((p) => p.permissionId === permission.id);
+                                return (
+                                  <label key={permission.id} className="flex items-center gap-2 text-[12px] text-ink">
+                                    <input
+                                      type="checkbox"
+                                      checked={held}
+                                      onChange={(e) =>
+                                        e.target.checked
+                                          ? grantPermission.mutate({ userId: u.id, permissionId: permission.id })
+                                          : revokePermission.mutate({ userId: u.id, permissionId: permission.id })
+                                      }
+                                    />
+                                    {permissionLabel(permission.key)}
                                   </label>
                                 );
                               })}

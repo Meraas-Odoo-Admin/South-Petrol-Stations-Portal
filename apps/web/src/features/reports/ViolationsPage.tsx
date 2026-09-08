@@ -23,6 +23,7 @@ import { TriggerDetail } from '../fillups/RecordFillUpPage';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { RULE_VIOLATION_MESSAGES } from '../fillups/ruleViolationMessages';
 import type { RuleFailureReason } from '@fuel-tracking/shared-types';
+import { InfoHint } from '../../components/InfoHint';
 
 const TAKE = 20;
 
@@ -117,14 +118,17 @@ export function ViolationsPage() {
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">من تاريخ</label>
-            <DateField value={from} onChange={resetPageAnd(setFrom)} inputClassName={`w-36 pe-8 ${selectClass}`} />
+            <DateField value={from} onChange={resetPageAnd(setFrom)} inputClassName={`w-44 pe-9 ${selectClass}`} />
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-bold text-ink-soft">إلى تاريخ</label>
-            <DateField value={to} onChange={resetPageAnd(setTo)} inputClassName={`w-36 pe-8 ${selectClass}`} />
+            <DateField value={to} onChange={resetPageAnd(setTo)} inputClassName={`w-44 pe-9 ${selectClass}`} />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">الحالة</label>
+            <label className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink-soft">
+              الحالة
+              <InfoHint text="«قيد الانتظار» استثناءات لم يعتمدها مشرف بعد وتحتاج قرارك. «معتمدة» استثناءات تمت الموافقة عليها بالفعل، سواء تلقائيًا عند التسجيل أو يدويًا من مشرف." />
+            </label>
             <select
               value={status}
               onChange={(e) => resetPageAnd(setStatus)(e.target.value as ViolationStatus)}

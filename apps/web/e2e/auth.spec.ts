@@ -14,7 +14,11 @@ test('login with a seeded user succeeds and lands on the home page', async ({ pa
   await submitLogin(page, fixtures.adminUsername, fixtures.adminPassword);
 
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('مرحبًا،');
+  // Round 16: HomePage's greeting became time-of-day-aware ("صباح
+  // الخير"/"مساء الخير" instead of a fixed "مرحبًا،") — matching either
+  // form here so this doesn't flake depending on when in the day the
+  // suite runs.
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/صباح الخير|مساء الخير/);
 });
 
 test('a user with mustChangePassword: true is redirected to /change-password and cannot navigate elsewhere until it succeeds', async ({

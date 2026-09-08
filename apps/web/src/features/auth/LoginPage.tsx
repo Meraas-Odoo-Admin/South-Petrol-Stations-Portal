@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { isAxiosError } from 'axios';
 import { APP_NAME, APP_TAGLINE } from '../../lib/appInfo';
+import { BrandMark } from '../../components/BrandMark';
+import { EyeIcon } from '../../components/EyeIcon';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'اسم المستخدم مطلوب'),
@@ -13,29 +15,6 @@ const loginSchema = z.object({
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
-
-function EyeIcon({ open }: { open: boolean }) {
-  return open ? (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
-      <circle cx="12" cy="12" r="2.6" />
-    </svg>
-  ) : (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 3l18 18M10.6 10.6a2.6 2.6 0 0 0 3.6 3.6M9.4 5.5A10.6 10.6 0 0 1 12 5c6.5 0 10 6 10 6a13.6 13.6 0 0 1-3.1 3.7M6.6 6.6C4 8.3 2 11 2 11s3.5 6 10 6c1 0 1.9-.14 2.8-.4" />
-    </svg>
-  );
-}
-
-function BrandMark() {
-  return (
-    <svg width="34" height="34" viewBox="0 0 56 56" fill="none">
-      <circle cx="28" cy="28" r="20" stroke="#0d5c52" strokeWidth="4" />
-      <line x1="28" y1="9" x2="28" y2="17" stroke="#0d5c52" strokeWidth="4" strokeLinecap="round" />
-      <line x1="28" y1="28" x2="39" y2="20" stroke="#e8a53d" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 // Matches design/"Fuel Control System - Round 2 Screens.dc.html" 3a
 // (desktop 1440 — two-column: form + a teal marketing panel) and 3b

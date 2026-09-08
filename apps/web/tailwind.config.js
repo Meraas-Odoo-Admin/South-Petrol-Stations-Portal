@@ -32,6 +32,23 @@ export default {
         lg: '0 20px 48px -12px rgba(19,37,36,.28)',
         glow: '0 4px 16px -2px rgba(232,165,61,.45)',
       },
+      // Round 16 (UX/motion pass): a small, shared vocabulary of entrance/
+      // feedback animations — used for card grids and table rows so the
+      // app reads as responsive rather than static, without reaching for
+      // an animation library. Kept subtle (150-420ms, small offsets) per
+      // the existing design system's restrained tone.
+      keyframes: {
+        fadeInUp: { '0%': { opacity: '0', transform: 'translateY(6px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+        scaleIn: { '0%': { opacity: '0', transform: 'scale(.97)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+        pulseSoft: { '0%,100%': { opacity: '1' }, '50%': { opacity: '.55' } },
+      },
+      animation: {
+        'fade-in-up': 'fadeInUp .38s ease-out both',
+        'fade-in': 'fadeIn .3s ease-out both',
+        'scale-in': 'scaleIn .2s ease-out both',
+        'pulse-soft': 'pulseSoft 1.6s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

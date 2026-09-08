@@ -5,6 +5,9 @@ import { z } from 'zod';
 import { isAxiosError } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
+import { BrandMark } from '../../components/BrandMark';
+import { EyeIcon } from '../../components/EyeIcon';
+import { APP_NAME, APP_TAGLINE } from '../../lib/appInfo';
 
 const changePasswordSchema = z
   .object({
@@ -50,6 +53,14 @@ export function ChangePasswordPage() {
   const { changePassword, user } = useAuth();
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Round 14: "it should also be put in the first login password change,
+  // and basically any field that contains a password" — LoginPage already
+  // has a show/hide toggle on its one password field; these three never
+  // did. Independent per field, same reasoning as three separate fields
+  // needing three separate answers to "is this one showing right now".
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const {
     register,
@@ -78,32 +89,83 @@ export function ChangePasswordPage() {
     }
   }
 
+  // Round 14: the eye-toggle button lives INSIDE this same flex row as a
+  // sibling of the <input>, not absolutely positioned over it — same
+  // structure LoginPage's own password field already uses. Deliberate:
+  // these inputs carry their own `dir="ltr"` (so typed characters read
+  // left-to-right regardless of the page's rtl), and CSS logical
+  // properties (ps-*/pe-*) resolve against an ELEMENT's OWN direction —
+  // an absolutely-positioned icon reserved via pe-* on an ltr-dir'd input
+  // would reserve space on the wrong physical side, the exact bug just
+  // fixed on DateField's calendar icon. A plain flex row sidesteps the
+  // whole class of bug since sibling layout order doesn't depend on either
+  // child's own dir.
+  const fieldRowClass =
+    'mt-2 flex h-[52px] items-center gap-2 rounded-sm bg-surface-alt px-3.5 focus-within:ring-2 focus-within:ring-accent';
   const fieldInputClass =
-    'mt-2 h-[52px] w-full rounded-sm bg-surface-alt px-3.5 text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none focus:ring-2 focus:ring-accent';
+    'min-w-0 flex-1 bg-transparent text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none';
 
+  // Round 14: this page used to be a bare, unbranded card — a visible
+  // downgrade right after LoginPage's polished two-tone shell (same auth
+  // flow, same user, jarringly different visual quality). Now shares
+  // LoginPage's exact brand mark and mobile header treatment. Also fixed
+  // live: the "الخطوة الأولى قبل الاستخدام" badge used to show
+  // unconditionally, even for a user voluntarily changing their password
+  // from the sidebar long after their first login — now only shown for
+  // the actual forced first-login flow, matching the paragraph below it
+  // (which already branched on this correctly).
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
-      <div className="w-full max-w-[480px] bg-surface p-6 shadow-lg lg:rounded-lg lg:p-10">
-        <div className="mb-2 rounded-full bg-primary-100 px-3 py-1.5 text-[11px] font-bold text-primary-dark inline-block">
-          الخطوة الأولى قبل الاستخدام
+      <div className="w-full max-w-[480px] overflow-hidden bg-surface shadow-lg lg:rounded-lg">
+        <div className="flex flex-col items-center gap-3 bg-primary py-8 text-white lg:hidden">
+          <BrandMark />
+          <div className="text-center">
+            <p className="text-[18px] font-black">{APP_NAME}</p>
+            <p className="mt-1 text-[11px] font-medium opacity-90">{APP_TAGLINE}</p>
+          </div>
         </div>
-        <h1 className="mt-3 text-[22px] font-black text-ink">اختر كلمة مرور جديدة</h1>
-        <p className="mt-2 text-[13px] leading-[1.7] text-ink-soft">
-          {user?.mustChangePassword
-            ? 'كلمة المرور المؤقتة التي سلّمك إياها المشرف تُستخدم مرة واحدة فقط.'
-            : 'اختر كلمة مرور جديدة لحسابك.'}
-        </p>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
+        <div className="p-6 lg:p-10">
+          <div className="mb-7 hidden items-center gap-3 lg:flex">
+            <BrandMark />
+            <div>
+              <p className="text-[18px] font-black text-ink">{APP_NAME}</p>
+              <p className="text-[11px] font-medium text-ink-soft">{APP_TAGLINE}</p>
+            </div>
+          </div>
+
+          {user?.mustChangePassword && (
+            <div className="mb-2 inline-block rounded-full bg-primary-100 px-3 py-1.5 text-[11px] font-bold text-primary-dark">
+              الخطوة الأولى قبل الاستخدام
+            </div>
+          )}
+          <h1 className="mt-3 text-[22px] font-black text-ink">اختر كلمة مرور جديدة</h1>
+          <p className="mt-2 text-[13px] leading-[1.7] text-ink-soft">
+            {user?.mustChangePassword
+              ? 'كلمة المرور المؤقتة التي سلّمك إياها المشرف تُستخدم مرة واحدة فقط.'
+              : 'اختر كلمة مرور جديدة لحسابك.'}
+          </p>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
           <div className="rounded-md border border-line p-4">
             <label className="text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
-            <input
-              type="password"
-              {...register('currentPassword')}
-              dir="ltr"
-              className={fieldInputClass}
-              autoComplete="current-password"
-            />
+            <div className={fieldRowClass}>
+              <input
+                type={showCurrent ? 'text' : 'password'}
+                {...register('currentPassword')}
+                dir="ltr"
+                className={fieldInputClass}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrent((s) => !s)}
+                className="shrink-0 text-ink-soft"
+                aria-label={showCurrent ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                <EyeIcon open={showCurrent} size={17} />
+              </button>
+            </div>
             {errors.currentPassword && (
               <p className="mt-1.5 text-[12px] text-danger">{errors.currentPassword.message}</p>
             )}
@@ -111,13 +173,23 @@ export function ChangePasswordPage() {
 
           <div className="rounded-md border border-line p-4">
             <label className="text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
-            <input
-              type="password"
-              {...register('newPassword')}
-              dir="ltr"
-              className={fieldInputClass}
-              autoComplete="new-password"
-            />
+            <div className={fieldRowClass}>
+              <input
+                type={showNew ? 'text' : 'password'}
+                {...register('newPassword')}
+                dir="ltr"
+                className={fieldInputClass}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew((s) => !s)}
+                className="shrink-0 text-ink-soft"
+                aria-label={showNew ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                <EyeIcon open={showNew} size={17} />
+              </button>
+            </div>
             {errors.newPassword && <p className="mt-1.5 text-[12px] text-danger">{errors.newPassword.message}</p>}
 
             {/* 4 segments per artboard 3c — the 3 checks below can only
@@ -141,7 +213,7 @@ export function ChangePasswordPage() {
                 <li key={check.label} className="flex items-center gap-2 text-[12px] text-ink-soft">
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                      check.met ? 'bg-ok text-white' : 'border border-line'
+                      check.met ? 'bg-ok text-white' : 'bg-surface-alt'
                     }`}
                   >
                     {check.met && (
@@ -158,13 +230,23 @@ export function ChangePasswordPage() {
 
           <div className="rounded-md border border-line p-4">
             <label className="text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
-            <input
-              type="password"
-              {...register('confirmPassword')}
-              dir="ltr"
-              className={fieldInputClass}
-              autoComplete="new-password"
-            />
+            <div className={fieldRowClass}>
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                {...register('confirmPassword')}
+                dir="ltr"
+                className={fieldInputClass}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((s) => !s)}
+                className="shrink-0 text-ink-soft"
+                aria-label={showConfirm ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                <EyeIcon open={showConfirm} size={17} />
+              </button>
+            </div>
             {errors.confirmPassword && (
               <p className="mt-1.5 text-[12px] text-danger">{errors.confirmPassword.message}</p>
             )}
@@ -192,6 +274,7 @@ export function ChangePasswordPage() {
             {isSubmitting ? '...جارٍ الحفظ' : 'حفظ والمتابعة'}
           </button>
         </form>
+        </div>
       </div>
     </div>
   );

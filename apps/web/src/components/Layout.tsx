@@ -5,6 +5,8 @@ import { useAuth } from '../features/auth/AuthProvider';
 import { apiClient } from '../lib/apiClient';
 import { roleLabel } from '../lib/labels';
 import { APP_NAME } from '../lib/appInfo';
+import { Icon, ICONS } from './icons';
+import { OnboardingTour } from './OnboardingTour';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
 // artboard 2a ("تنقّل الهاتف — نمط مقصود، لا قائمة سطح مكتب ملتفّة"): the
@@ -22,28 +24,6 @@ interface NavItem {
   show: boolean;
   badge?: number;
 }
-
-function Icon({ d }: { d: string }) {
-  return (
-    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  );
-}
-
-const ICONS = {
-  dashboard: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z',
-  fillup: 'M4 21V8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v13M2 21h14m3-13 2.5 2.5a1.5 1.5 0 0 1 .5 1.1V18a1.5 1.5 0 0 1-3 0v-3.5M8 8V4M4 12h8',
-  vehicles: 'M3 13l1.6-5A2 2 0 0 1 6.5 6.5h11a2 2 0 0 1 1.9 1.5L21 13v6a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z',
-  violations: 'M12 9v4m0 4h.01M10.3 3.9 2.4 18a1.8 1.8 0 0 0 1.6 2.7h16a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z',
-  changeRequests: 'M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M9 15h3l8-8a2 2 0 0 0-3-3l-8 8v3Z',
-  reports: 'M8 7h8M8 12h8M8 17h5M4 4h16v16H4V4Z',
-  stations: 'M4 21V8l8-5 8 5v13M9 21v-6h6v6M4 21h16',
-  admin: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 1-.1 1.3l2 1.6-2 3.4-2.4-1a7 7 0 0 1-2.2 1.3l-.4 2.5H9.7l-.4-2.5a7 7 0 0 1-2.2-1.3l-2.4 1-2-3.4 2-1.6a7.4 7.4 0 0 1 0-2.6l-2-1.6 2-3.4 2.4 1a7 7 0 0 1 2.2-1.3L9.7 2h4.6l.4 2.5a7 7 0 0 1 2.2 1.3l2.4-1 2 3.4-2 1.6c.07.4.1.9.1 1.2Z',
-  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm10 2-4.35-4.35',
-  menu: 'M4 7h16M4 12h16M4 17h16',
-  close: 'M6 6l12 12M18 6 6 18',
-};
 
 export function Layout() {
   const { user, logout, hasPermission } = useAuth();
@@ -80,6 +60,19 @@ export function Layout() {
   });
 
   const navItems: NavItem[] = [
+    // Round 19: "why does the home screen only appear once upon login and
+    // then you don't have an option to get back to that page" — HomePage
+    // ("/") had no persistent nav entry anywhere (sidebar, mobile sheet, or
+    // bottom bar), reachable only immediately post-login before the first
+    // navigation away. Always shown — HomePage itself has no permission
+    // gate (it just filters its own quick-link cards per user), so this
+    // entry shouldn't have one either.
+    {
+      to: '/',
+      label: 'الرئيسية',
+      icon: <Icon d={ICONS.home} />,
+      show: true,
+    },
     {
       to: '/reports/dashboard',
       label: 'لوحة المتابعة',
@@ -168,7 +161,7 @@ export function Layout() {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/vehicles' || item.to === '/stations'}
+              end={item.to === '/' || item.to === '/vehicles' || item.to === '/stations'}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[12.5px] font-bold transition ${
                   isActive ? 'bg-primary text-white shadow-sm' : 'text-ink-soft hover:bg-surface-alt'
@@ -185,17 +178,39 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-surface-alt px-4 py-4">
-          <p className="truncate text-[12.5px] font-bold text-ink">{user?.fullName}</p>
-          <p className="text-[10.5px] text-ink-faint">
-            {roleName}
-            {stationName ? ` · ${stationName}` : ''}
-          </p>
-          <div className="mt-2.5 flex gap-3 text-[11px] font-bold text-ink-soft">
-            <NavLink to="/change-password" className="hover:text-primary">
-              تغيير كلمة المرور
+        {/* Round 14: this used to be two bare text links side by side — the
+            client flagged it directly as looking unfinished next to the
+            pill-styled nav above it. Now a small account card (avatar +
+            name/role) with two proper icon buttons underneath, matching
+            the same rounded-full/hover-tint vocabulary the nav items and
+            PillButton already use elsewhere, not a new pattern. */}
+        <div className="border-t border-surface-alt p-3">
+          <div className="flex items-center gap-2.5 rounded-lg bg-surface-alt/70 p-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[12px] font-extrabold text-primary">
+              {(user?.fullName ?? '').trim().slice(0, 2)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12.5px] font-bold text-ink">{user?.fullName}</p>
+              <p className="truncate text-[10.5px] text-ink-faint">
+                {roleName}
+                {stationName ? ` · ${stationName}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <NavLink
+              to="/change-password"
+              className="flex items-center justify-center gap-1.5 rounded-full bg-surface-alt py-2 text-[11px] font-bold text-ink-soft transition hover:bg-primary-100 hover:text-primary"
+            >
+              <Icon d={ICONS.lock} />
+              كلمة المرور
             </NavLink>
-            <button type="button" onClick={() => logout()} className="hover:text-danger">
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2 text-[11px] font-bold text-danger transition hover:bg-danger hover:text-white"
+            >
+              <Icon d={ICONS.logout} />
               خروج
             </button>
           </div>
@@ -307,29 +322,34 @@ export function Layout() {
               </button>
             </div>
 
+            <NavGroup title="" items={navItems.filter((i) => i.to === '/')} onNavigate={setSheetOpen} />
             <NavGroup title="التسجيل والمتابعة" items={navItems.filter((i) => ['/fillups/new', '/reports/daily', '/reports/violations', '/reports/dashboard'].includes(i.to))} onNavigate={setSheetOpen} />
             <NavGroup title="السجلات" items={navItems.filter((i) => ['/vehicles', '/stations', '/vehicles/change-requests'].includes(i.to))} onNavigate={setSheetOpen} />
             <NavGroup title="الإدارة" items={navItems.filter((i) => i.to === '/admin')} onNavigate={setSheetOpen} />
 
-            <div className="mt-3 space-y-0.5 border-t border-surface-alt pt-3">
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-surface-alt pt-3">
               <NavLink
                 to="/change-password"
                 onClick={() => setSheetOpen(false)}
-                className="block rounded-full px-3.5 py-2.5 text-[12.5px] font-bold text-ink-soft hover:bg-surface-alt"
+                className="flex items-center justify-center gap-1.5 rounded-full bg-surface-alt py-2.5 text-[12px] font-bold text-ink-soft"
               >
-                تغيير كلمة المرور
+                <Icon d={ICONS.lock} />
+                كلمة المرور
               </NavLink>
               <button
                 type="button"
                 onClick={() => closeSheetAnd(() => logout())}
-                className="block w-full rounded-full px-3.5 py-2.5 text-start text-[12.5px] font-bold text-danger hover:bg-danger-100"
+                className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2.5 text-[12px] font-bold text-danger"
               >
+                <Icon d={ICONS.logout} />
                 خروج
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <OnboardingTour />
     </div>
   );
 }
@@ -338,12 +358,13 @@ function NavGroup({ title, items, onNavigate }: { title: string; items: NavItem[
   if (items.length === 0) return null;
   return (
     <div className="mb-3">
-      <p className="mb-1 px-3.5 text-[10.5px] font-extrabold uppercase tracking-wide text-ink-faint">{title}</p>
+      {title && <p className="mb-1 px-3.5 text-[10.5px] font-extrabold uppercase tracking-wide text-ink-faint">{title}</p>}
       <div className="space-y-0.5">
         {items.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.to === '/' || item.to === '/vehicles' || item.to === '/stations'}
             onClick={() => onNavigate(false)}
             className={({ isActive }) =>
               `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[12.5px] font-bold ${

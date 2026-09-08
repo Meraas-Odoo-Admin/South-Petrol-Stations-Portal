@@ -22,7 +22,9 @@ export function AdminLayout() {
       <div className="flex flex-wrap items-end justify-between gap-3 bg-surface px-6 py-5 shadow-sm">
         <div>
           <h1 className="text-xl font-extrabold text-ink">الإدارة</h1>
-          <div className="text-[11px] text-ink-faint">الحسابات · إعدادات المنظومة · أنواع الاستثناءات · المحطات · سجل التغييرات</div>
+          <div className="text-[11px] text-ink-faint">
+            الحسابات · إعدادات المنظومة · أنواع الاستثناءات · أنواع المركبات · سجل التغييرات
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {hasPermission('users:manage') && (
@@ -40,9 +42,9 @@ export function AdminLayout() {
               أنواع الاستثناءات
             </NavLink>
           )}
-          {hasPermission('stations:manage') && (
-            <NavLink to="/admin/stations" className={tabClass}>
-              المحطات
+          {hasPermission('vehicle_types:manage') && (
+            <NavLink to="/admin/vehicle-types" className={tabClass}>
+              أنواع المركبات
             </NavLink>
           )}
           {hasPermission('audit:view') && (
