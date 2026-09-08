@@ -6,7 +6,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { IdentityType } from '@prisma/client';
-import { ADMINISTRATIVE_ID_REGEX, NATIONAL_ID_REGEX } from './libyan-formats';
+import { ADMINISTRATIVE_ID_REGEX, DRIVERS_LICENSE_REGEX, NATIONAL_ID_REGEX } from './libyan-formats';
 
 // A driver's identityNumber format depends on the sibling identityType
 // field (national ID vs. administrative ID use different 12-digit
@@ -25,13 +25,16 @@ class IsValidIdentityNumberConstraint implements ValidatorConstraintInterface {
     if (identityType === IdentityType.ADMINISTRATIVE_ID) {
       return ADMINISTRATIVE_ID_REGEX.test(value);
     }
+    if (identityType === IdentityType.DRIVERS_LICENSE) {
+      return DRIVERS_LICENSE_REGEX.test(value);
+    }
     // identityType itself is invalid — @IsEnum on that field reports it;
     // don't also fail this field with a confusing message.
     return true;
   }
 
   defaultMessage(): string {
-    return 'identityNumber must be 12 digits starting with 1 or 2 (national ID) or 9 (administrative ID), matching identityType.';
+    return 'identityNumber must be 12 digits starting with 1 or 2 (national ID), 9 (administrative ID), or 4-20 alphanumeric characters (drivers license — unconfirmed format), matching identityType.';
   }
 }
 

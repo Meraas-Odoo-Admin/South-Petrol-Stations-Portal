@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient';
 import { formatLicensePlate, normalizePlateSearchTerm } from '../../lib/libyanFormats';
@@ -7,9 +7,21 @@ import { PrevNext } from '../../components/PrevNext';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
+import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
+import { KpiCard } from '../../components/design/KpiCard';
+import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
+import { Icon, ICONS } from '../../components/icons';
 import { useAuth } from '../auth/AuthProvider';
-import { USAGE_TYPE_LABELS, usageTypeLabel, CHANGE_NOT_YET_EFFECTIVE } from '../../lib/labels';
+import { VehicleCreateForm } from './VehicleCreateForm';
+import {
+  identityTypeLabel,
+  isProvisionalOwnerIdentity,
+  PROVISIONAL_OWNER_LABEL,
+  PROVISIONAL_OWNER_VARIANT,
+  CHANGE_NOT_YET_EFFECTIVE,
+} from '../../lib/labels';
+import { VEHICLE_BRANDS } from '../../lib/vehicleBrands';
 import type { VehicleBasicInfo } from './types';
 
 const TAKE = 20;
@@ -19,19 +31,65 @@ interface PendingChangeSummary {
   reason: string;
 }
 
+// Round 11 item 2: verified vs. provisional vs. no owner at all — ties
+// directly to item 1's mandatory-owner change ("which vehicles still need
+// their owner's real ID"). Mirrors OwnerIdentityStatusFilter in
+// apps/api/src/vehicles/dto/find-vehicles-query.dto.ts.
+type OwnerIdentityStatusFilter = 'VERIFIED' | 'PROVISIONAL' | 'MISSING';
+const OWNER_IDENTITY_STATUS_LABELS: Record<OwnerIdentityStatusFilter, string> = {
+  VERIFIED: 'هوية موثّقة',
+  PROVISIONAL: 'هوية مؤقتة',
+  MISSING: 'بلا مالك',
+};
+
+type VehicleSortField = 'CREATED_AT' | 'INTERNAL_CODE' | 'CURRENT_PLATE';
+const SORT_LABELS: Record<VehicleSortField, string> = {
+  CREATED_AT: 'الأحدث أولًا',
+  INTERNAL_CODE: 'الرمز الداخلي',
+  CURRENT_PLATE: 'رقم اللوحة',
+};
+
 // Matches design 5a (desktop table) + 5b (mobile card list). GET /vehicles
 // isn't station-scoped (vehicles are a directorate-wide registry), so this
 // lists every vehicle vehicles:read allows — same as before this rebuild.
-// The usageType filter is applied client-side over the loaded page rather
-// than as a new backend query param: FindVehiclesQueryDto doesn't support
-// it, and adding a server-side filter is out of scope for a visual pass.
+// Round 11 item 2: usage-type/brand/owner-identity-status filters and
+// sorting all moved server-side now that this is a real filters/sorting
+// pass — usageType used to be client-side-only over one loaded page, an
+// explicit prior scope cut (see FindVehiclesQueryDto/VehiclesService.
+// findAll), reconsidered deliberately per the round's own instruction
+// rather than just inherited. A station filter was asked for too, but
+// Vehicle has no direct station relation (vehicles are a directorate-wide
+// registry, not station-scoped) — what "this vehicle's station" would
+// even mean (e.g. derived from its fill-up history?) isn't something this
+// round picked unilaterally; flagged in docs/OPEN_ITEMS.md instead of a
+// filter that quietly does the wrong thing.
 export function VehiclesListPage() {
   const { hasPermission } = useAuth();
+  const queryClient = useQueryClient();
   const canSeeChangeRequests = hasPermission('vehicles:approve_change');
+  // Client feedback: "All users should be able to add a new vehicle
+  // profile with all of its information from the المركبات screen, so that
+  // if it is a busy station one employee starts creating profiles and the
+  // other employee does the fill ups." Gated on vehicles:manage — same
+  // permission the inline fill-up-flow's "add new vehicle" already uses —
+  // not "all users" literally, since creating a vehicle is still a
+  // permissioned action; every role that can record a fill-up now also
+  // holds vehicles:manage (see seed.ts), so in practice every station
+  // employee can reach this.
+  const canCreateVehicle = hasPermission('vehicles:manage');
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [skip, setSkip] = useState(0);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [usageFilter, setUsageFilter] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState('');
+  const [ownerStatusFilter, setOwnerStatusFilter] = useState<OwnerIdentityStatusFilter | ''>('');
+  const [sort, setSort] = useState<VehicleSortField>('CREATED_AT');
+
+  const { data: vehicleTypes } = useQuery({
+    queryKey: ['vehicle-types'],
+    queryFn: async () => (await apiClient.get<{ id: string; name: string; isActive: boolean }[]>('/vehicle-types')).data,
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -42,11 +100,19 @@ export function VehiclesListPage() {
   }, [query]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['vehicles', 'list', skip, debounced],
+    queryKey: ['vehicles', 'list', skip, debounced, brandFilter, vehicleTypeFilter, ownerStatusFilter, sort],
     queryFn: async () =>
       (
         await apiClient.get<VehicleBasicInfo[]>('/vehicles', {
-          params: { skip, take: TAKE, search: debounced || undefined },
+          params: {
+            skip,
+            take: TAKE,
+            search: debounced || undefined,
+            brand: brandFilter || undefined,
+            vehicleTypeId: vehicleTypeFilter || undefined,
+            ownerIdentityStatus: ownerStatusFilter || undefined,
+            sort,
+          },
         })
       ).data,
   });
@@ -75,30 +141,153 @@ export function VehiclesListPage() {
     return map;
   }, [pendingChangesQuery.data]);
 
-  const filtered = useMemo(() => {
-    if (!data) return data;
-    if (!usageFilter) return data;
-    return data.filter((v) => v.usageType === usageFilter);
-  }, [data, usageFilter]);
+  // Round 11 item 2: filtering moved server-side (see the useQuery above) —
+  // `filtered` is now just `data` itself, kept as the JSX's own local name
+  // rather than renaming every usage below.
+  const filtered = data;
 
   const selectClass =
     'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   return (
     <div>
-      <PageHeader title="المركبات" subtitle={data ? `${data.length} مركبة في هذه الصفحة` : undefined} />
+      <PageHeader
+        title="المركبات"
+        subtitle={data ? `${data.length} مركبة في هذه الصفحة` : undefined}
+        actions={
+          canCreateVehicle ? (
+            <PillButton size="sm" onClick={() => setShowCreateForm((s) => !s)}>
+              {showCreateForm ? 'إلغاء' : 'مركبة جديدة +'}
+            </PillButton>
+          ) : undefined
+        }
+      />
+
+      {/* Round 16: a quick-glance KPI strip — the page felt flat with
+          nothing but a bare table under the header. Every figure here is
+          real, not fabricated: the fleet has no single "total" endpoint
+          today (GET /vehicles returns a page, not a count), so this
+          deliberately labels itself "في هذه الصفحة" rather than implying a
+          directorate-wide total it can't actually back up; the pending
+          change-request count IS a real global figure (its own query
+          already fetches every pending request, not just this page's). */}
+      {data && (
+        <div className="mb-4 grid animate-fade-in-up grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <KpiCard label="في هذه الصفحة" value={data.length} />
+          <KpiCard
+            label="هوية مؤقتة"
+            value={data.filter((v) => v.owner && isProvisionalOwnerIdentity(v.owner.identityType)).length}
+            variant={data.some((v) => v.owner && isProvisionalOwnerIdentity(v.owner.identityType)) ? 'accent' : 'neutral'}
+          />
+          <KpiCard label="بلا مالك" value={data.filter((v) => !v.owner).length} />
+          {canSeeChangeRequests && (
+            <KpiCard
+              label="طلبات تعديل بانتظار الاعتماد"
+              value={pendingChangesQuery.data?.length ?? 0}
+              variant={(pendingChangesQuery.data?.length ?? 0) > 0 ? 'accent' : 'neutral'}
+            />
+          )}
+        </div>
+      )}
+
+      {showCreateForm && (
+        <div className="mb-4 animate-scale-in">
+          <VehicleCreateForm
+            onCreated={() => {
+              setShowCreateForm(false);
+              queryClient.invalidateQueries({ queryKey: ['vehicles', 'list'] });
+            }}
+            onCancel={() => setShowCreateForm(false)}
+          />
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ابحث برقم اللوحة أو الرمز الداخلي"
-          dir="ltr"
-          className="h-9 w-full rounded-sm bg-surface px-3 text-end text-[12.5px] text-ink shadow-sm focus:outline-none focus:ring-2 focus:ring-accent sm:w-72"
-        />
-        <select value={usageFilter} onChange={(e) => setUsageFilter(e.target.value)} className={selectClass}>
-          <option value="">كل أنواع الاستخدام</option>
-          {Object.entries(USAGE_TYPE_LABELS).map(([value, label]) => (
+        <div className="relative w-full sm:w-72">
+          {/* This input carries dir="ltr" (typed plate/ID digits read
+              left-to-right) inside an otherwise-rtl page — CSS logical
+              padding/inset utilities resolve against an element's OWN
+              direction, not the page's, so an icon positioned that way on
+              this non-dir'd sibling span would land on the wrong physical
+              side (the exact bug already fixed once on DateField's calendar
+              icon). Explicit physical right/pr utilities sidestep it. */}
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-ink-faint">
+            <Icon d={ICONS.search} size={15} />
+          </span>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+            }}
+            placeholder="ابحث برقم اللوحة أو الرمز الداخلي أو الشاسيه أو اسم/رقم هوية المالك"
+            dir="ltr"
+            className="h-9 w-full rounded-sm bg-surface pl-3 pr-9 text-end text-[12.5px] text-ink shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+        </div>
+        {/* Round 14: the "usage type" filter was removed alongside the
+            field itself — see the vehicle-type filter below, which is now
+            the only "type" concept the app collects. */}
+        <select
+          value={brandFilter}
+          onChange={(e) => {
+            setBrandFilter(e.target.value);
+            setSkip(0);
+          }}
+          className={selectClass}
+        >
+          <option value="">كل الماركات</option>
+          {/* A-Z, same reasoning as VehicleBrandPicker's own sort — the
+              source array stays organized by category, sorted only here
+              for display. */}
+          {[...VEHICLE_BRANDS]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((brand) => (
+              <option key={brand.name} value={brand.name}>
+                {brand.name}
+              </option>
+            ))}
+        </select>
+        <select
+          value={vehicleTypeFilter}
+          onChange={(e) => {
+            setVehicleTypeFilter(e.target.value);
+            setSkip(0);
+          }}
+          className={selectClass}
+        >
+          <option value="">كل أنواع المركبات</option>
+          {vehicleTypes
+            ?.filter((t) => t.isActive)
+            .map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+        </select>
+        <select
+          value={ownerStatusFilter}
+          onChange={(e) => {
+            setOwnerStatusFilter(e.target.value as OwnerIdentityStatusFilter | '');
+            setSkip(0);
+          }}
+          className={selectClass}
+        >
+          <option value="">كل حالات هوية المالك</option>
+          {(Object.entries(OWNER_IDENTITY_STATUS_LABELS) as [OwnerIdentityStatusFilter, string][]).map(
+            ([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ),
+          )}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as VehicleSortField)}
+          className={selectClass}
+          aria-label="الترتيب"
+        >
+          {(Object.entries(SORT_LABELS) as [VehicleSortField, string][]).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -117,23 +306,30 @@ export function VehiclesListPage() {
               <table className="w-full min-w-[720px] text-[12.5px]">
                 <thead>
                   <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
-                    <th className="px-[18px] py-2.5 text-start">الرمز الداخلي</th>
+                    <th className="px-[18px] py-2.5 text-start">المركبة</th>
                     <th className="px-[18px] py-2.5 text-start">رقم اللوحة</th>
-                    <th className="px-[18px] py-2.5 text-start">نوع الاستخدام</th>
-                    <th className="px-[18px] py-2.5 text-start">الطراز</th>
+                    <th className="px-[18px] py-2.5 text-start">نوع المركبة</th>
+                    <th className="px-[18px] py-2.5 text-start">المالك</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((vehicle) => {
+                  {filtered.map((vehicle, i) => {
                     const pending = pendingByVehicleId.get(vehicle.id);
                     return (
                       <tr
                         key={vehicle.id}
-                        className={`border-b border-surface-alt last:border-0 ${pending ? 'bg-accent-100' : ''}`}
+                        className={`animate-fade-in-up border-b border-surface-alt transition-colors last:border-0 hover:bg-surface-alt/60 ${pending ? 'bg-accent-100' : ''}`}
+                        style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
                       >
                         <td className="px-[18px] py-3">
-                          <Link to={`/vehicles/${vehicle.id}`} className="font-bold text-primary hover:underline">
-                            {vehicle.internalCode}
+                          <Link to={`/vehicles/${vehicle.id}`} className="group flex items-center gap-2.5">
+                            <VehicleBrandLogo model={vehicle.model} size={34} />
+                            <span className="min-w-0">
+                              <span className="block font-bold text-primary group-hover:underline">
+                                {vehicle.internalCode}
+                              </span>
+                              <span className="block text-[11px] text-ink-faint">{vehicle.model ?? 'طراز غير محدَّد'}</span>
+                            </span>
                           </Link>
                         </td>
                         <td className="px-[18px] py-3">
@@ -145,8 +341,24 @@ export function VehiclesListPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-[18px] py-3 text-ink">{usageTypeLabel(vehicle.usageType)}</td>
-                        <td className="px-[18px] py-3 text-ink">{vehicle.model ?? '—'}</td>
+                        <td className="px-[18px] py-3 text-ink">{vehicle.vehicleType?.name ?? '—'}</td>
+                        <td className="px-[18px] py-3 text-ink">
+                          {vehicle.owner ? (
+                            <>
+                              {vehicle.owner.fullName}
+                              <span className="ms-1.5 text-[11px] text-ink-faint">
+                                ({identityTypeLabel(vehicle.owner.identityType)})
+                              </span>
+                              {isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
+                                <div className="mt-1">
+                                  <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -164,23 +376,43 @@ export function VehiclesListPage() {
 
           {/* Mobile card list (5b) */}
           <div className="flex flex-col gap-2.5 sm:hidden">
-            {filtered.map((vehicle) => {
+            {filtered.map((vehicle, i) => {
               const pending = pendingByVehicleId.get(vehicle.id);
               return (
-                <Link key={vehicle.id} to={`/vehicles/${vehicle.id}`}>
-                  <Card className={`p-4 ${pending ? 'border-s-4 border-accent' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[14px] font-extrabold text-ink">{vehicle.internalCode}</span>
-                      {pending && <StatusPill variant="accent">{CHANGE_NOT_YET_EFFECTIVE}</StatusPill>}
-                    </div>
-                    <div className="mt-1.5 text-[13px] font-bold text-ink-soft">
-                      <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>
+                <Link
+                  key={vehicle.id}
+                  to={`/vehicles/${vehicle.id}`}
+                  className="animate-fade-in-up block"
+                  style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
+                >
+                  <Card
+                    className={`p-4 transition-transform active:scale-[0.98] ${pending ? 'border-s-4 border-accent' : ''}`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <VehicleBrandLogo model={vehicle.model} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[14px] font-extrabold text-ink">{vehicle.internalCode}</span>
+                          {pending && <StatusPill variant="accent">{CHANGE_NOT_YET_EFFECTIVE}</StatusPill>}
+                        </div>
+                        <div className="text-[13px] font-bold text-ink-soft">
+                          <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>
+                        </div>
+                      </div>
                     </div>
                     <div className="mt-2 flex items-center gap-2 text-[11.5px] text-ink-faint">
-                      <span>{usageTypeLabel(vehicle.usageType)}</span>
+                      <span>{vehicle.vehicleType?.name ?? '—'}</span>
                       <span>·</span>
                       <span>{vehicle.model ?? '—'}</span>
                     </div>
+                    <div className="mt-1.5 text-[11.5px] text-ink-soft">
+                      المالك: {vehicle.owner ? vehicle.owner.fullName : '—'}
+                    </div>
+                    {vehicle.owner && isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
+                      <div className="mt-1">
+                        <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
+                      </div>
+                    )}
                     {pending && <p className="mt-2 text-[11.5px] text-ink-soft">{pending.reason}</p>}
                   </Card>
                 </Link>

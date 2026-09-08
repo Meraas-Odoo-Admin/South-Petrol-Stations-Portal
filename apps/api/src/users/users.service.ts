@@ -59,6 +59,7 @@ export class UsersService {
       include: {
         roles: { include: { role: true } },
         stationScope: { include: { station: true } },
+        directPermissions: { include: { permission: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -71,6 +72,7 @@ export class UsersService {
       include: {
         roles: { include: { role: true } },
         stationScope: { include: { station: true } },
+        directPermissions: { include: { permission: true } },
       },
     });
     if (!user) {
@@ -157,6 +159,62 @@ export class UsersService {
       );
     });
 
+    return this.findOne(userId);
+  }
+
+  // Round 12: grant/revoke a Permission directly to this ONE user,
+  // independent of their roles — see UserPermission's schema comment. Same
+  // upsert/deleteMany + audit + invalidate shape as assignRole/removeRole
+  // above, since it's the same kind of "add/remove one join row" operation.
+  async grantPermission(userId: string, permissionId: string, actorId: string) {
+    await this.ensureUserExists(userId);
+    const permission = await this.prisma.permission.findUnique({ where: { id: permissionId } });
+    if (!permission) {
+      throw new NotFoundException('Permission not found.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPermission.upsert({
+        where: { userId_permissionId: { userId, permissionId } },
+        create: { userId, permissionId, grantedById: actorId },
+        update: {},
+      });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'GRANT_PERMISSION',
+          entityType: 'User',
+          entityId: userId,
+          newValue: { permissionId, permissionKey: permission.key },
+        },
+        tx,
+      );
+    });
+
+    this.rbac.invalidate(userId);
+    return this.findOne(userId);
+  }
+
+  async revokePermission(userId: string, permissionId: string, actorId: string) {
+    await this.ensureUserExists(userId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPermission.deleteMany({ where: { userId, permissionId } });
+
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'REVOKE_PERMISSION',
+          entityType: 'User',
+          entityId: userId,
+          oldValue: { permissionId },
+        },
+        tx,
+      );
+    });
+
+    this.rbac.invalidate(userId);
     return this.findOne(userId);
   }
 

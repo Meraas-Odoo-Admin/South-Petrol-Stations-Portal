@@ -59,7 +59,16 @@ export class VehiclesController {
     return this.vehicles.update(id, dto, actor.id);
   }
 
-  @RequirePermission('vehicles:manage')
+  // Round 14: this used to be gated on vehicles:manage — fine while only
+  // supervisor-tier roles held that permission, but station_employee was
+  // granted vehicles:manage in round 13 (so employees can create vehicle
+  // profiles), which would have let an ordinary employee change a plate
+  // directly with zero approval — exactly what the client now wants
+  // gated. Restricted to vehicles:approve_change (supervisor/directorate-
+  // admin/system-admin) for a genuinely-urgent direct correction; an
+  // employee goes through POST /vehicles/:id/change-requests
+  // (PLATE_CHANGE) instead, gated on vehicles:request_change.
+  @RequirePermission('vehicles:approve_change')
   @Post(':id/plate-change')
   changePlate(
     @Param('id') id: string,

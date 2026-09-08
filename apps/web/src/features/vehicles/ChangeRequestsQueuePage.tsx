@@ -78,7 +78,7 @@ export function ChangeRequestsQueuePage() {
   return (
     <div>
       <PageHeader
-        title="طلبات تعديل هوية المركبة"
+        title="طلبات تعديل بيانات المركبة"
         actions={
           <select
             value={statusFilter}

@@ -42,6 +42,12 @@ export class RbacService {
         roles: {
           include: { role: { include: { permissions: { include: { permission: true } } } } },
         },
+        // Round 12: a permission can also be granted directly to this
+        // specific user, independent of their roles (see UserPermission's
+        // schema comment) — "given to certain users they pick, not per
+        // role". Always ADDITIVE on top of role-derived permissions below,
+        // never a narrower override.
+        directPermissions: { include: { permission: true } },
       },
     });
 
@@ -55,6 +61,9 @@ export class RbacService {
         for (const rolePermission of userRole.role.permissions) {
           permissions.add(rolePermission.permission.key);
         }
+      }
+      for (const userPermission of user.directPermissions) {
+        permissions.add(userPermission.permission.key);
       }
     }
 

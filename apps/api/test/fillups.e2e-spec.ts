@@ -30,14 +30,17 @@ describe('Fill-ups (e2e)', () => {
 
   const usernameRecorder = `e2e_fu_recorder_${runId}`;
   const usernameRecorderOtherStation = `e2e_fu_recorder_other_${runId}`;
+  const usernameRecorderNoException = `e2e_fu_recorder_noexception_${runId}`;
   const usernameApprover = `e2e_fu_approver_${runId}`;
   const usernameNoPerm = `e2e_fu_noperm_${runId}`;
 
   let recorderUserId: string;
   let recorderOtherStationUserId: string;
+  let recorderNoExceptionUserId: string;
   let approverUserId: string;
   let noPermUserId: string;
   let recorderRoleId: string;
+  let recorderNoExceptionRoleId: string;
   let approverRoleId: string;
 
   let company: { id: string };
@@ -138,12 +141,36 @@ describe('Fill-ups (e2e)', () => {
       create: { key: 'fillups:approve_exception' },
       update: {},
     });
+    // Round 12: exception recording is now gated by its own permission,
+    // separate from fillups:create, and a holder of it is auto-approved at
+    // creation (no pending queue) — see FillUpsService.create.
+    const recordExceptionPermission = await prisma.permission.upsert({
+      where: { key: 'fillups:record_exception' },
+      create: { key: 'fillups:record_exception' },
+      update: {},
+    });
 
     // Deliberately scoped (unrestrictedStationAccess: false) — the
     // station-scope check in FillUpsService.create is exercised below.
     const recorderRole = await prisma.role.create({ data: { name: `e2e_fu_recorder_role_${runId}` } });
     recorderRoleId = recorderRole.id;
-    await prisma.rolePermission.create({ data: { roleId: recorderRole.id, permissionId: createPermission.id } });
+    await prisma.rolePermission.createMany({
+      data: [
+        { roleId: recorderRole.id, permissionId: createPermission.id },
+        { roleId: recorderRole.id, permissionId: recordExceptionPermission.id },
+      ],
+    });
+
+    // Holds fillups:create but deliberately NOT fillups:record_exception —
+    // proves the exception-recording gate is enforced independently of
+    // being able to record a normal fill-up at all.
+    const recorderNoExceptionRole = await prisma.role.create({
+      data: { name: `e2e_fu_recorder_noexception_role_${runId}` },
+    });
+    recorderNoExceptionRoleId = recorderNoExceptionRole.id;
+    await prisma.rolePermission.create({
+      data: { roleId: recorderNoExceptionRole.id, permissionId: createPermission.id },
+    });
 
     const approverRole = await prisma.role.create({ data: { name: `e2e_fu_approver_role_${runId}` } });
     approverRoleId = approverRole.id;
@@ -180,12 +207,29 @@ describe('Fill-ups (e2e)', () => {
     // other tests' exceptions are actually recorded (stationA).
     await prisma.userStationScope.create({ data: { userId: approverUser.id, stationId: stationA.id } });
 
+    // Round 12: fillups:create but NOT fillups:record_exception — proves
+    // exception recording is gated independently.
+    const recorderNoExceptionUser = await createUser(usernameRecorderNoException);
+    recorderNoExceptionUserId = recorderNoExceptionUser.id;
+    await prisma.userRole.create({
+      data: { userId: recorderNoExceptionUser.id, roleId: recorderNoExceptionRoleId },
+    });
+    await prisma.userStationScope.create({
+      data: { userId: recorderNoExceptionUser.id, stationId: stationA.id },
+    });
+
     const noPermUser = await createUser(usernameNoPerm);
     noPermUserId = noPermUser.id;
   }, 30_000);
 
   afterAll(async () => {
-    const allUserIds = [recorderUserId, recorderOtherStationUserId, approverUserId, noPermUserId];
+    const allUserIds = [
+      recorderUserId,
+      recorderOtherStationUserId,
+      recorderNoExceptionUserId,
+      approverUserId,
+      noPermUserId,
+    ];
     // FillUpTransaction.recordedById references User — must go before the
     // user rows are deleted, not after.
     await prisma.exception.deleteMany({ where: { fillUpTransaction: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } } });
@@ -195,8 +239,10 @@ describe('Fill-ups (e2e)', () => {
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
-    await prisma.rolePermission.deleteMany({ where: { roleId: { in: [recorderRoleId, approverRoleId] } } });
-    await prisma.role.deleteMany({ where: { id: { in: [recorderRoleId, approverRoleId] } } });
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: { in: [recorderRoleId, recorderNoExceptionRoleId, approverRoleId] } },
+    });
+    await prisma.role.deleteMany({ where: { id: { in: [recorderRoleId, recorderNoExceptionRoleId, approverRoleId] } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
     await prisma.station.deleteMany({ where: { id: { in: [stationA.id, stationB.id] } } });
@@ -220,6 +266,7 @@ describe('Fill-ups (e2e)', () => {
 
   const loginAsRecorder = () => login(usernameRecorder);
   const loginAsRecorderOtherStation = () => login(usernameRecorderOtherStation);
+  const loginAsRecorderNoException = () => login(usernameRecorderNoException);
   const loginAsApprover = () => login(usernameApprover);
   const loginAsNoPerm = () => login(usernameNoPerm);
 
@@ -473,32 +520,79 @@ describe('Fill-ups (e2e)', () => {
       .expect(201);
     expect(exceptionRes.body.isException).toBe(true);
     expect(exceptionRes.body.exception).toBeDefined();
-    expect(exceptionRes.body.exception.approvedById).toBeNull();
+    // Round 12: recorderUser holds fillups:record_exception, so this
+    // exception is auto-approved by the recorder themselves at creation —
+    // "I don't want them to be approved by the supervisor or admin, I just
+    // want them go as exception" (client's own framing). No pending state
+    // for this row at all, ever.
+    expect(exceptionRes.body.exception.approvedById).toBe(recorderUserId);
     expect(exceptionRes.body.exception.reason).toBe(
       'E2E test: over weekly cap, directorate-approved exception',
     );
     const fillUpId = exceptionRes.body.id;
 
-    // Approving requires fillups:approve_exception — the recorder (who only
-    // has fillups:create) cannot approve their own exception.
+    // The approve endpoint's own guard (fillups:approve_exception) is
+    // still enforced independent of the exception's current state — the
+    // recorder (fillups:create + fillups:record_exception, but not
+    // fillups:approve_exception) still can't call it.
     await request(server)
       .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(403);
 
+    // An approver CAN reach the endpoint (permission-wise) but this
+    // exception is already approved — conflict, not a silent no-op or a
+    // second approval.
     const approverToken = await loginAsApprover();
-    const approveRes = await request(server)
-      .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
-      .set('Authorization', `Bearer ${approverToken}`)
-      .expect(201);
-    expect(approveRes.body.exception.approvedById).toBe(approverUserId);
-
-    // Approving an already-approved exception is a conflict, not a silent
-    // no-op or a second approval.
     await request(server)
       .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
       .set('Authorization', `Bearer ${approverToken}`)
       .expect(409);
+  });
+
+  // ── fillups:record_exception permission gate (round 12) ──────────────
+
+  it('blocks an actor with fillups:create but not fillups:record_exception from submitting an exception, while normal fill-ups still work', async () => {
+    const server = app.getHttpServer();
+    const accessToken = await loginAsRecorderNoException();
+
+    // Dedicated fresh vehicle — isolated from every other vehicle's
+    // fill-up history built up by earlier tests, so the "normal fill-up"
+    // assertion below isn't accidentally rejected by the gap/cap rules
+    // instead of genuinely succeeding.
+    const vehicle5 = await prisma.vehicle.create({
+      data: { internalCode: `E2E-FU-VEH-5-${runId}`, currentPlate: `E2E-FU-PLATE-5-${runId}` },
+    });
+
+    // A normal (non-exception) fill-up still succeeds — the gate is
+    // specific to exception mode, not a general fillups:create narrowing.
+    await request(server)
+      .post('/api/v1/fillups')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Idempotency-Key', `e2e-fu-noexception-normal-${runId}`)
+      .send(baseFillUpBody({ vehicleId: vehicle5.id }))
+      .expect(201);
+
+    const idempotencyKey = `e2e-fu-noexception-blocked-${runId}`;
+    await request(server)
+      .post('/api/v1/fillups')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(
+        baseFillUpBody({
+          vehicleId: vehicle5.id,
+          exceptionTypeId,
+          reason: 'E2E test: should be blocked — no fillups:record_exception',
+        }),
+      )
+      .expect(403);
+
+    const rows = await prisma.fillUpTransaction.findMany({ where: { idempotencyKey } });
+    expect(rows).toHaveLength(0);
+
+    await prisma.fillUpTransaction.deleteMany({ where: { vehicleId: vehicle5.id } });
+    await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: vehicle5.id } });
+    await prisma.vehicle.delete({ where: { id: vehicle5.id } });
   });
 
   // ── Station scoping on approve (CLAUDE.md rule 3) ────────────────────
@@ -509,28 +603,38 @@ describe('Fill-ups (e2e)', () => {
   // (SecurityAuthority-scoped approval) flagged in the method's comment —
   // this is the ordinary UserStationScope check.
 
-  it('blocks an approver scoped only to stationA from approving an exception recorded at stationB', async () => {
+  it('blocks an approver scoped only to stationA from approving a still-pending exception recorded at stationB', async () => {
     const server = app.getHttpServer();
 
-    // recorderOtherStationUser is scoped to stationB and holds
-    // fillups:create — use it to record an exception AT stationB.
-    // Exception mode bypasses the rule engine entirely, so reusing
-    // vehicle1/driver1 (which already has fill-up history from earlier
-    // tests) is safe here — no gap/cap check applies.
-    const otherStationToken = await loginAsRecorderOtherStation();
-    const stationBExceptionRes = await request(server)
-      .post('/api/v1/fillups')
-      .set('Authorization', `Bearer ${otherStationToken}`)
-      .set('Idempotency-Key', `e2e-fu-stationb-exception-${runId}`)
-      .send(
-        baseFillUpBody({
-          stationId: stationB.id,
-          exceptionTypeId,
-          reason: 'E2E test: exception recorded at stationB',
-        }),
-      )
-      .expect(201);
-    const stationBFillUpId = stationBExceptionRes.body.id;
+    // Round 12: every exception recorded through the API by a
+    // fillups:record_exception holder is now auto-approved at creation —
+    // there's no longer an API path that produces a genuinely PENDING
+    // exception (see the dedicated permission-gate test below for that
+    // behavior). A pending row is still a real, reachable state though —
+    // any Exception created before this permission existed, or by a future
+    // caller who somehow lacks the auto-approve path — so this seeds one
+    // directly via Prisma to test approveException's station-scope check,
+    // which runs on ANY pending exception regardless of how it got there.
+    const stationBFillUp = await prisma.fillUpTransaction.create({
+      data: {
+        vehicleId: vehicle1Id,
+        stationId: stationB.id,
+        fuelType: 'PETROL_95',
+        quantityLiters: 10,
+        recordedById: recorderOtherStationUserId,
+        isException: true,
+        idempotencyKey: `e2e-fu-stationb-pending-${runId}`,
+      },
+    });
+    await prisma.exception.create({
+      data: {
+        fillUpTransactionId: stationBFillUp.id,
+        exceptionTypeId,
+        reason: 'E2E test: pending exception recorded at stationB',
+        approvedById: null,
+      },
+    });
+    const stationBFillUpId = stationBFillUp.id;
 
     // approverUser is scoped to stationA ONLY — no access to stationB.
     const approverToken = await loginAsApprover();

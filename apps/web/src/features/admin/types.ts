@@ -15,6 +15,19 @@ export interface AdminUserRole {
   role: AdminRole;
 }
 
+// Round 12: a Permission can also be granted directly to one user,
+// independent of their roles — see UserPermission's schema comment.
+export interface AdminPermission {
+  id: string;
+  key: string;
+  description: string | null;
+}
+
+export interface AdminUserPermission {
+  permissionId: string;
+  permission: AdminPermission;
+}
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -25,6 +38,7 @@ export interface AdminUser {
   createdAt: string;
   roles: AdminUserRole[];
   stationScope: AdminUserStationScope[];
+  directPermissions: AdminUserPermission[];
 }
 
 export interface SystemSettingRow {

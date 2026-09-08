@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { AssignPermissionDto } from './dto/assign-permission.dto';
 import { AssignStationScopeDto } from './dto/assign-station-scope.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -49,6 +50,28 @@ export class UsersController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.users.removeRole(id, roleId, actor.id);
+  }
+
+  // Same gate as role assignment — granting a permission directly to a
+  // user is exactly as consequential as granting it via a role.
+  @RequirePermission('roles:manage')
+  @Post(':id/permissions')
+  grantPermission(
+    @Param('id') id: string,
+    @Body() dto: AssignPermissionDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.users.grantPermission(id, dto.permissionId, actor.id);
+  }
+
+  @RequirePermission('roles:manage')
+  @Delete(':id/permissions/:permissionId')
+  revokePermission(
+    @Param('id') id: string,
+    @Param('permissionId') permissionId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.users.revokePermission(id, permissionId, actor.id);
   }
 
   @RequirePermission('users:manage')

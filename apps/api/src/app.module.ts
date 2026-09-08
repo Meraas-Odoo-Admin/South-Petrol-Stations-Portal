@@ -10,9 +10,13 @@ import { RbacModule } from './rbac/rbac.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
+import { MunicipalitiesModule } from './municipalities/municipalities.module';
+import { RoutesModule } from './routes/routes.module';
+import { SecurityAuthoritiesModule } from './security-authorities/security-authorities.module';
 import { StationsModule } from './stations/stations.module';
 import { OwnersModule } from './owners/owners.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { FillUpsModule } from './fillups/fillups.module';
 import { ReportsModule } from './reports/reports.module';
@@ -39,9 +43,13 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     AuthModule,
     UsersModule,
     CompaniesModule,
+    MunicipalitiesModule,
+    RoutesModule,
+    SecurityAuthoritiesModule,
     StationsModule,
     OwnersModule,
     VehiclesModule,
+    VehicleTypesModule,
     SystemSettingsModule,
     FillUpsModule,
     ReportsModule,

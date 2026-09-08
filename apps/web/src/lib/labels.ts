@@ -19,6 +19,51 @@ export function roleLabel(roleName: string): string {
   return ROLE_LABELS[roleName] ?? roleName;
 }
 
+// Permission.key (apps/api/prisma/seed.ts's PERMISSIONS list) — round 14:
+// the per-user "صلاحيات إضافية" checkbox list in UsersAdminPage used to
+// show these raw (English) keys directly, which the client flagged as
+// something station staff won't understand. Every permission actually
+// seeded gets an entry here; a key added to the backend without a matching
+// entry here still renders (falls back to the raw key, same pattern as
+// roleLabel above) rather than crashing, but should get a real label added
+// promptly — this list is meant to stay complete.
+export const PERMISSION_LABELS: Record<string, string> = {
+  'companies:read': 'عرض الشركات',
+  'companies:manage': 'إدارة الشركات',
+  'municipalities:read': 'عرض البلديات',
+  'municipalities:manage': 'إدارة البلديات',
+  'routes:read': 'عرض خطوط السير',
+  'routes:manage': 'إدارة خطوط السير',
+  'security_authorities:read': 'عرض الجهات الأمنية',
+  'security_authorities:manage': 'إدارة الجهات الأمنية',
+  'stations:read': 'عرض المحطات',
+  'stations:manage': 'إدارة المحطات',
+  'users:manage': 'إدارة الحسابات',
+  'roles:manage': 'إسناد الأدوار والصلاحيات الفردية',
+  'reports:view_all_stations': 'عرض تقارير كل المحطات',
+  'reports:view': 'عرض تقارير المحطة',
+  'owners:manage': 'إدارة بيانات ملاك المركبات',
+  'owners:reveal_identity': 'إظهار رقم هوية المالك الكامل',
+  'vehicles:manage': 'إضافة/تعديل المركبات',
+  'vehicles:read': 'عرض سجل المركبات',
+  'vehicles:request_change': 'طلب تعديل بيانات مركبة (يتطلب اعتمادًا)',
+  'vehicles:approve_change': 'اعتماد طلبات تعديل بيانات المركبات',
+  'vehicle_types:read': 'عرض أنواع المركبات',
+  'vehicle_types:manage': 'إدارة أنواع المركبات',
+  'fillups:create': 'تسجيل تعبئة',
+  'fillups:update': 'تعديل تعبئة (غير مفعّلة حاليًا)',
+  'fillups:record_exception': 'تسجيل تعبئة كاستثناء دون موافقة',
+  'fillups:approve_exception': 'اعتماد استثناء تعبئة',
+  'settings:manage': 'إدارة إعدادات المنظومة',
+  'audit:view': 'عرض سجل التغييرات',
+  'exception_types:manage': 'إدارة أنواع الاستثناءات',
+  'standing_exceptions:manage': 'منح/سحب استثناء مستمر',
+};
+
+export function permissionLabel(key: string): string {
+  return PERMISSION_LABELS[key] ?? key;
+}
+
 // Vehicle.usageType (Prisma enum VehicleUsageType).
 export const USAGE_TYPE_LABELS: Record<string, string> = {
   GOVERNMENT: 'مركبة إدارية',
@@ -62,6 +107,18 @@ export function stationStatusLabel(status: string | null | undefined): string {
   return STATION_STATUS_LABELS[status] ?? status;
 }
 
+// Station.ownershipType (Prisma enum StationOwnershipType) — fixed,
+// two-value, not Settings-managed (see the schema's own comment on why).
+export const OWNERSHIP_TYPE_LABELS: Record<string, string> = {
+  GOVERNMENT: 'حكومية',
+  PRIVATE: 'خاصة',
+};
+
+export function ownershipTypeLabel(ownershipType: string | null | undefined): string {
+  if (!ownershipType) return '—';
+  return OWNERSHIP_TYPE_LABELS[ownershipType] ?? ownershipType;
+}
+
 // Fuel types (FuelType — PETROL_95 / DIESEL / KEROSENE).
 export const FUEL_TYPE_LABELS: Record<string, string> = {
   PETROL_95: 'بنزين 95',
@@ -74,16 +131,34 @@ export function fuelTypeLabel(fuelType: string | null | undefined): string {
   return FUEL_TYPE_LABELS[fuelType] ?? fuelType;
 }
 
-// Identity type (NATIONAL_ID / ADMINISTRATIVE_ID).
+// Identity type (NATIONAL_ID / ADMINISTRATIVE_ID / DRIVERS_LICENSE).
 export const IDENTITY_TYPE_LABELS: Record<string, string> = {
   NATIONAL_ID: 'رقم وطني',
   ADMINISTRATIVE_ID: 'رقم إداري',
+  // Round 11 item 1: deliberately provisional — see
+  // VehicleOwner.identityType's schema comment and
+  // isProvisionalOwnerIdentity below.
+  DRIVERS_LICENSE: 'رخصة قيادة (مؤقت)',
 };
 
 export function identityTypeLabel(identityType: string | null | undefined): string {
   if (!identityType) return '—';
   return IDENTITY_TYPE_LABELS[identityType] ?? identityType;
 }
+
+// Round 11 item 1: a DRIVERS_LICENSE-identified owner is a one-time
+// fallback, valid only for the vehicle's first fill-up — the vehicle
+// profile stays flagged "incomplete" until a real national/administrative
+// ID replaces it. Reuses the same accent-badge language
+// STATION_STATUS_LABELS.UNVERIFIED already established for "on record but
+// needs review," rather than inventing a new visual vocabulary for
+// "incomplete."
+export function isProvisionalOwnerIdentity(identityType: string | null | undefined): boolean {
+  return identityType === 'DRIVERS_LICENSE';
+}
+
+export const PROVISIONAL_OWNER_LABEL = 'هوية مؤقتة — تحتاج مراجعة';
+export const PROVISIONAL_OWNER_VARIANT = 'accent' as const;
 
 // Generic pending/approved/rejected status wording, shared by change
 // requests and exceptions (dictionary's "حالات الاستثناء").
@@ -108,6 +183,14 @@ export const CHANGE_NOT_YET_EFFECTIVE = 'لم يسرِ بعد';
 export const VEHICLE_CHANGE_TYPE_LABELS: Record<string, string> = {
   CHASSIS_CHANGE: 'رقم الشاصي',
   BOOKLET_CHANGE: 'رقم كتيب المركبة',
+  // Round 12: rule-affecting vehicle edits route through this same
+  // approval flow now — see VehicleChangeType's schema comment.
+  OWNER_CHANGE: 'المالك',
+  // Deprecated (round 14) — kept only so a pre-existing pending/decided
+  // request of this type still renders a real label instead of a raw key.
+  USAGE_TYPE_CHANGE: 'نوع الاستخدام',
+  PLATE_CHANGE: 'رقم اللوحة',
+  VEHICLE_TYPE_CHANGE: 'نوع المركبة',
 };
 
 export function vehicleChangeTypeLabel(changeType: string | null | undefined): string {

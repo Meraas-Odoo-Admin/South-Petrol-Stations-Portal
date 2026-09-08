@@ -1,10 +1,10 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { VehicleChangeType } from '@prisma/client';
+import { Prisma, VehicleChangeType, VehicleUsageType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
-import { FindVehiclesQueryDto } from './dto/find-vehicles-query.dto';
+import { FindVehiclesQueryDto, OwnerIdentityStatusFilter, VehicleSortField } from './dto/find-vehicles-query.dto';
 import { PlateChangeDto } from './dto/plate-change.dto';
 import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
 import { RejectVehicleChangeRequestDto } from './dto/reject-change-request.dto';
@@ -12,28 +12,78 @@ import { FindChangeRequestsQueryDto } from './dto/find-change-requests-query.dto
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { resolveWeekWindowStrategy } from '../fillups/rule-engine/week-window.strategy';
 
-// The single field on Vehicle that a given changeType targets, and the
-// parallel history table/column it's tracked in once a value has been
-// approved-changed at least once. Centralizing this mapping is what keeps
-// setOrRequestChange/approveChangeRequest generic across both change
-// types instead of two near-duplicate code paths.
-const CHANGE_TYPE_FIELD: Record<VehicleChangeType, 'chassisNumber' | 'registrationBooklet'> = {
+// The single field on Vehicle that a given changeType targets, and (for the
+// @unique history-tracked fields) the parallel history table it's tracked
+// in once a value has been approved-changed at least once. Centralizing
+// this mapping is what keeps setOrRequestChange/approveChangeRequest
+// generic across every change type instead of near-duplicate code paths.
+// OWNER_CHANGE/USAGE_TYPE_CHANGE/VEHICLE_TYPE_CHANGE have no @unique
+// constraint and no history table — many vehicles legitimately share the
+// same owner/usage-type/vehicle-type, so there's nothing to conflict-check
+// or archive, only the field itself to update. USAGE_TYPE_CHANGE is
+// deprecated (round 14 — see VehicleChangeType's schema comment) but stays
+// wired here so any already-pending request of that type can still be
+// approved/rejected cleanly; ChangeRequestForm.tsx no longer offers it.
+const CHANGE_TYPE_FIELD: Record<
+  VehicleChangeType,
+  'chassisNumber' | 'registrationBooklet' | 'ownerId' | 'usageType' | 'currentPlate' | 'vehicleTypeId'
+> = {
   [VehicleChangeType.CHASSIS_CHANGE]: 'chassisNumber',
   [VehicleChangeType.BOOKLET_CHANGE]: 'registrationBooklet',
+  [VehicleChangeType.OWNER_CHANGE]: 'ownerId',
+  [VehicleChangeType.USAGE_TYPE_CHANGE]: 'usageType',
+  [VehicleChangeType.PLATE_CHANGE]: 'currentPlate',
+  [VehicleChangeType.VEHICLE_TYPE_CHANGE]: 'vehicleTypeId',
 };
+
+const UNIQUE_CHANGE_TYPES: Set<VehicleChangeType> = new Set([
+  VehicleChangeType.CHASSIS_CHANGE,
+  VehicleChangeType.BOOKLET_CHANGE,
+  VehicleChangeType.PLATE_CHANGE,
+]);
 
 // Prisma's findUnique `where` requires a literal known unique-field key —
 // a computed `{ [field]: value }` doesn't type-check against
 // VehicleWhereUniqueInput, hence the explicit branch here rather than at
-// every call site.
+// every call site. Only meaningful for the @unique fields — callers must
+// check UNIQUE_CHANGE_TYPES before invoking this for a change type with no
+// uniqueness constraint to check.
 function findVehicleByChangeValue(
   prisma: PrismaService,
   changeType: VehicleChangeType,
   value: string,
 ) {
-  return changeType === VehicleChangeType.CHASSIS_CHANGE
-    ? prisma.vehicle.findUnique({ where: { chassisNumber: value } })
-    : prisma.vehicle.findUnique({ where: { registrationBooklet: value } });
+  switch (changeType) {
+    case VehicleChangeType.CHASSIS_CHANGE:
+      return prisma.vehicle.findUnique({ where: { chassisNumber: value } });
+    case VehicleChangeType.BOOKLET_CHANGE:
+      return prisma.vehicle.findUnique({ where: { registrationBooklet: value } });
+    case VehicleChangeType.PLATE_CHANGE:
+      return prisma.vehicle.findUnique({ where: { currentPlate: value } });
+    default:
+      throw new Error(`findVehicleByChangeValue called for a non-unique changeType: ${changeType}`);
+  }
+}
+
+// A computed `{ [field]: value }` can't type-check against
+// Prisma.VehicleUpdateInput once the field union includes usageType (a real
+// enum, not a plain string like the others) — build the typed update
+// object explicitly instead of trusting the dynamic key.
+function buildChangeUpdateData(changeType: VehicleChangeType, value: string): Prisma.VehicleUpdateInput {
+  switch (changeType) {
+    case VehicleChangeType.CHASSIS_CHANGE:
+      return { chassisNumber: value };
+    case VehicleChangeType.BOOKLET_CHANGE:
+      return { registrationBooklet: value };
+    case VehicleChangeType.PLATE_CHANGE:
+      return { currentPlate: value };
+    case VehicleChangeType.OWNER_CHANGE:
+      return { owner: { connect: { id: value } } };
+    case VehicleChangeType.USAGE_TYPE_CHANGE:
+      return { usageType: value as VehicleUsageType };
+    case VehicleChangeType.VEHICLE_TYPE_CHANGE:
+      return { vehicleType: { connect: { id: value } } };
+  }
 }
 
 @Injectable()
@@ -153,26 +203,65 @@ export class VehiclesService {
     });
   }
 
+  // Round 11 item 2: real filters/sorting, not the visual-pass placeholder
+  // this used to be — usageType moved server-side (was client-side-only
+  // over one loaded page, an explicit prior scope cut, now reconsidered
+  // deliberately per the round's own instruction), plus brand and the new
+  // owner-identity-status filter (verified/provisional/missing — ties
+  // directly to item 1's mandatory-owner change). `owner` is now included
+  // in the response too — the client asked for the vehicle to read as a
+  // profile with its owner, not a bare row. Sort defaults to newest-
+  // vehicle-first (createdAt desc); internalCode/currentPlate sorting is
+  // a plain column order. Sorting by "most recent fill-up" needs an
+  // aggregate join this round didn't build — see VehicleSortField's own
+  // comment and docs/OPEN_ITEMS.md; requesting it isn't possible yet
+  // since the DTO's enum doesn't expose it, not silently ignored.
   findAll(query: FindVehiclesQueryDto) {
+    const ownerIdentityFilter: Record<OwnerIdentityStatusFilter, object> = {
+      [OwnerIdentityStatusFilter.VERIFIED]: {
+        owner: { identityType: { in: ['NATIONAL_ID', 'ADMINISTRATIVE_ID'] } },
+      },
+      [OwnerIdentityStatusFilter.PROVISIONAL]: { owner: { identityType: 'DRIVERS_LICENSE' } },
+      [OwnerIdentityStatusFilter.MISSING]: { ownerId: null },
+    };
+
+    const sortOrderBy: Record<VehicleSortField, object> = {
+      [VehicleSortField.CREATED_AT]: { createdAt: 'desc' },
+      [VehicleSortField.INTERNAL_CODE]: { internalCode: 'asc' },
+      [VehicleSortField.CURRENT_PLATE]: { currentPlate: 'asc' },
+    };
+
     return this.prisma.vehicle.findMany({
       where: {
         internalCode: query.internalCode ? { contains: query.internalCode } : undefined,
         currentPlate: query.currentPlate ? { contains: query.currentPlate } : undefined,
         chassisNumber: query.chassisNumber ? { contains: query.chassisNumber } : undefined,
+        usageType: query.usageType,
+        model: query.brand ? { equals: query.brand } : undefined,
+        vehicleTypeId: query.vehicleTypeId,
+        ...(query.ownerIdentityStatus ? ownerIdentityFilter[query.ownerIdentityStatus] : {}),
         // Independent OR search — a caller who doesn't know whether their
-        // typed term is an internal code or a plate (the "find this
-        // vehicle" use case from the fill-up form / lookup search) needs
-        // both tried, not ANDed against the precise fields above.
+        // typed term is an internal code, plate, chassis number, or the
+        // owner's own name/ID (the "find this vehicle or its owner" use
+        // case from this list and the fill-up form's lookup search) needs
+        // all of them tried, not ANDed against the precise fields above.
         OR: query.search
           ? [
               { internalCode: { contains: query.search, mode: 'insensitive' } },
               { currentPlate: { contains: query.search, mode: 'insensitive' } },
+              { chassisNumber: { contains: query.search, mode: 'insensitive' } },
+              { owner: { fullName: { contains: query.search, mode: 'insensitive' } } },
+              { owner: { identityNumber: { contains: query.search } } },
             ]
           : undefined,
       },
+      include: {
+        owner: { select: { id: true, fullName: true, identityType: true, identityNumber: true, phone: true } },
+        vehicleType: { select: { id: true, name: true } },
+      },
       skip: query.skip,
       take: query.take,
-      orderBy: { createdAt: 'asc' },
+      orderBy: sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT],
     });
   }
 
@@ -198,7 +287,8 @@ export class VehiclesService {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id },
       include: {
-        owner: { select: { id: true, fullName: true, identityType: true, identityNumber: true } },
+        owner: { select: { id: true, fullName: true, identityType: true, identityNumber: true, phone: true } },
+        vehicleType: { select: { id: true, name: true } },
         plateHistory: { orderBy: { validFrom: 'asc' } },
       },
     });
@@ -208,15 +298,17 @@ export class VehiclesService {
     return vehicle;
   }
 
+  // Cosmetic-only — every field that actually feeds FillUpRuleEngine, or
+  // could plausibly need to (see VehicleChangeType's schema comment), is
+  // no longer accepted here at all (UpdateVehicleDto no longer declares
+  // them, and the global ValidationPipe's forbidNonWhitelisted:true rejects
+  // one outright if a caller still sends it). Round 12 moved ownerId/
+  // usageType off this path; round 14 also moved vehicleTypeId off it —
+  // the client asked that changing a vehicle's type require the same
+  // approval as chassis/booklet/plate/owner, so it now only travels
+  // through POST /vehicles/:id/change-requests (VEHICLE_TYPE_CHANGE).
   async update(id: string, dto: UpdateVehicleDto, actorId: string) {
     const before = await this.findOne(id);
-
-    if (dto.ownerId) {
-      const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: dto.ownerId } });
-      if (!owner) {
-        throw new NotFoundException('Vehicle owner not found.');
-      }
-    }
 
     return this.prisma.$transaction(async (tx) => {
       const vehicle = await tx.vehicle.update({ where: { id }, data: dto });
@@ -227,8 +319,8 @@ export class VehiclesService {
           action: 'UPDATE',
           entityType: 'Vehicle',
           entityId: vehicle.id,
-          oldValue: { ownerId: before.ownerId, usageType: before.usageType },
-          newValue: { ownerId: vehicle.ownerId, usageType: vehicle.usageType },
+          oldValue: { model: before.model, color: before.color, manufactureYear: before.manufactureYear },
+          newValue: { model: vehicle.model, color: vehicle.color, manufactureYear: vehicle.manufactureYear },
         },
         tx,
       );
@@ -319,22 +411,49 @@ export class VehiclesService {
       throw new ConflictException('requestedValue is the same as the current value.');
     }
 
-    const existing = await findVehicleByChangeValue(this.prisma, dto.changeType, dto.requestedValue);
-    if (existing) {
-      throw new ConflictException(`${field} is already in use by another vehicle.`);
+    if (dto.changeType === VehicleChangeType.OWNER_CHANGE) {
+      const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: dto.requestedValue } });
+      if (!owner) {
+        throw new NotFoundException('Vehicle owner not found.');
+      }
     }
+    if (dto.changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
+      const vehicleType = await this.prisma.vehicleType.findUnique({ where: { id: dto.requestedValue } });
+      if (!vehicleType) {
+        throw new NotFoundException('Vehicle type not found.');
+      }
+    }
+
+    if (UNIQUE_CHANGE_TYPES.has(dto.changeType)) {
+      const existing = await findVehicleByChangeValue(this.prisma, dto.changeType, dto.requestedValue);
+      if (existing) {
+        throw new ConflictException(`${field} is already in use by another vehicle.`);
+      }
+    }
+
+    const FIRST_SET_ACTION: Record<VehicleChangeType, string> = {
+      [VehicleChangeType.CHASSIS_CHANGE]: 'CHASSIS_SET',
+      [VehicleChangeType.BOOKLET_CHANGE]: 'BOOKLET_SET',
+      [VehicleChangeType.OWNER_CHANGE]: 'OWNER_SET',
+      [VehicleChangeType.USAGE_TYPE_CHANGE]: 'USAGE_TYPE_SET',
+      // currentPlate is never null (required at creation) — this branch is
+      // unreachable for PLATE_CHANGE in practice, kept only so this map
+      // stays exhaustive over every VehicleChangeType.
+      [VehicleChangeType.PLATE_CHANGE]: 'PLATE_SET',
+      [VehicleChangeType.VEHICLE_TYPE_CHANGE]: 'VEHICLE_TYPE_SET',
+    };
 
     if (currentValue === null) {
       const updated = await this.prisma.$transaction(async (tx) => {
         const result = await tx.vehicle.update({
           where: { id: vehicleId },
-          data: { [field]: dto.requestedValue },
+          data: buildChangeUpdateData(dto.changeType, dto.requestedValue),
         });
 
         await this.audit.log(
           {
             userId: actorId,
-            action: dto.changeType === VehicleChangeType.CHASSIS_CHANGE ? 'CHASSIS_SET' : 'BOOKLET_SET',
+            action: FIRST_SET_ACTION[dto.changeType],
             entityType: 'Vehicle',
             entityId: vehicleId,
             newValue: { [field]: dto.requestedValue },
@@ -415,10 +534,25 @@ export class VehiclesService {
 
     // Re-check at approval time, not just at request time — the target
     // value's availability can change in between (same reasoning as
-    // changePlate's own re-check).
-    const existing = await findVehicleByChangeValue(this.prisma, request.changeType, request.requestedValue);
-    if (existing && existing.id !== request.vehicleId) {
-      throw new ConflictException(`${field} is already in use by another vehicle.`);
+    // changePlate's own re-check). Only meaningful for the two @unique
+    // fields — OWNER_CHANGE/USAGE_TYPE_CHANGE have nothing to conflict with.
+    if (UNIQUE_CHANGE_TYPES.has(request.changeType)) {
+      const existing = await findVehicleByChangeValue(this.prisma, request.changeType, request.requestedValue);
+      if (existing && existing.id !== request.vehicleId) {
+        throw new ConflictException(`${field} is already in use by another vehicle.`);
+      }
+    }
+    if (request.changeType === VehicleChangeType.OWNER_CHANGE) {
+      const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: request.requestedValue } });
+      if (!owner) {
+        throw new NotFoundException('Vehicle owner not found.');
+      }
+    }
+    if (request.changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
+      const vehicleType = await this.prisma.vehicleType.findUnique({ where: { id: request.requestedValue } });
+      if (!vehicleType) {
+        throw new NotFoundException('Vehicle type not found.');
+      }
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -436,7 +570,7 @@ export class VehiclesService {
         await tx.vehicleChassisHistory.create({
           data: { vehicleId: request.vehicleId, chassisNumber: request.requestedValue },
         });
-      } else {
+      } else if (request.changeType === VehicleChangeType.BOOKLET_CHANGE) {
         const currentHistoryRow = await tx.vehicleBookletHistory.findFirst({
           where: { vehicleId: request.vehicleId, validTo: null },
           orderBy: { validFrom: 'desc' },
@@ -450,11 +584,32 @@ export class VehiclesService {
         await tx.vehicleBookletHistory.create({
           data: { vehicleId: request.vehicleId, registrationBooklet: request.requestedValue },
         });
+      } else if (request.changeType === VehicleChangeType.PLATE_CHANGE) {
+        // Same close-old/open-new pattern as changePlate() below — a
+        // change-request-approved plate change must leave the same
+        // unbroken VehiclePlateHistory trail a direct change would.
+        const currentHistoryRow = await tx.vehiclePlateHistory.findFirst({
+          where: { vehicleId: request.vehicleId, validTo: null },
+          orderBy: { validFrom: 'desc' },
+        });
+        if (currentHistoryRow) {
+          await tx.vehiclePlateHistory.update({
+            where: { id: currentHistoryRow.id },
+            data: { validTo: new Date() },
+          });
+        }
+        await tx.vehiclePlateHistory.create({
+          data: { vehicleId: request.vehicleId, plate: request.requestedValue },
+        });
       }
+      // OWNER_CHANGE/USAGE_TYPE_CHANGE/VEHICLE_TYPE_CHANGE: no dedicated
+      // history table (see CHANGE_TYPE_FIELD's own comment) — the field
+      // update below plus this request row's own audit trail is the
+      // complete record.
 
       await tx.vehicle.update({
         where: { id: request.vehicleId },
-        data: { [field]: request.requestedValue },
+        data: buildChangeUpdateData(request.changeType, request.requestedValue),
       });
 
       const updatedRequest = await tx.vehicleChangeRequest.update({

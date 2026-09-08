@@ -21,3 +21,22 @@ export class RolesController {
     });
   }
 }
+
+// Round 12: read-only, same reasoning as RolesController above — Permission
+// rows are seeded, not created through the UI. Exists so the new per-user
+// direct-permission picker (UsersAdminPage) has something to populate
+// itself from; no GET /permissions endpoint existed anywhere before this.
+@ApiTags('permissions')
+@Controller('permissions')
+export class PermissionsController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  @RequirePermission('roles:manage')
+  @Get()
+  findAll() {
+    return this.prisma.permission.findMany({
+      select: { id: true, key: true, description: true },
+      orderBy: { key: 'asc' },
+    });
+  }
+}

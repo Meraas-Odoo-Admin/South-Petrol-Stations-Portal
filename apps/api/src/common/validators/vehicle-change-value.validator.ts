@@ -5,11 +5,18 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-import { VehicleChangeType } from '@prisma/client';
-import { CHASSIS_NUMBER_REGEX, REGISTRATION_BOOKLET_REGEX } from './libyan-formats';
+import { VehicleChangeType, VehicleUsageType } from '@prisma/client';
+import { CHASSIS_NUMBER_REGEX, LICENSE_PLATE_REGEX, REGISTRATION_BOOKLET_REGEX } from './libyan-formats';
 
 // requestedValue's format depends on the sibling changeType field, same
 // reasoning as IsValidIdentityNumber for Driver.identityNumber.
+//
+// Round 12: OWNER_CHANGE/USAGE_TYPE_CHANGE added — these route
+// rule-affecting vehicle edits through the same approval flow chassis/
+// booklet changes already use (see VehicleChangeType's own schema comment).
+// requestedValue holds a VehicleOwner id (OWNER_CHANGE, existence checked at
+// the service layer in setOrRequestChange, same as CreateVehicleDto.ownerId)
+// or a VehicleUsageType enum value (USAGE_TYPE_CHANGE, checkable here).
 @ValidatorConstraint({ name: 'isValidVehicleChangeValue', async: false })
 class IsValidVehicleChangeValueConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
@@ -23,12 +30,24 @@ class IsValidVehicleChangeValueConstraint implements ValidatorConstraintInterfac
     if (changeType === VehicleChangeType.BOOKLET_CHANGE) {
       return REGISTRATION_BOOKLET_REGEX.test(value);
     }
+    if (changeType === VehicleChangeType.OWNER_CHANGE) {
+      return value.trim().length > 0;
+    }
+    if (changeType === VehicleChangeType.USAGE_TYPE_CHANGE) {
+      return Object.values(VehicleUsageType).includes(value as VehicleUsageType);
+    }
+    if (changeType === VehicleChangeType.PLATE_CHANGE) {
+      return LICENSE_PLATE_REGEX.test(value);
+    }
+    if (changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
+      return value.trim().length > 0;
+    }
     // changeType itself is invalid — @IsEnum on that field reports it.
     return true;
   }
 
   defaultMessage(): string {
-    return 'requestedValue must be a 17-character chassis number (CHASSIS_CHANGE) or a 6-12 character alphanumeric registration booklet number (BOOKLET_CHANGE), matching changeType.';
+    return 'requestedValue must match changeType: a 17-character chassis number (CHASSIS_CHANGE), a 6-12 character alphanumeric registration booklet number (BOOKLET_CHANGE), an existing owner id (OWNER_CHANGE), a city-code+sequence plate (PLATE_CHANGE), or an existing vehicle type id (VEHICLE_TYPE_CHANGE).';
   }
 }
 

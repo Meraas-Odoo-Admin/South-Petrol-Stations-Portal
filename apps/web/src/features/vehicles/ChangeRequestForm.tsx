@@ -1,15 +1,25 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
+import { OwnerSearchSelect } from '../../components/OwnerSearchSelect';
 import {
   blockChassisForbiddenKeys,
   restrictToChassisNumber,
+  restrictToLicensePlate,
 } from '../../lib/libyanFormats';
+
+interface VehicleTypeOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+type VehicleChangeType = 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | 'OWNER_CHANGE' | 'PLATE_CHANGE' | 'VEHICLE_TYPE_CHANGE';
 
 interface ChangeRequestFormProps {
   vehicleId: string;
-  changeType: 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE';
+  changeType: VehicleChangeType;
   label: string;
   onDone: () => void;
 }
@@ -19,14 +29,30 @@ interface ChangeRequestFormProps {
 // against it. A first-time null -> value set applies immediately
 // (requiresApproval: false); displacing an already-set value creates a
 // pending request instead (requiresApproval: true) — both outcomes are
-// handled here since the caller can't know in advance which one applies.
+// handled here since the caller can't know in advance which one applies
+// (currentPlate is a partial exception — see PLATE_CHANGE below).
+//
+// Round 12 added OWNER_CHANGE (owner search-select). Round 14: dropped
+// USAGE_TYPE_CHANGE from this form entirely — the client asked that
+// "نوع المركبة" and "نوع الاستخدام" not both be collected, keeping only
+// the Settings-managed one — and added PLATE_CHANGE (a restricted plate
+// text field, always approval-gated since currentPlate is never null) and
+// VEHICLE_TYPE_CHANGE (a <select> over GET /vehicle-types, replacing
+// USAGE_TYPE_CHANGE's old select as the one remaining "type" field).
 export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: ChangeRequestFormProps) {
   const queryClient = useQueryClient();
   const [requestedValue, setRequestedValue] = useState('');
+  const [ownerLabel, setOwnerLabel] = useState('');
   const [reason, setReason] = useState('');
   const [proofReference, setProofReference] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState<{ requiresApproval: boolean } | null>(null);
+
+  const { data: vehicleTypes } = useQuery({
+    queryKey: ['vehicle-types'],
+    queryFn: async () => (await apiClient.get<VehicleTypeOption[]>('/vehicle-types')).data,
+    enabled: changeType === 'VEHICLE_TYPE_CHANGE',
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -65,18 +91,48 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
     <div className="space-y-3">
       <div>
         <label className="mb-1 block text-[11px] font-bold text-ink-soft">{label} الجديد</label>
-        <input
-          value={requestedValue}
-          onChange={(e) =>
-            setRequestedValue(
-              changeType === 'CHASSIS_CHANGE' ? restrictToChassisNumber(e.target.value) : e.target.value,
-            )
-          }
-          onKeyDown={changeType === 'CHASSIS_CHANGE' ? blockChassisForbiddenKeys : undefined}
-          dir="ltr"
-          maxLength={changeType === 'CHASSIS_CHANGE' ? 17 : 12}
-          className={`${inputClass} text-end font-mono`}
-        />
+        {changeType === 'OWNER_CHANGE' ? (
+          <OwnerSearchSelect
+            value={requestedValue}
+            onChange={(ownerId, ownerFullName) => {
+              setRequestedValue(ownerId);
+              setOwnerLabel(ownerFullName);
+            }}
+            initialLabel={ownerLabel}
+            className={inputClass}
+          />
+        ) : changeType === 'VEHICLE_TYPE_CHANGE' ? (
+          <select value={requestedValue} onChange={(e) => setRequestedValue(e.target.value)} className={inputClass}>
+            <option value="">— اختر —</option>
+            {vehicleTypes
+              ?.filter((t) => t.isActive)
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+          </select>
+        ) : changeType === 'PLATE_CHANGE' ? (
+          <input
+            value={requestedValue}
+            onChange={(e) => setRequestedValue(restrictToLicensePlate(e.target.value))}
+            dir="ltr"
+            className={`${inputClass} text-end font-mono`}
+          />
+        ) : (
+          <input
+            value={requestedValue}
+            onChange={(e) =>
+              setRequestedValue(
+                changeType === 'CHASSIS_CHANGE' ? restrictToChassisNumber(e.target.value) : e.target.value,
+              )
+            }
+            onKeyDown={changeType === 'CHASSIS_CHANGE' ? blockChassisForbiddenKeys : undefined}
+            dir="ltr"
+            maxLength={changeType === 'CHASSIS_CHANGE' ? 17 : 12}
+            className={`${inputClass} text-end font-mono`}
+          />
+        )}
       </div>
       <div>
         <label className="mb-1 block text-[11px] font-bold text-ink-soft">السبب</label>

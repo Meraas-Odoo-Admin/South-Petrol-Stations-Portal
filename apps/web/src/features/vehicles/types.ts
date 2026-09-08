@@ -17,7 +17,10 @@ export interface VehicleBasicInfo {
   currentPlate: string;
   chassisNumber: string | null;
   registrationBooklet: string | null;
-  vehicleType: string | null;
+  // Round 12: vehicleType became a Settings-managed lookup (VehicleType),
+  // replacing the old free-text field — see VehicleType's schema comment.
+  vehicleTypeId: string | null;
+  vehicleType: { id: string; name: string } | null;
   model: string | null;
   color: string | null;
   manufactureYear: number | null;
@@ -25,8 +28,14 @@ export interface VehicleBasicInfo {
   owner: {
     id: string;
     fullName: string;
-    identityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
+    // Round 11 item 1: DRIVERS_LICENSE added — a provisional, one-time
+    // fallback identity type. See isProvisionalOwnerIdentity in lib/labels.ts.
+    identityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE';
     identityNumber: string;
+    // Round 20: required for new owners (the WhatsApp-share button opens a
+    // chat with this number directly) — still nullable in the type since
+    // owners created before this round have none.
+    phone: string | null;
   } | null;
   plateHistory: VehiclePlateHistoryEntry[];
 }

@@ -86,6 +86,19 @@ describe('Owners/Vehicles (e2e)', () => {
       create: { key: 'vehicles:read' },
       update: {},
     });
+    // Round 12: ownerId moved off the general PATCH endpoint onto the
+    // change-request flow (see VehicleChangeType.OWNER_CHANGE) — this
+    // manager role needs both ends of that flow to exercise it below.
+    const vehiclesRequestChangePermission = await prisma.permission.upsert({
+      where: { key: 'vehicles:request_change' },
+      create: { key: 'vehicles:request_change' },
+      update: {},
+    });
+    const vehiclesApproveChangePermission = await prisma.permission.upsert({
+      where: { key: 'vehicles:approve_change' },
+      create: { key: 'vehicles:approve_change' },
+      update: {},
+    });
 
     // Dedicated test-only role — never the real seeded station_supervisor.
     const managerRole = await prisma.role.create({ data: { name: `e2e_dov_manager_role_${runId}` } });
@@ -95,6 +108,8 @@ describe('Owners/Vehicles (e2e)', () => {
         { roleId: managerRole.id, permissionId: ownersPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesManagePermission.id },
         { roleId: managerRole.id, permissionId: vehiclesReadPermission.id },
+        { roleId: managerRole.id, permissionId: vehiclesRequestChangePermission.id },
+        { roleId: managerRole.id, permissionId: vehiclesApproveChangePermission.id },
       ],
     });
 
@@ -115,6 +130,11 @@ describe('Owners/Vehicles (e2e)', () => {
 
   afterAll(async () => {
     if (vehicleId) {
+      // Round 12: the OWNER_CHANGE change-request test leaves
+      // VehicleChangeRequest rows referencing this vehicle — must go
+      // before the vehicle delete, same FK-order reasoning as
+      // vehiclePlateHistory below.
+      await prisma.vehicleChangeRequest.deleteMany({ where: { vehicleId } });
       await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId } });
       await prisma.vehicle.deleteMany({ where: { id: vehicleId } });
     }
@@ -218,6 +238,7 @@ describe('Owners/Vehicles (e2e)', () => {
         fullName: 'Duplicate Attempt',
         identityType: 'NATIONAL_ID',
         identityNumber: `1${numericId11}`, // same pair as the owner created above
+        phone: '0930000000',
       })
       .expect(409);
   });
@@ -257,13 +278,13 @@ describe('Owners/Vehicles (e2e)', () => {
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}` })
+      .send({ internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}`, ownerId })
       .expect(409);
 
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}` })
+      .send({ internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}`, ownerId })
       .expect(409);
   });
 
@@ -277,7 +298,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const res = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ currentPlate: `12-${randomDigits(7)}` })
+      .send({ currentPlate: `12-${randomDigits(7)}`, ownerId })
       .expect(201);
 
     expect(res.body.internalCode).toMatch(/^V-\d{6}$/);
@@ -287,7 +308,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const secondRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ currentPlate: `12-${randomDigits(7)}` })
+      .send({ currentPlate: `12-${randomDigits(7)}`, ownerId })
       .expect(201);
     expect(secondRes.body.internalCode).toMatch(/^V-\d{6}$/);
     expect(secondRes.body.internalCode).not.toBe(res.body.internalCode);
@@ -310,7 +331,27 @@ describe('Owners/Vehicles (e2e)', () => {
     }
   });
 
-  it('lets a properly-permissioned actor reassign ownerId through the general PATCH endpoint', async () => {
+  // Round 12: ownerId/usageType affect FillUpRuleEngine eligibility, so they
+  // no longer go through the general PATCH endpoint at all (forbidNonWhitelisted
+  // rejects them outright) — they route through the same approval-gated
+  // change-request flow chassisNumber/registrationBooklet already used.
+  it('rejects ownerId/usageType on the general PATCH endpoint — they must go through change-requests', async () => {
+    const accessToken = await loginAsManager();
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/vehicles/${vehicleId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ ownerId: 'some-other-owner-id' })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/vehicles/${vehicleId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ usageType: 'GOVERNMENT' })
+      .expect(400);
+  });
+
+  it('reassigns ownerId through the OWNER_CHANGE change-request flow, approval-gated since the vehicle already has an owner', async () => {
     const accessToken = await loginAsManager();
 
     const secondOwnerRes = await request(app.getHttpServer())
@@ -320,23 +361,50 @@ describe('Owners/Vehicles (e2e)', () => {
         fullName: 'E2E DOV Owner Two',
         identityType: 'NATIONAL_ID',
         identityNumber: `2${numericId11}`,
+        phone: '0940000000',
       })
       .expect(201);
     const secondOwnerId = secondOwnerRes.body.id;
 
-    const updateRes = await request(app.getHttpServer())
-      .patch(`/api/v1/vehicles/${vehicleId}`)
+    const requestRes = await request(app.getHttpServer())
+      .post(`/api/v1/vehicles/${vehicleId}/change-requests`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ ownerId: secondOwnerId })
-      .expect(200);
-    expect(updateRes.body.ownerId).toBe(secondOwnerId);
+      .send({
+        changeType: 'OWNER_CHANGE',
+        requestedValue: secondOwnerId,
+        reason: 'E2E DOV owner reassignment test',
+        proofReference: 'E2E-PROOF-OWNER-CHANGE',
+      })
+      .expect(201);
+    expect(requestRes.body.requiresApproval).toBe(true);
 
-    // Reassign back to the original owner and clean up the throwaway one.
     await request(app.getHttpServer())
-      .patch(`/api/v1/vehicles/${vehicleId}`)
+      .post(`/api/v1/vehicles/change-requests/${requestRes.body.changeRequest.id}/approve`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ ownerId })
+      .expect(201);
+
+    const vehicleRes = await request(app.getHttpServer())
+      .get(`/api/v1/vehicles/${vehicleId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
+    expect(vehicleRes.body.ownerId).toBe(secondOwnerId);
+
+    // Reassign back to the original owner (also approval-gated) and clean
+    // up the throwaway one.
+    const revertRes = await request(app.getHttpServer())
+      .post(`/api/v1/vehicles/${vehicleId}/change-requests`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        changeType: 'OWNER_CHANGE',
+        requestedValue: ownerId,
+        reason: 'E2E DOV owner revert',
+        proofReference: 'E2E-PROOF-OWNER-REVERT',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/vehicles/change-requests/${revertRes.body.changeRequest.id}/approve`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(201);
     await prisma.vehicleOwner.delete({ where: { id: secondOwnerId } });
   });
 
@@ -417,7 +485,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const otherVehicleRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}` })
+      .send({ internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}`, ownerId })
       .expect(201);
     const otherVehicleId = otherVehicleRes.body.id;
 

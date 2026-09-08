@@ -49,10 +49,10 @@ export class CreateVehicleDto {
   })
   registrationBooklet?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'VehicleType lookup row id — see GET /vehicle-types.' })
   @IsOptional()
   @IsString()
-  vehicleType?: string;
+  vehicleTypeId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -74,8 +74,14 @@ export class CreateVehicleDto {
   @IsEnum(VehicleUsageType)
   usageType?: VehicleUsageType;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  // Round 11 item 1: the client confirmed owner information should be
+  // mandatory going forward — no longer optional (was `@IsOptional()`
+  // ownerId?: string). Vehicle.ownerId itself stays nullable in the
+  // DATABASE (existing vehicles with no owner need a backfill decision
+  // that hasn't been made — see docs/OPEN_ITEMS.md); this DTO is what
+  // actually enforces "mandatory" for every vehicle created from here on.
+  @ApiProperty({ description: 'Required — every new vehicle must have an owner.' })
   @IsString()
-  ownerId?: string;
+  @MinLength(1)
+  ownerId!: string;
 }

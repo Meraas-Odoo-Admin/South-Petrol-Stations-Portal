@@ -23,25 +23,105 @@ model Company {
 }
 
 model Station {
-  id                  String                    @id @default(cuid())
-  internalCode        String                    @unique // the ONLY globally unique station identifier
-  stationNumber       String // as reported by the company — NOT globally unique
-  name                String
-  companyId           String
-  company             Company                   @relation(fields: [companyId], references: [id])
-  municipality        String?
-  status              StationStatus             @default(ACTIVE)
+  id            String  @id @default(cuid())
+  internalCode  String  @unique // the ONLY globally unique station identifier — auto-generated on create, like Vehicle.internalCode (VehiclesService.generateInternalCode's pattern)
+  stationNumber String // as reported by the company — NOT globally unique
+  name          String
+  companyId     String
+  company       Company @relation(fields: [companyId], references: [id])
+
+  // station-card-field-spec: municipality/route were free text (or, for
+  // route, didn't exist) — both are now Settings-managed lookup tables,
+  // same reasoning as Company/SecurityAuthority: real data reuses the same
+  // ~15-20 municipality names across dozens of stations, and free text
+  // guarantees spelling drift ("الشاطئ" vs "الشاطئي" vs "الشاطي" all
+  // appearing for the same place). Left NULLABLE rather than required —
+  // the spec's own field table marks this "required", but forcing that at
+  // the DTO level would mean every existing station-creation call site
+  // (global-setup.ts's e2e fixture, admin-rbac.e2e-spec.ts) needs a real
+  // seeded municipality first; treated the same as every other
+  // schema-affecting judgment call in this project — nullable/flexible
+  // until that's confirmed as a hard requirement, not silently forced.
+  municipalityId String?
+  municipality   Municipality? @relation(fields: [municipalityId], references: [id])
+  routeId        String?
+  route          Route?        @relation(fields: [routeId], references: [id])
+
+  status     StationStatus @default(ACTIVE)
+  // Only shown/meaningful in the UI once status !== ACTIVE — e.g. "needs a
+  // new electrical connection" or "awaiting fuel-distribution approval,"
+  // the free-text detail a fixed status enum can't capture on its own.
+  statusNote String?
+
+  // Fixed two-value enum, not Settings-managed — same reasoning as
+  // StationStatus itself (see the schema-level note on StationStatus):
+  // rule engine / reporting code would need to keep working if someone
+  // renamed or deleted a Settings-list entry, so this lives in code, not
+  // an admin-editable table. Nullable: not every existing/incomplete
+  // station record has this confirmed yet (see the "زاوية مرزق" example in
+  // station-card-field-spec — location/status known, ownership not).
+  ownershipType StationOwnershipType?
+
   securityAuthorityId String? // TBD — see docs/OPEN_ITEMS.md #4. Nullable until scope question is answered.
   securityAuthority   SecurityAuthority?        @relation(fields: [securityAuthorityId], references: [id])
   fuelAvailability    StationFuelAvailability[]
-  userScopes          UserStationScope[]
-  fillUps             FillUpTransaction[]
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
+
+  // station-card-field-spec items 11-15: supervisor is the primary
+  // contact; operator defaults to "same person" (operatorSameAsSupervisor)
+  // rather than duplicating the name/phone into operatorName/operatorPhone
+  // — the real data's own recurring "نفس المشرف" case. When true,
+  // operatorName/operatorPhone stay null and callers read the supervisor
+  // fields instead (StationsService enforces this on create/update, not
+  // left to every reader to remember).
+  supervisorName           String?
+  supervisorPhone          String?
+  operatorSameAsSupervisor Boolean @default(false)
+  operatorName             String?
+  operatorPhone            String?
+
+  userScopes UserStationScope[]
+  fillUps    FillUpTransaction[]
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
 
   @@unique([companyId, stationNumber]) // the composite key that encodes the lesson learned
 }
 
+enum StationOwnershipType {
+  GOVERNMENT // حكومية
+  PRIVATE // خاصة
+}
+
+// station-card-field-spec item 4 / item 5 — Settings-managed, same CRUD
+// shape as Company (companies.module.ts): a plain admin-editable list,
+// nothing in the rule engine or reporting branches on which municipality a
+// station is in.
+model Municipality {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  stations  Station[]
+  createdAt DateTime  @default(now())
+}
+
+// station-card-field-spec item 5 — the client's ownership/haulage route
+// (خط الإعداد), e.g. "خط سبها" — optional on a station, Settings-managed
+// like Municipality/Company.
+model Route {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  stations  Station[]
+  createdAt DateTime  @default(now())
+}
+
+// Fixed, not Settings-managed — unlike Company/Municipality/Route (pure
+// labels, nothing in the code branches on which one a station has), the
+// rule engine/reporting/filtering logic checks against these specific
+// values by name. A freely-editable Settings list would let someone
+// rename or delete ACTIVE and quietly break every place that checks for
+// it. See station-card-field-spec's own "why status and ownership-type
+// aren't Settings-managed" section.
 enum StationStatus {
   ACTIVE
   SUSPENDED_LEGAL // موقوفة قضائيًا
@@ -98,6 +178,26 @@ model Permission {
   key         String           @unique // "fillups:create", "fillups:approve_exception", "reports:view_all_stations"
   description String?
   roles       RolePermission[]
+  users       UserPermission[]
+}
+
+// Round 12: the client wants a right that is NOT tied to a role — "given to
+// certain users they pick, it could be given to certain employees and not
+// for other employees" (specifically fillups:record_exception, but built
+// generically since the same need will recur). RbacService unions this with
+// role-derived permissions rather than replacing them — a direct grant is
+// additive on top of whatever the user's roles already provide, never a
+// narrower override.
+model UserPermission {
+  userId       String
+  permissionId String
+  user         User       @relation(fields: [userId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  grantedById  String
+  grantedBy    User       @relation("UserPermissionGrantedBy", fields: [grantedById], references: [id])
+  grantedAt    DateTime   @default(now())
+
+  @@id([userId, permissionId])
 }
 
 model RolePermission {
@@ -120,6 +220,8 @@ model User {
   failedLoginAttempts          Int                    @default(0)
   lockedUntil                  DateTime?
   roles                        UserRole[]
+  directPermissions            UserPermission[]
+  permissionsGranted           UserPermission[]       @relation("UserPermissionGrantedBy")
   stationScope                 UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
   refreshTokens                RefreshToken[]
   recordedFillUps              FillUpTransaction[]    @relation("RecordedBy")
@@ -177,6 +279,14 @@ model SystemSetting {
 enum IdentityType {
   NATIONAL_ID
   ADMINISTRATIVE_ID // بديل معتمد لدى الطوارق وقبائل أخرى — equally valid per client confirmation
+  // Round 11 item 1: a one-time fallback when the owner's real ID isn't
+  // available on the spot — deliberately NOT equal standing to the other
+  // two (see VehicleOwner.identityType's own comment and
+  // FillUpsService.create's provisional-owner gate). No standard Libyan
+  // driver's-license number format was found during research (only plate
+  // formats and application-process pages turned up) — validated
+  // permissively for now (DRIVERS_LICENSE_REGEX), see docs/OPEN_ITEMS.md.
+  DRIVERS_LICENSE
 }
 
 // Round 6: no longer required on a fill-up, and has no active create/edit UI
@@ -197,8 +307,19 @@ model Driver {
   @@unique([identityType, identityNumber])
 }
 
+// Round 11 item 1: owner identity is mandatory on a vehicle going forward
+// (see Vehicle.ownerId), but a real national/administrative ID isn't
+// always available on the spot when a vehicle is first registered — a
+// DRIVERS_LICENSE identityType is a deliberately PROVISIONAL stand-in,
+// good for exactly the vehicle's first fill-up (FillUpsService.create
+// hard-blocks any later one, no exception route — the client's own
+// framing was "only the first fill is available," not a flaggable rule).
+// Provisional-ness is derived directly from identityType ===
+// 'DRIVERS_LICENSE' rather than a separate status field — nothing else
+// needs to vary independently of it yet; add a real status field instead
+// if that ever changes.
 model VehicleOwner {
-  id                 String               @id @default(cuid())
+  id                 String              @id @default(cuid())
   identityType       IdentityType
   identityNumber     String // immutable together with identityType after creation, like Driver.identityNumber/User.username
   fullName           String
@@ -206,8 +327,8 @@ model VehicleOwner {
   address            String?
   vehicles           Vehicle[]
   standingExceptions StandingException[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@unique([identityType, identityNumber])
 }
@@ -216,6 +337,21 @@ enum VehicleUsageType {
   GOVERNMENT
   PRIVATE
   COMMERCIAL
+}
+
+// Round 12: "نوع المركبة" becomes a Settings-managed lookup, same shape as
+// Municipality/Route/ExceptionType — admin/system_admin add categories
+// (سيارة خاصة, نقل ثقيل, ...) without a deploy. Distinct from
+// VehicleUsageType (GOVERNMENT/PRIVATE/COMMERCIAL, "نوع الاستخدام") — the
+// client only asked to change this one, not the usage-type enum. Confirmed
+// via the rule engine (no reference to either field anywhere in
+// fillups/rule-engine) that converting this to a lookup table is safe.
+model VehicleType {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  vehicles  Vehicle[]
+  createdAt DateTime  @default(now())
 }
 
 model Vehicle {
@@ -227,11 +363,20 @@ model Vehicle {
   // (docs/IMPLEMENTATION_PLAN.md phase note: chassis-booklet-linkage
   // proposal). Nullable: not every vehicle has one recorded yet.
   registrationBooklet String?                 @unique
-  vehicleType         String?
+  vehicleTypeId       String?
+  vehicleType         VehicleType?            @relation(fields: [vehicleTypeId], references: [id])
   model               String?
   color               String?
   manufactureYear     Int?
   usageType           VehicleUsageType?
+  // Round 11 item 1: the client confirmed owner information should be
+  // mandatory going forward — enforced at CreateVehicleDto (application
+  // level: ownerId is now required on create), NOT here. Left nullable in
+  // the DATABASE deliberately: real existing vehicles have no owner at
+  // all today (this column being nullable is exactly how that's possible
+  // right now), and forcing it NOT NULL would need a migration/backfill
+  // decision for those rows that hasn't been made — see docs/OPEN_ITEMS.md.
+  // Don't silently pick a backfill strategy by flipping this to required.
   ownerId             String?
   owner               VehicleOwner?           @relation(fields: [ownerId], references: [id])
   plateHistory        VehiclePlateHistory[]
@@ -289,6 +434,37 @@ model VehicleBookletHistory {
 enum VehicleChangeType {
   CHASSIS_CHANGE
   BOOKLET_CHANGE
+  // Round 12: the client wants a vehicle-edit approval gate that follows
+  // rule-eligibility impact, not an arbitrary field list — "things that
+  // don't affect their fill up rule status" save immediately (model, color,
+  // manufactureYear, vehicleTypeId — see VehiclesService.update), "things
+  // that need approval are the ones that affect their fill up status" go
+  // through this same request/approval flow instead. The rule engine keys
+  // strictly off vehicleId + ownerId (see FillUpRuleEngine), so OWNER_CHANGE
+  // is the clear case; USAGE_TYPE_CHANGE is included pre-emptively because a
+  // per-usage-type liter cap SystemSetting already exists even though it
+  // isn't wired into the engine yet (see SettingsAdminPage) — treating it as
+  // rule-affecting now avoids a second migration once that wiring lands.
+  OWNER_CHANGE
+  // Deprecated (round 14): the client asked that "نوع المركبة" and "نوع
+  // الاستخدام" not both be collected — one is enough, and it should be the
+  // Settings-managed one (VehicleType/vehicleTypeId). usageType stays in
+  // the schema for historical rows already carrying a value, but is no
+  // longer collected or editable anywhere in the UI — VEHICLE_TYPE_CHANGE
+  // below is what replaces this for the one type field that remains.
+  USAGE_TYPE_CHANGE
+  // Round 14: the client wants EVERY field that could affect a vehicle's
+  // fill-up rule status to require approval, requestable by ordinary
+  // station employees (not just supervisor-tier) and approved by
+  // supervisor/directorate-admin/system-admin — explicitly including the
+  // plate number, previously changed directly with no approval at all via
+  // POST /vehicles/:id/plate-change (still exists, but now restricted to
+  // vehicles:approve_change — see VehiclesController). PLATE_CHANGE reuses
+  // the existing VehiclePlateHistory table the same way CHASSIS_CHANGE/
+  // BOOKLET_CHANGE reuse their own history tables. VEHICLE_TYPE_CHANGE is
+  // the client-requested single "نوع المركبة" field's own change type.
+  PLATE_CHANGE
+  VEHICLE_TYPE_CHANGE
 }
 
 enum VehicleChangeRequestStatus {

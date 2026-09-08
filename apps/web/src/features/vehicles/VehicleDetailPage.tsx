@@ -6,7 +6,15 @@ import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../auth/AuthProvider';
 import { maskIdentityNumber } from '../../lib/masking';
 import { formatLicensePlate } from '../../lib/libyanFormats';
-import { usageTypeLabel, fuelTypeLabel, vehicleChangeTypeLabel } from '../../lib/labels';
+import {
+  fuelTypeLabel,
+  vehicleChangeTypeLabel,
+  isProvisionalOwnerIdentity,
+  PROVISIONAL_OWNER_LABEL,
+  PROVISIONAL_OWNER_VARIANT,
+} from '../../lib/labels';
+import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
+import { VehicleQrPanel } from '../../components/VehicleQrPanel';
 import { Pagination } from '../../components/Pagination';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
@@ -18,15 +26,21 @@ import { StandingExceptionsSection } from '../standing-exceptions/StandingExcept
 import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { ChangeRequestForm } from './ChangeRequestForm';
+import { VehicleEditForm } from './VehicleEditForm';
 import type { VehicleBasicInfo } from './types';
+
+type ChangeFormType = 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | 'OWNER_CHANGE' | 'PLATE_CHANGE' | 'VEHICLE_TYPE_CHANGE';
 
 const TAKE = 20;
 
-type MobileTab = 'identity' | 'plates' | 'history';
+type MobileTab = 'identity' | 'plates' | 'qr' | 'history';
 
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
   { id: 'identity', label: 'الهوية' },
   { id: 'plates', label: 'سجل اللوحات' },
+  // Round 15: "third tab beside «الهوية» و«اللوحات»" per
+  // design/design_handoff_fuel_control_system/README.md §"Round 3".
+  { id: 'qr', label: 'الرمز' },
   { id: 'history', label: 'سجل التعبئات' },
 ];
 
@@ -35,8 +49,10 @@ export function VehicleDetailPage() {
   const { user, hasPermission } = useAuth();
   const permissions = user?.permissions ?? [];
   const canRequestChange = hasPermission('vehicles:request_change');
+  const canEditVehicle = hasPermission('vehicles:manage');
   const [skip, setSkip] = useState(0);
-  const [openChangeForm, setOpenChangeForm] = useState<'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | null>(null);
+  const [openChangeForm, setOpenChangeForm] = useState<ChangeFormType | null>(null);
+  const [editingCosmetic, setEditingCosmetic] = useState(false);
   // Matches design 5d — mobile gets tabs (identity / plate history /
   // fill-up history) instead of everything stacked with scrolling tables.
   // Desktop ignores this entirely: sections stay permanently visible via
@@ -97,41 +113,108 @@ export function VehicleDetailPage() {
       </div>
 
       <div className="space-y-4">
-        <Card className={`${mobileTab === 'identity' ? '' : 'hidden'} grid grid-cols-2 gap-4 p-4 sm:!grid sm:grid-cols-4`}>
-          <Field label="رقم اللوحة" value={<LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>} />
-          <Field
-            label="رقم الشاصي"
-            value={vehicle.chassisNumber ? <CodeText>{vehicle.chassisNumber}</CodeText> : '—'}
+        {/* Round 16: QR-first, per the client's own framing of what a user
+            opening a vehicle profile most likely wants — the code to share
+            with the owner, right alongside the vehicle's identity, not
+            buried after plate history/change requests/standing exceptions.
+            The identity card and QR panel sit side by side on wide screens
+            (lg:) instead of QR only ever reachable via its own mobile tab
+            further down the stack — actually using the extra width a
+            laptop viewport has instead of leaving it empty beside a single
+            narrow column. Also folds the old separate, near-empty "بيانات
+            المركبة" edit-toggle card into this same card's header (an
+            action, not its own section) — one fewer nearly-blank card. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
+          <Card className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}>
+            <div className="flex items-center justify-between gap-3 border-b border-surface-alt p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                {/* Round 14: "the car logo is an indicator of the car... it
+                    should appear as the profile photo" — the brand's real logo
+                    (same source VehicleBrandPicker uses), or a generic vehicle
+                    glyph for an unmatched/blank brand, as a circular avatar
+                    heading the identity card. */}
+                <VehicleBrandLogo model={vehicle.model} size={52} />
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-extrabold text-ink">{vehicle.model ?? 'طراز غير محدَّد'}</p>
+                  <p className="truncate text-[11.5px] text-ink-faint">{vehicle.vehicleType?.name ?? 'نوع غير محدَّد'}</p>
+                </div>
+              </div>
+              {canEditVehicle && !editingCosmetic && (
+                <PillButton
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setEditingCosmetic(true)}
+                >
+                  تعديل
+                </PillButton>
+              )}
+            </div>
+            {editingCosmetic ? (
+              <div className="p-4">
+                <VehicleEditForm vehicle={vehicle} onDone={() => setEditingCosmetic(false)} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3">
+              <Field label="رقم اللوحة" value={<LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>} />
+              <Field
+                label="رقم الشاصي"
+                value={vehicle.chassisNumber ? <CodeText>{vehicle.chassisNumber}</CodeText> : '—'}
+              />
+              <Field
+                label="رقم كتيب المركبة"
+                value={vehicle.registrationBooklet ? <CodeText>{vehicle.registrationBooklet}</CodeText> : '—'}
+              />
+              <Field label="اللون" value={vehicle.color ?? '—'} />
+              <Field label="سنة الصنع" value={vehicle.manufactureYear?.toString() ?? '—'} />
+              <Field
+                label="المالك"
+                value={
+                  <>
+                    {vehicle.owner?.fullName ?? '—'}
+                    {vehicle.owner && isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
+                      <div className="mt-1">
+                        <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
+                      </div>
+                    )}
+                  </>
+                }
+              />
+              <Field
+                label="رقم هوية المالك"
+                value={
+                  vehicle.owner ? (
+                    <span data-testid="vehicle-owner-identity-number">
+                      <OwnerIdentityReveal
+                        ownerId={vehicle.owner.id}
+                        maskedValue={maskIdentityNumber(vehicle.owner.identityNumber, permissions)}
+                      />
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                }
+              />
+              </div>
+            )}
+          </Card>
+
+          <VehicleQrPanel
+            internalCode={vehicle.internalCode}
+            vehicleLabel={formatLicensePlate(vehicle.currentPlate)}
+            variant="full"
+            className={`animate-fade-in-up ${mobileTab === 'qr' ? '' : 'hidden sm:!block'}`}
+            style={{ animationDelay: '60ms' }}
+            ownerPhone={vehicle.owner?.phone}
+            ownerId={vehicle.owner?.id}
           />
-          <Field
-            label="رقم كتيب المركبة"
-            value={vehicle.registrationBooklet ? <CodeText>{vehicle.registrationBooklet}</CodeText> : '—'}
-          />
-          <Field label="النوع" value={vehicle.vehicleType ?? '—'} />
-          <Field label="الطراز" value={vehicle.model ?? '—'} />
-          <Field label="اللون" value={vehicle.color ?? '—'} />
-          <Field label="سنة الصنع" value={vehicle.manufactureYear?.toString() ?? '—'} />
-          <Field label="نوع الاستخدام" value={usageTypeLabel(vehicle.usageType)} />
-          <Field label="المالك" value={vehicle.owner?.fullName ?? '—'} />
-          <Field
-            label="رقم هوية المالك"
-            value={
-              vehicle.owner ? (
-                <span data-testid="vehicle-owner-identity-number">
-                  <OwnerIdentityReveal
-                    ownerId={vehicle.owner.id}
-                    maskedValue={maskIdentityNumber(vehicle.owner.identityNumber, permissions)}
-                  />
-                </span>
-              ) : (
-                '—'
-              )
-            }
-          />
-        </Card>
+        </div>
 
         {weeklyUsageQuery.data && (
-          <Card className={`${mobileTab === 'identity' ? '' : 'hidden sm:!block'} p-4`}>
+          <Card
+            className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'} p-4`}
+            style={{ animationDelay: '100ms' }}
+          >
             <p className="mb-2 text-[12.5px] font-bold text-ink">استهلاك هذا الأسبوع</p>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[22px] font-black text-ink" data-testid="vehicle-weekly-usage">
@@ -153,8 +236,11 @@ export function VehicleDetailPage() {
         )}
 
         {canRequestChange && (
-          <Card className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
-            <CardHeader title="تعديل هوية المركبة" />
+          <Card
+            className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}
+            style={{ animationDelay: '140ms' }}
+          >
+            <CardHeader title="تعديل هوية المركبة — يتطلب اعتمادًا" />
             <div className="p-4">
               {openChangeForm ? (
                 <ChangeRequestForm
@@ -164,12 +250,30 @@ export function VehicleDetailPage() {
                   onDone={() => setOpenChangeForm(null)}
                 />
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('PLATE_CHANGE')}>
+                    طلب تغيير رقم اللوحة
+                  </PillButton>
                   <PillButton variant="secondary" onClick={() => setOpenChangeForm('CHASSIS_CHANGE')}>
                     طلب تغيير رقم الشاصي
                   </PillButton>
                   <PillButton variant="secondary" onClick={() => setOpenChangeForm('BOOKLET_CHANGE')}>
                     طلب تغيير رقم كتيب المركبة
+                  </PillButton>
+                  {/* Round 12/14: every one of these affects fill-up rule
+                      eligibility (see VehicleChangeType's schema comment),
+                      so they all go through this same approval flow
+                      instead of the immediate-save cosmetic form above —
+                      requestable by any station employee
+                      (vehicles:request_change), approved only by
+                      supervisor/directorate-admin/system-admin
+                      (vehicles:approve_change, gating the buttons this
+                      form's own queue page shows). */}
+                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('OWNER_CHANGE')}>
+                    طلب تغيير المالك
+                  </PillButton>
+                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('VEHICLE_TYPE_CHANGE')}>
+                    طلب تغيير نوع المركبة
                   </PillButton>
                 </div>
               )}
