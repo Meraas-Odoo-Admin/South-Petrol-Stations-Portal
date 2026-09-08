@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useForm, type UseFormReturn } from 'react-hook-form';
+import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,8 +19,8 @@ import { apiClient } from '../../lib/apiClient';
 import { StationSelect } from '../../components/StationSelect';
 import { LtrText } from '../../components/LtrText';
 import { DigitBoxInput } from '../../components/DigitBoxInput';
-import { PLATE_DIGIT_GROUPS } from '../../lib/digitBoxGroups';
-import { formatLicensePlate, LICENSE_PLATE_REGEX, normalizePlateSearchTerm } from '../../lib/libyanFormats';
+import { PLATE_DIGIT_GROUPS, isAllComplete, splitToGroups } from '../../lib/digitBoxGroups';
+import { formatLicensePlate, normalizePlateSearchTerm } from '../../lib/libyanFormats';
 import { fuelTypeLabel } from '../../lib/labels';
 import { useAuth } from '../auth/AuthProvider';
 import { useStations } from '../stations/useStations';
@@ -32,6 +32,9 @@ import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { VehicleSearchSelect } from './VehicleSearchSelect';
 import { VehicleCreateForm } from '../vehicles/VehicleCreateForm';
 import { VehiclePreviewCard } from './VehiclePreviewCard';
+import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
+import { VehicleQrPanel } from '../../components/VehicleQrPanel';
+import { QrScanPanel } from '../../components/QrScanPanel';
 import { RULE_VIOLATION_MESSAGES, RULE_CHECK_LABELS, describeRuleCheck } from './ruleViolationMessages';
 import { useFuelPrices } from './useFuelPrice';
 import type { VehicleBasicInfo } from '../vehicles/types';
@@ -57,11 +60,13 @@ export function TriggerDetail({ trigger }: { trigger: RuleTriggerDetail | null }
 
 type Rejection = { reason: RuleFailureReason; trigger: RuleTriggerDetail | null };
 
-// Shared by both layouts (round 8) — the exact same per-rule breakdown
-// content, just wrapped in a differently-placed Card by each. idSuffix
-// keeps the two layouts' testids from colliding, since both can exist in
-// the DOM at once (CSS hides whichever doesn't match the viewport, it
-// doesn't unmount it).
+// The same per-rule breakdown content, used by both the review step and
+// (round 10) the confirmation-adjacent contexts. idSuffix is a round-8
+// leftover from when a separate desktop form shared the DOM with the
+// mobile wizard and needed disambiguating testids — round 10 removed that
+// desktop form, but the wizard's own step still passes idSuffix="-mobile"
+// (kept as-is rather than renamed, since the component itself is
+// unaffected either way).
 function RuleReviewChecks({
   checks,
   isLoading,
@@ -148,12 +153,14 @@ function ExceptionFormFields({
   selectedExceptionType,
   onSubmit,
   idSuffix = '',
+  submitError,
 }: {
   exceptionForm: UseFormReturn<ExceptionFormValues>;
   exceptionTypes: ExceptionTypeOption[] | undefined;
   selectedExceptionType: ExceptionTypeOption | null;
   onSubmit: (values: ExceptionFormValues) => void;
   idSuffix?: string;
+  submitError?: string | null;
 }) {
   const fieldLabelClass = 'mb-1 block text-[11px] font-bold text-ink-soft';
   const fieldErrorClass = 'mt-1 text-[12px] text-danger';
@@ -211,6 +218,8 @@ function ExceptionFormFields({
           )}
         </div>
       )}
+
+      {submitError && <p className="text-[13px] text-danger">{submitError}</p>}
 
       <div className="flex gap-2 pt-1">
         <PillButton
@@ -339,8 +348,31 @@ function isRejected(result: CreateFillUpResult): result is Extract<CreateFillUpR
   return 'allowed' in result && result.allowed === false;
 }
 
+// crypto.randomUUID() is restricted to secure contexts (HTTPS or
+// localhost) by spec — throws on a plain-HTTP LAN origin (e.g. a phone
+// testing against the dev server over http://<lan-ip>), which crashed this
+// whole page with no error boundary to catch it. crypto.getRandomValues
+// has no such restriction, so build a UUID v4 from it instead; the
+// Math.random fallback only matters for a crypto-less environment, which
+// shouldn't happen in a real browser, but the key just needs to be unique
+// per submission, not cryptographically strong, so it's an acceptable
+// last resort.
 function newIdempotencyKey(): string {
-  return crypto.randomUUID();
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // Fall through to the getRandomValues-based UUID below.
+    }
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 }
 
 // Captured at the moment of a successful submission, before resetAll()
@@ -357,21 +389,36 @@ interface ConfirmationSummary {
   quantityLiters: string;
   occurredAt: string;
   isException: boolean;
+  // Round 12: a holder of fillups:record_exception is auto-approved at
+  // creation (see FillUpsService.create) — always true for a non-exception
+  // fill-up, but for an exception it now genuinely varies, so the
+  // confirmation screen can no longer assume every exception is pending.
+  isApproved: boolean;
+  // Round 15: set only when THIS submission's vehicle was created inline
+  // during the same transaction (via VehicleCreateForm's onCreated, never
+  // onDuplicateFound/matchedVehicle/a clicked live-search candidate) — the
+  // compact vehicle-QR block on this success screen is gated on this being
+  // present, not on "the vehicle has a code" (every vehicle does). An
+  // already-registered vehicle's success screen stays exactly as it was.
+  newVehicleInternalCode?: string;
+  // Round 20: the freshly-typed owner phone from the same VehicleCreateForm
+  // submission — lets the compact QR block's "فتح واتساب" target the owner
+  // directly instead of asking again for a number it was just given.
+  newVehicleOwnerPhone?: string;
 }
 
-// Round 8: the client's own words — "the journey screens are not as I
-// told you last time" — round 7 added the rule-preview breakdown but
-// never actually restructured this page into the guided step sequence
-// from design/feedback-2026-08-31/01-*.png/02-*.png. That was a real gap
-// in what got asked for across rounds 6-7, not a regression (see
-// docs/OPEN_ITEMS.md #31's round 7 note, which flagged the flow redesign
-// itself as not started). This round builds it for real, but ONLY for
-// narrow viewports (`sm:hidden`, matching the `sm` breakpoint convention
-// VehicleDetailPage already uses for its own mobile-tabs/desktop split) —
-// desktop keeps the single-page-with-everything-visible form round 6
-// originally called for (04-06 in the same folder), now confirmed still
-// correct since the client's complaint was specifically about the phone
-// screenshot.
+// Round 8 built the guided step sequence from design/feedback-2026-08-31/
+// 01-*.png/02-*.png, but only for narrow viewports (`sm:hidden`) — desktop
+// kept the old single-page-with-everything-visible form, on the reading
+// that round 6 had asked for that split. Round 10: the client confirmed
+// directly they want the SAME step-by-step journey at every screen size,
+// not a separate desktop form — that reading is now explicitly overridden.
+// The desktop-only form (station select, all fields visible at once, the
+// always-shown rule-review card) is removed outright, not hidden. What
+// doesn't just disappear: the desktop-only day-list rail from screenshots
+// 06/07 — it becomes a persistent sidebar beside the step column on wide
+// screens (still one step at a time in the main column), rather than only
+// appearing on the post-submit confirmation screen the way it did before.
 type MobileStep = 'plate' | 'match' | 'fuel' | 'review' | 'exception';
 
 const MOBILE_STEP_TITLES: Record<MobileStep, string> = {
@@ -413,11 +460,17 @@ export function RecordFillUpPage() {
   const { data: fuelPrices } = useFuelPrices();
 
   const [rejection, setRejection] = useState<Rejection | null>(null);
-  const [showNewVehicleForm, setShowNewVehicleForm] = useState(false);
   const [showNewVehicleFormMobile, setShowNewVehicleFormMobile] = useState(false);
-  const [newlyCreatedVehicleLabel, setNewlyCreatedVehicleLabel] = useState<string | undefined>(undefined);
-  const [vehicleQuery, setVehicleQuery] = useState('');
   const canCreateVehicle = hasPermission('vehicles:manage');
+  // Round 12: recording an exception is now its own permission, grantable
+  // per-user independent of role (see UserPermission on the backend) — the
+  // client wants this offered only to specific employees, not everyone who
+  // can record a normal fill-up. Hiding the button for anyone without it
+  // avoids the confusing "I clicked it and nothing happened" report this
+  // round started with — that one was a missing error-render bug (see
+  // ExceptionFormFields' submitError prop), but a 403 on submit for someone
+  // who was never supposed to see this option in the first place is worse.
+  const canRecordException = hasPermission('fillups:record_exception');
   // Display label for the currently-selected vehicle — the form only ever
   // stores its ID (fillUpForm's vehicleId), and FillUpTransactionRaw's
   // response doesn't carry names either, so this is the only source for
@@ -431,12 +484,67 @@ export function RecordFillUpPage() {
   const [amountLyd, setAmountLyd] = useState('');
   const [success, setSuccess] = useState<ConfirmationSummary | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Round 15: stashed only from VehicleCreateForm's onCreated callback
+  // (never onDuplicateFound) — see ConfirmationSummary.newVehicleInternalCode.
+  const [newlyCreatedVehicle, setNewlyCreatedVehicle] = useState<{
+    id: string;
+    internalCode: string;
+    ownerPhone: string;
+  } | null>(null);
   const idempotencyKeyRef = useRef(newIdempotencyKey());
 
   // ── Mobile wizard state ──────────────────────────────────────────────
   const [mobileStep, setMobileStep] = useState<MobileStep>('plate');
   const [plateValue, setPlateValue] = useState('');
+  // Round 11 item 4: whether the user has actually finished typing the
+  // plate (moved focus away from the box row) since the last keystroke —
+  // needed because the sequence group's `minFilled: 1` makes isAllComplete
+  // go true after just the FIRST sequence digit (a 1-digit sequence is a
+  // genuinely valid plate), long before a longer real plate is actually
+  // finished. Reset to false on every keystroke so re-editing after
+  // finalizing re-arms the gate; set true by DigitBoxInput's onFocusLeave.
+  const [plateBlurred, setPlateBlurred] = useState(false);
+  // Client feedback: typing a genuinely SHORT plate (fewer than 7
+  // sequence digits — a real, valid case, not everyone's plate is 7
+  // digits long) correctly hid the "no vehicle — add new" panel while
+  // still typing (that's the round 11 fix working as intended), but then
+  // required an extra, unintuitive click OUTSIDE the box row before the
+  // panel would show at all — even though the user was already done and
+  // just sitting in the next (empty, focused) box because that's simply
+  // where auto-advance left them. Fix: treat a pause in typing the same
+  // way DigitBoxInput's onFocusLeave already does (sets plateBlurred) —
+  // if no new digit lands within ~900ms, the user has very likely
+  // stopped, not just paused mid-keystroke, so finalize the same way an
+  // explicit blur would. Continuous typing (any real gap under ~900ms
+  // between keystrokes) keeps resetting this timer, so it can't
+  // reintroduce the original premature-verdict bug — it only fires once
+  // input has genuinely gone quiet.
+  useEffect(() => {
+    const timer = setTimeout(() => setPlateBlurred(true), 900);
+    return () => clearTimeout(timer);
+  }, [plateValue]);
+  // Round 12: live search-as-you-type — matches should surface before the
+  // plate is fully typed, not just once it's complete. Debounced
+  // separately from `plateValue` itself so a lookup doesn't fire on every
+  // single box's keystroke while the user is still mid-entry (same 250ms
+  // pattern VehicleSearchSelect already uses for its own free-text field).
+  const [debouncedPlateValue, setDebouncedPlateValue] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedPlateValue(plateValue), 250);
+    return () => clearTimeout(timer);
+  }, [plateValue]);
   const [showManualSearchMobile, setShowManualSearchMobile] = useState(false);
+  // Round 15 (scan-in): a second identification route inside this same
+  // 'plate' step, offered next to the digit-box entry — not a new
+  // MobileStep, not a 4th progress segment. The offer itself is only ever
+  // rendered when a camera could plausibly open at all (secure context +
+  // getUserMedia present); a runtime failure AFTER tapping it is the
+  // separate 'denied' state QrScanPanel itself handles.
+  const [qrScanOpen, setQrScanOpen] = useState(false);
+  const [cameraUnavailableHint, setCameraUnavailableHint] = useState(false);
+  const qrScanSupported =
+    typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
+  const [scanVariant, setScanVariant] = useState<'phone' | 'desktop'>('phone');
 
   const fillUpForm = useForm<FillUpFormValues>({
     resolver: zodResolver(fillUpSchema),
@@ -451,12 +559,6 @@ export function RecordFillUpPage() {
   const exceptionForm = useForm<ExceptionFormValues>({
     resolver: zodResolver(exceptionSchema),
     defaultValues: { exceptionTypeId: '', reason: '', proofReference: '' },
-  });
-
-  const { data: exceptionTypes } = useQuery({
-    queryKey: ['fillups', 'exception-types'],
-    queryFn: async () => (await apiClient.get<ExceptionTypeOption[]>('/fillups/exception-types')).data,
-    enabled: rejection !== null,
   });
 
   const selectedVehicleId = fillUpForm.watch('vehicleId');
@@ -490,14 +592,58 @@ export function RecordFillUpPage() {
     enabled: !!selectedVehicleId,
   });
 
-  // Round 8: desktop's confirmation screen needs the live day-list rail
-  // from screenshot 06/07 (round 6's original desktop description, not
-  // built until now — see the reconciliation note in this file's own
-  // round-8 header comment) — same GET /reports/daily endpoint
-  // DailyReportPage already uses, scoped to the station just used and
-  // today's date. Gated on reports:view since that's the same permission
-  // DailyReportPage itself requires; without it desktop just skips the
-  // rail rather than firing a request that would 403.
+  // Round 11 item 7: confirmed live (docs/screenshots/verify/round11/
+  // 05-item7-before-submit.png) that this is genuinely the state the
+  // client's screenshot shows — two checks already failing in the
+  // PREVIEW, yet no exception path, because `rejection` (below) was only
+  // ever set by a REAL submit attempt's 422 response, never by the
+  // preview data the review step already has in hand. Round 7's original
+  // spec was "failing rule → red block ... plus a record-as-exception
+  // screen" — nothing said the user has to click "تسجيل التعبئة" once,
+  // watch it fail, and only THEN get the exception option, when the
+  // screen already knows it's going to fail. `checks` is in the same
+  // fixed precedence order `FillUpRuleEngine.computeChecks` builds it in
+  // (vehicle gap → vehicle cap → owner gap → owner cap → owner liters),
+  // so the first failing entry here is the same `reason` a real 422 from
+  // this exact vehicle would return RIGHT NOW — with one caveat: the
+  // preview endpoint (`GET /fillups/rule-preview`) deliberately doesn't
+  // expose whether a StandingException would auto-allow it (it only ever
+  // returns the raw per-rule `checks`, not `resolveViolations`'s final
+  // verdict — see `FillUpsService.previewRules`), so this can be
+  // optimistic-wrong in the rare case a standing exception covers the
+  // failing rule. That's why the plain "تسجيل التعبئة" button stays
+  // visible alongside the exception option below rather than being
+  // replaced by it — a real submit is still the authoritative check, this
+  // just stops making the user run it once, pointlessly, before the
+  // exception path they can already see is coming becomes available.
+  const previewRejection: Rejection | null = (() => {
+    const failed = rulePreviewQuery.data?.checks.find((c) => !c.passed);
+    return failed ? { reason: failed.reason, trigger: null } : null;
+  })();
+  const effectiveRejection = rejection ?? previewRejection;
+
+  // Bug found live: this used to be gated on `rejection !== null` alone —
+  // but round 11 item 7 (above) made the exception path reachable via
+  // `previewRejection` too, without `rejection` ever being set (that's now
+  // the COMMON path: the exception button is the first option offered once
+  // a rule fails, not a fallback reached only after an attempted submit).
+  // Reaching the exception form that way left this query permanently
+  // disabled — the dropdown rendered with only the placeholder option and
+  // zero network requests ever fired for /fillups/exception-types, even
+  // though the backend had real active types to return. Gated on
+  // `effectiveRejection` instead, which covers both paths.
+  const { data: exceptionTypes } = useQuery({
+    queryKey: ['fillups', 'exception-types'],
+    queryFn: async () => (await apiClient.get<ExceptionTypeOption[]>('/fillups/exception-types')).data,
+    enabled: effectiveRejection !== null && canRecordException,
+  });
+
+  // Round 8: the confirmation screen's live day-list rail from screenshot
+  // 06/07 — same GET /reports/daily endpoint DailyReportPage already
+  // uses, scoped to the station just used and today's date. Gated on
+  // reports:view since that's the same permission DailyReportPage itself
+  // requires; without it this just skips the rail rather than firing a
+  // request that would 403.
   const todayIso = new Date().toISOString().slice(0, 10);
   const dayListQuery = useQuery({
     queryKey: ['reports', 'daily', success?.stationId, todayIso],
@@ -510,6 +656,24 @@ export function RecordFillUpPage() {
     enabled: !!success && canViewReports && !!success.stationId,
   });
 
+  // Round 10: the SAME rail, but for the duration of the wizard itself
+  // (not just the post-submit confirmation) — the client didn't ask to
+  // lose the day-list just because the desktop-only form it lived in is
+  // going away, so it becomes a persistent sidebar next to the step
+  // column on wide screens. Scoped to whichever station the fill-up is
+  // actually being recorded at right now, not to a completed submission.
+  const currentStationId = fillUpForm.watch('stationId');
+  const wizardDayListQuery = useQuery({
+    queryKey: ['reports', 'daily', currentStationId, todayIso],
+    queryFn: async () =>
+      (
+        await apiClient.get<DailyReportResponse>('/reports/daily', {
+          params: { stationId: currentStationId, date: todayIso },
+        })
+      ).data,
+    enabled: !success && canViewReports && !!currentStationId,
+  });
+
   // ── Mobile plate-entry lookup ────────────────────────────────────────
   // Round 8: the wizard's first screen is a NARROWER, plate-only entry
   // step (01-*.png screen 1) — not the same broad plate/chassis/
@@ -520,32 +684,129 @@ export function RecordFillUpPage() {
   // free-text field is (round 7 deliberately kept THAT field free-text
   // for exactly this reason — this is a different, narrower field, not a
   // reversal of that call).
-  const plateComplete = LICENSE_PLATE_REGEX.test(plateValue);
+  // Round 11 item 4 — TWO real, distinct bugs behind one client complaint,
+  // both confirmed live before fixing either:
+  //
+  // (a) This used to be `LICENSE_PLATE_REGEX.test(plateValue)`. The
+  // regex's separator is optional (`[-\s]?`), so once the city-code group
+  // has 2 digits and NOTHING has been typed into the sequence group yet,
+  // `joinGroups` (deliberately, by its own design — no dangling dash while
+  // a later group is still empty) emits an unseparated string like "84"
+  // with no dash at all. The regex then backtracks and happily reads that
+  // as "8" (1-digit code) + "4" (1-digit sequence) — a false "complete"
+  // match on a plate that's genuinely still mid-typing.
+  //
+  // (b) Deeper, and the actual cause of the client's specific screenshot
+  // (city code done, 4 of 7 sequence digits typed, "not found" already
+  // showing): PLATE_DIGIT_GROUPS' sequence group has `minFilled: 1` — a
+  // real format rule (a 1-digit sequence number is a genuinely valid
+  // plate), so `isAllComplete` alone goes true the instant the FIRST
+  // sequence digit lands, not just once all 7 are typed. Every keystroke
+  // after that first sequence digit was firing a real lookup against a
+  // too-short, not-actually-final value — the "not found" message wasn't
+  // wrong for THAT value, it was just showing for a value the user hadn't
+  // finished typing yet, repeatedly, on every keystroke.
+  //
+  // Fixed: `plateComplete` now requires isAllComplete (every group has at
+  // least reached its own minFilled) PLUS the LAST group specifically
+  // being either fully filled or the user having demonstrably stopped
+  // typing (blurred away). Only the LAST group's fill state is actually
+  // ambiguous while typing is still in progress — natural typing moves
+  // strictly forward group-by-group, so by the time the sequence group
+  // has ANY content at all, the city-code group is already behind the
+  // user and its own minFilled is trustworthy as final (this was the
+  // first version of this fix's own bug, caught live: requiring EVERY
+  // group fully filled wrongly stayed incomplete forever for a genuinely
+  // valid 1-digit city code, since that group's second box was never
+  // going to fill).
+  const plateGroupValues = splitToGroups(plateValue, PLATE_DIGIT_GROUPS, '-');
+  const lastPlateGroupIndex = PLATE_DIGIT_GROUPS.length - 1;
+  const lastPlateGroup = PLATE_DIGIT_GROUPS[lastPlateGroupIndex]!;
+  const lastPlateGroupFilled = (plateGroupValues[lastPlateGroupIndex] ?? '').length === lastPlateGroup.boxes;
+  const plateComplete =
+    isAllComplete(plateGroupValues, PLATE_DIGIT_GROUPS) && (lastPlateGroupFilled || plateBlurred);
+
+  // Round 12 (client testing found this started too late — confirmed
+  // live): the client wants candidate matches from the very FIRST digit
+  // typed anywhere in the plate, including the city-code digits before
+  // the dash — not gated on isAllComplete (which requires BOTH groups to
+  // have content, so nothing showed until the user crossed into the
+  // sequence group). "Worth searching" is now just "any digit typed at
+  // all." This single query still serves both the live list below and
+  // the definitive match/no-match verdict once plateComplete — no second
+  // query needed, and the exact-match auto-advance effect below still
+  // only ever fires on a genuine full-string match, so firing the search
+  // earlier can't cause a premature auto-advance.
+  const debouncedPlateGroupValues = splitToGroups(debouncedPlateValue, PLATE_DIGIT_GROUPS, '-');
+  const plateSearchWorthwhile = debouncedPlateGroupValues.some((g) => g.length > 0);
   const plateLookupQuery = useQuery({
-    queryKey: ['vehicles', 'plate-lookup', plateValue],
+    queryKey: ['vehicles', 'plate-lookup', debouncedPlateValue],
     queryFn: async () =>
       (
-        await apiClient.get<{ id: string; internalCode: string; currentPlate: string }[]>('/vehicles', {
-          params: { search: normalizePlateSearchTerm(plateValue), take: 5 },
+        await apiClient.get<{ id: string; internalCode: string; currentPlate: string; model: string | null }[]>('/vehicles', {
+          params: { search: normalizePlateSearchTerm(debouncedPlateValue), take: 5 },
         })
       ).data,
-    enabled: plateComplete,
+    enabled: plateSearchWorthwhile,
   });
   const matchedVehicle = plateLookupQuery.data?.find(
     (v) => normalizePlateSearchTerm(v.currentPlate) === normalizePlateSearchTerm(plateValue),
   );
+  // Live-search candidates shown below the keypad WHILE still typing —
+  // distinct from matchedVehicle (exact match, drives auto-advance).
+  //
+  // Bug found live (client report): this used to be gated on
+  // `!plateComplete`, which sounds right but isn't — `plateComplete` is
+  // idle-timer-inclusive (see the 900ms effect above), so ~650ms after
+  // results first rendered, the idle timer alone flips `plateBlurred`
+  // true, `plateComplete` follows (isAllComplete was already satisfied
+  // by the sequence group's `minFilled: 1`), and this ternary zeroed the
+  // list — matches vanished on their own with no click and no further
+  // typing. That idle timer exists to finalize the "not found / add new
+  // vehicle" verdict for a genuinely short, already-typed plate (see
+  // below); it was never meant to control whether currently-fetched
+  // candidates stay on screen, and conflating the two is exactly what
+  // caused the disappearing act. The live list now depends only on
+  // whether the query actually has results and there's no exact match
+  // yet — never on the idle/blur approximation.
+  const plateLiveCandidates = !matchedVehicle ? (plateLookupQuery.data ?? []) : [];
+  const plateHasNoCandidates =
+    plateSearchWorthwhile && !plateLookupQuery.isFetching && !matchedVehicle && plateLiveCandidates.length === 0;
 
   // Auto-advance once an exact plate match is found — only while still on
   // the 'plate' step, so re-running this effect after the user has
   // already moved on (e.g. they go back to double check) doesn't yank
   // them forward again.
+  //
+  // Bug found live: a multi-station (canViewAllStations) user who typed a
+  // plate that matched an ALREADY-CREATED vehicle (e.g. one they'd just
+  // added inline) but hadn't picked a station yet would auto-advance to
+  // 'match' immediately regardless — then fail at the final submit with
+  // "no station chosen" and get sent back to 'plate' by onInvalidFillUp/
+  // onSubmitException. Once back there, this effect's old dependency array
+  // (`[matchedVehicle?.id]` only) would never fire again, since the SAME
+  // vehicle was already matched before — nothing else ever changed to
+  // re-trigger it. The user was stuck on 'plate' with no way forward
+  // short of retyping the plate to force a change, which read as "my data
+  // disappeared" even though the vehicle itself was already saved
+  // server-side. Fixed by also watching stationId and requiring it to be
+  // set (for canViewAllStations users only — a scoped employee's stationId
+  // defaults from their own station and never blocks this) before
+  // advancing — plate and station can now be filled in either order, and
+  // picking the station after being sent back is itself what unblocks
+  // progress again.
+  const watchedStationIdForAutoAdvance = fillUpForm.watch('stationId');
   useEffect(() => {
-    if (matchedVehicle && mobileStep === 'plate') {
+    if (
+      matchedVehicle &&
+      mobileStep === 'plate' &&
+      (!canViewAllStations || watchedStationIdForAutoAdvance)
+    ) {
       fillUpForm.setValue('vehicleId', matchedVehicle.id, { shouldValidate: true });
       setSelectedVehicleLabel(formatLicensePlate(matchedVehicle.currentPlate));
       setMobileStep('match');
     }
-  }, [matchedVehicle?.id]);
+  }, [matchedVehicle?.id, watchedStationIdForAutoAdvance]);
 
   const selectedExceptionTypeId = exceptionForm.watch('exceptionTypeId');
   const selectedExceptionType = exceptionTypes?.find((t) => t.id === selectedExceptionTypeId) ?? null;
@@ -561,12 +822,14 @@ export function RecordFillUpPage() {
     setRejection(null);
     setSuccess(null);
     setSelectedVehicleLabel('');
-    setNewlyCreatedVehicleLabel(undefined);
     setAmountLyd('');
     setMobileStep('plate');
     setPlateValue('');
     setShowManualSearchMobile(false);
     setShowNewVehicleFormMobile(false);
+    setNewlyCreatedVehicle(null);
+    setQrScanOpen(false);
+    setCameraUnavailableHint(false);
     idempotencyKeyRef.current = newIdempotencyKey();
   }
 
@@ -615,7 +878,11 @@ export function RecordFillUpPage() {
     };
   }
 
-  function buildConfirmationSummary(values: FillUpFormValues, isException: boolean): ConfirmationSummary {
+  function buildConfirmationSummary(
+    values: FillUpFormValues,
+    isException: boolean,
+    isApproved: boolean,
+  ): ConfirmationSummary {
     const stationName = stations?.find((s) => s.id === values.stationId)?.name ?? '';
     return {
       vehicleLabel: selectedVehicleLabel,
@@ -625,7 +892,10 @@ export function RecordFillUpPage() {
       fuelType: values.fuelType,
       quantityLiters: values.quantityLiters,
       occurredAt: new Date().toISOString(),
+      isApproved,
       isException,
+      newVehicleInternalCode: newlyCreatedVehicle?.id === values.vehicleId ? newlyCreatedVehicle.internalCode : undefined,
+      newVehicleOwnerPhone: newlyCreatedVehicle?.id === values.vehicleId ? newlyCreatedVehicle.ownerPhone : undefined,
     };
   }
 
@@ -638,15 +908,49 @@ export function RecordFillUpPage() {
         setRejection({ reason: result.reason, trigger: result.trigger });
         return;
       }
-      setSuccess(buildConfirmationSummary(values, result.isException));
+      setSuccess(buildConfirmationSummary(values, result.isException, !result.isException || result.exception?.approvedById != null));
     } catch (error) {
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
   }
 
+  // Bug found live: clicking "تسجيل التعبئة" did NOTHING — no error, no
+  // navigation, nothing — for a multi-station (canViewAllStations) user
+  // who reached the review step without picking a station. Root cause:
+  // react-hook-form's handleSubmit silently no-ops on a validation
+  // failure unless a second (invalid) callback is passed — it was never
+  // wired here, so a failing stationId check (the field lives on the
+  // 'plate' step, whose own error text the user had long since navigated
+  // past by the time they clicked submit on 'review') just vanished into
+  // formState.errors with nothing on screen ever pointing at it. This
+  // sends the user back to the step that actually holds the invalid
+  // field (today, only stationId can be empty by the time review is
+  // reachable — vehicleId/quantityLiters are already enforced by their
+  // own steps' "متابعة" buttons) and surfaces a real Arabic message
+  // instead of a click that does nothing.
+  function onInvalidFillUp(errors: FieldErrors<FillUpFormValues>) {
+    if (errors.stationId) {
+      setSubmitError(errors.stationId.message ?? 'اختر المحطة قبل تسجيل التعبئة.');
+      setMobileStep('plate');
+      return;
+    }
+    setSubmitError('تعذر إتمام العملية — تحقّق من بيانات التعبئة.');
+  }
+
   async function onSubmitException(exceptionValues: ExceptionFormValues) {
     setSubmitError(null);
     const base = toBasePayload(fillUpForm.getValues());
+    // Bug found live: this path posts straight to the API with no
+    // client-side validation at all (unlike onSubmitFillUp, which at least
+    // goes through react-hook-form's zod schema) — a missing stationId
+    // reached the backend as a 404 "Station not found", which
+    // formatAxiosError has no special case for, so it fell through to the
+    // generic "تعذر إتمام العملية" with no hint of the actual cause.
+    if (!base.stationId) {
+      setSubmitError('اختر المحطة قبل تسجيل الاستثناء.');
+      setMobileStep('plate');
+      return;
+    }
     try {
       const result = await submitFillUp({ ...base, ...exceptionValues });
       if (isRejected(result)) {
@@ -655,7 +959,13 @@ export function RecordFillUpPage() {
         setSubmitError('تعذر تسجيل الاستثناء.');
         return;
       }
-      setSuccess(buildConfirmationSummary(fillUpForm.getValues(), result.isException));
+      setSuccess(
+        buildConfirmationSummary(
+          fillUpForm.getValues(),
+          result.isException,
+          !result.isException || result.exception?.approvedById != null,
+        ),
+      );
     } catch (error) {
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
@@ -697,10 +1007,10 @@ export function RecordFillUpPage() {
         <div className="mx-auto flex max-w-xl flex-col items-center py-6 text-center sm:mx-0 sm:max-w-none">
           <div
             className={`flex h-[88px] w-[88px] items-center justify-center rounded-full ${
-              success.isException ? 'bg-accent-100' : 'bg-ok-100'
+              success.isException && !success.isApproved ? 'bg-accent-100' : 'bg-ok-100'
             }`}
           >
-            {success.isException ? (
+            {success.isException && !success.isApproved ? (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#a8681c" strokeWidth="2.2">
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 7v5l3.5 2" />
@@ -712,11 +1022,25 @@ export function RecordFillUpPage() {
             )}
           </div>
           <h1 className="mt-6 text-[24px] font-black text-ink" data-testid="fillup-success-heading">
-            {success.isException ? 'سُجِّل كاستثناء — بانتظار اعتماد المشرف' : 'تم تسجيل التعبئة'}
+            {/* Round 12: a fillups:record_exception holder's exception is
+                auto-approved at creation (see FillUpsService.create) — the
+                old copy unconditionally said "awaiting supervisor approval"
+                for every exception, which is now simply false for most of
+                them. Only the genuinely-still-pending case (a legacy row,
+                or a caller somehow without auto-approval) shows that text. */}
+            {success.isException
+              ? success.isApproved
+                ? 'سُجِّل كاستثناء — معتمدة'
+                : 'سُجِّل كاستثناء — بانتظار اعتماد المشرف'
+              : 'تم تسجيل التعبئة'}
           </h1>
           <p className="mt-2.5 text-[13px] leading-[1.8] text-ink-soft">
             {success.isException ? (
-              'لا يمكنك تعديلها أو حذفها بعد الآن — لن تحتسب ضمن التعبئات المعتمدة حتى يوافق عليها المشرف.'
+              success.isApproved ? (
+                'اعتُمدت هذه التعبئة تلقائيًا عند تسجيلها — لا يمكن تعديلها أو حذفها بعد الآن.'
+              ) : (
+                'لا يمكنك تعديلها أو حذفها بعد الآن — لن تحتسب ضمن التعبئات المعتمدة حتى يوافق عليها المشرف.'
+              )
             ) : (
               <>
                 {success.stationName ? `سُجّلت باسمك في ${success.stationName}، ` : 'سُجّلت باسمك، '}
@@ -750,6 +1074,20 @@ export function RecordFillUpPage() {
             </div>
           </Card>
 
+          {/* Round 15: only when THIS transaction created the vehicle
+              inline — an already-registered vehicle's success screen is
+              unchanged, per design/design_handoff_fuel_control_system's
+              13d ("both success-screen variants side by side"). */}
+          {success.newVehicleInternalCode && (
+            <VehicleQrPanel
+              internalCode={success.newVehicleInternalCode}
+              vehicleLabel={success.vehicleLabel}
+              variant="compact"
+              className="mt-4 w-full text-start"
+              ownerPhone={success.newVehicleOwnerPhone}
+            />
+          )}
+
           <div className="mt-6 flex w-full flex-col gap-2.5">
             <PillButton onClick={resetAll} className="h-[52px] w-full text-[15px]">
               تعبئة جديدة
@@ -757,6 +1095,15 @@ export function RecordFillUpPage() {
             {canViewReports && (
               <PillButton variant="ghost" onClick={() => navigate('/reports/daily')} className="h-11 w-full text-[13px]">
                 عرض تعبئات اليوم
+              </PillButton>
+            )}
+            {success.newVehicleInternalCode && (
+              <PillButton
+                variant="ghost"
+                onClick={() => navigate(`/vehicles/${newlyCreatedVehicle?.id}`)}
+                className="h-11 w-full text-[13px]"
+              >
+                صفحة المركبة الجديدة
               </PillButton>
             )}
           </div>
@@ -775,9 +1122,20 @@ export function RecordFillUpPage() {
   const vehicleSelected = fillUpForm.watch('vehicleId');
 
   return (
-    <div className="mx-auto max-w-xl">
-      {/* ── Mobile guided wizard (round 8) ──────────────────────────── */}
-      <div className="sm:hidden" data-testid="fillup-mobile-wizard">
+    // Round 10: the guided journey is now the ONLY fill-up experience at
+    // every width — the sm:hidden/hidden-sm:block split that gated it to
+    // narrow viewports is gone. The day-list rail that used to live only
+    // in the desktop form's own layout becomes a sidebar here, visible
+    // beside the step column on wide screens; the step column itself
+    // still shows exactly one step at a time regardless of viewport width
+    // — the client asked for the SAME journey everywhere, not a wider
+    // version of it.
+    <div className="sm:mx-auto sm:grid sm:max-w-3xl sm:grid-cols-[280px_1fr] sm:items-start sm:gap-5">
+      <div className="hidden sm:block">
+        <DayListRail query={wizardDayListQuery} visible={canViewReports} highlightStationName="" />
+      </div>
+
+      <div className="mx-auto w-full max-w-xl" data-testid="fillup-mobile-wizard">
         <div className="mb-3 flex items-center gap-2">
           {mobileStep !== 'plate' && (
             <button
@@ -806,7 +1164,38 @@ export function RecordFillUpPage() {
         </div>
 
         {mobileStep === 'plate' && (
-          <Card className="p-4">
+          <Card className="relative p-4">
+            {qrScanOpen && (
+              <QrScanPanel
+                variant={scanVariant}
+                onResolved={(vehicle) => {
+                  // Reuse the existing plate pipeline rather than a
+                  // parallel resolve-and-jump: setting plateValue lets the
+                  // SAME plateLookupQuery -> matchedVehicle -> auto-advance
+                  // effect above (station-gating included) take it from
+                  // here, so this can never drift out of sync with the
+                  // next fix that effect gets.
+                  setCameraUnavailableHint(false);
+                  setQrScanOpen(false);
+                  setPlateValue(vehicle.currentPlate);
+                }}
+                onCancel={() => setQrScanOpen(false)}
+                onCameraUnavailable={() => setCameraUnavailableHint(true)}
+              />
+            )}
+            {canViewAllStations && (
+              <div className="mb-4">
+                <label className={fieldLabelClass}>المحطة</label>
+                <StationSelect
+                  value={fillUpForm.watch('stationId')}
+                  onChange={(v) => fillUpForm.setValue('stationId', v, { shouldValidate: true })}
+                  className={textInputClass}
+                />
+                {fillUpForm.formState.errors.stationId && (
+                  <p className={fieldErrorClass}>{fillUpForm.formState.errors.stationId.message}</p>
+                )}
+              </div>
+            )}
             {showNewVehicleFormMobile ? (
               <VehicleCreateForm
                 initialPlate={plateValue}
@@ -815,6 +1204,11 @@ export function RecordFillUpPage() {
                   setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
                   setShowNewVehicleFormMobile(false);
                   setMobileStep('match');
+                  // Round 15: only onCreated (a genuinely new vehicle),
+                  // never onDuplicateFound below (resolves to an EXISTING
+                  // vehicle) — drives the compact QR block on the success
+                  // screen, see ConfirmationSummary.newVehicleInternalCode.
+                  setNewlyCreatedVehicle({ id: vehicle.id, internalCode: vehicle.internalCode, ownerPhone: vehicle.ownerPhone });
                 }}
                 onDuplicateFound={(vehicle) => {
                   fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
@@ -831,14 +1225,78 @@ export function RecordFillUpPage() {
                   groups={PLATE_DIGIT_GROUPS}
                   separator="-"
                   value={plateValue}
-                  onChange={setPlateValue}
+                  onChange={(v) => {
+                    setPlateValue(v);
+                    setPlateBlurred(false);
+                  }}
+                  onFocusLeave={() => setPlateBlurred(true)}
                   showKeypad
                   data-testid="fillup-mobile-plate-input"
                 />
-                {plateComplete && plateLookupQuery.isFetching && (
+                {/* Round 12: candidate matches while still typing — the
+                    client asked not to require the entire plate before
+                    the system finds it. Shown whenever the search has
+                    results and there's no exact match yet, independent
+                    of plateComplete (see plateLiveCandidates' own
+                    comment for why that used to make results vanish
+                    mid-typing). */}
+                {plateSearchWorthwhile && plateLookupQuery.isFetching && !matchedVehicle && (
                   <p className="mt-3 text-center text-[12px] text-ink-soft">...جارٍ البحث</p>
                 )}
-                {plateComplete && !plateLookupQuery.isFetching && !matchedVehicle && (
+                {plateLiveCandidates.length > 0 && (
+                  <div className="mt-3 overflow-hidden rounded-sm border border-line" data-testid="fillup-mobile-plate-live-results">
+                    <ul>
+                      {plateLiveCandidates.map((vehicle) => (
+                        <li key={vehicle.id} className="border-b border-line last:border-0">
+                          <button
+                            type="button"
+                            data-testid="fillup-mobile-plate-live-result"
+                            // Round 12 (client testing found this — confirmed
+                            // the mechanism live): without this, a real
+                            // click/tap first fires `mousedown` on this
+                            // button, which blurs the currently-focused
+                            // digit box BEFORE the `click` event fires.
+                            // That blur runs DigitBoxInput's onFocusLeave →
+                            // setPlateBlurred(true) → plateComplete flips
+                            // true (isAllComplete was already satisfied) →
+                            // plateLiveCandidates goes empty → this button
+                            // unmounts mid-click, so the click never
+                            // reaches it — "the suggestion just
+                            // disappears," exactly the client's report.
+                            // Same guard VehicleSearchSelect's own dropdown
+                            // options already use for identical reasons.
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
+                              setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
+                              setMobileStep('match');
+                            }}
+                            className="flex w-full items-center gap-2.5 bg-surface-alt px-3 py-2.5 text-start text-[13px] font-bold text-ink hover:bg-surface"
+                          >
+                            {/* Round 18: "helps the person make sure it's
+                                the same vehicle they're looking for" — the
+                                real brand logo (or the generic glyph
+                                fallback), same component the vehicle
+                                detail/list pages already use. */}
+                            <VehicleBrandLogo model={vehicle.model} size={28} />
+                            <span className="min-w-0">
+                              <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>
+                              <span className="ms-1.5 text-[11px] font-normal text-ink-faint">{vehicle.internalCode}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* "Not found" only finalizes once the search has
+                    genuinely returned zero candidates AND the user has
+                    gone idle or filled every box — a real, stable
+                    signal (a query that already matched nothing won't
+                    start matching from more of the same prefix), unlike
+                    the live list above which no longer depends on the
+                    idle timer at all. */}
+                {plateHasNoCandidates && plateComplete && (
                   <div className="mt-3 rounded-sm bg-surface-alt p-3 text-center" data-testid="fillup-mobile-no-match">
                     <p className="text-[12.5px] text-ink-soft">لا توجد مركبة بهذا الرقم في المنظومة</p>
                     {canCreateVehicle && (
@@ -850,6 +1308,43 @@ export function RecordFillUpPage() {
                       >
                         إضافة كمركبة جديدة
                       </PillButton>
+                    )}
+                  </div>
+                )}
+                {/* Round 15: scanning is a second, equal route to
+                    identify the vehicle — offered next to the digit-box
+                    entry, only when a camera could plausibly open at all
+                    (a runtime failure after tapping is QrScanPanel's own
+                    'denied' state, not this gate). */}
+                {qrScanSupported && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-line" />
+                    <span className="text-[11px] font-bold text-ink-faint">أو</span>
+                    <div className="h-px flex-1 bg-line" />
+                  </div>
+                )}
+                {qrScanSupported && (
+                  <div
+                    className={`mt-4 rounded-md border-2 p-3.5 text-center ${
+                      cameraUnavailableHint ? 'border-accent bg-accent-100' : 'border-primary'
+                    }`}
+                  >
+                    <PillButton
+                      variant="secondary"
+                      className="w-full justify-center"
+                      data-testid="fillup-mobile-qr-scan-offer"
+                      onClick={() => {
+                        setScanVariant(window.innerWidth >= 640 ? 'desktop' : 'phone');
+                        setQrScanOpen(true);
+                      }}
+                    >
+                      امسح رمز المركبة
+                    </PillButton>
+                    <p className="mt-1.5 text-[11px] text-ink-soft">أسرع من الكتابة إن كان الرمز مع المالك</p>
+                    {cameraUnavailableHint && (
+                      <p className="mt-1.5 text-[11px] font-bold text-accent-dark">
+                        يمكنك تجربة المسح مرة أخرى بعد السماح بإذن الكاميرا من إعدادات الجهاز.
+                      </p>
                     )}
                   </div>
                 )}
@@ -871,7 +1366,6 @@ export function RecordFillUpPage() {
                     setSelectedVehicleLabel(formatLicensePlate(label));
                     setMobileStep('match');
                   }}
-                  onQueryChange={setVehicleQuery}
                   onCreateNew={canCreateVehicle ? () => setShowNewVehicleFormMobile(true) : undefined}
                 />
                 <button
@@ -1004,13 +1498,16 @@ export function RecordFillUpPage() {
 
         {mobileStep === 'review' && (
           <>
-            <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp)} className="space-y-3">
-              <Card data-testid="rule-review-card-mobile" className={`p-3.5 ${rejection ? 'border-t-4 border-danger' : ''}`}>
+            <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp, onInvalidFillUp)} className="space-y-3">
+              <Card
+                data-testid="rule-review-card-mobile"
+                className={`p-3.5 ${effectiveRejection ? 'border-t-4 border-danger' : ''}`}
+              >
                 <RuleReviewChecks
                   checks={rulePreviewQuery.data?.checks}
                   isLoading={rulePreviewQuery.isLoading}
                   isError={rulePreviewQuery.isError}
-                  rejection={rejection}
+                  rejection={effectiveRejection}
                   idSuffix="-mobile"
                 />
               </Card>
@@ -1030,7 +1527,7 @@ export function RecordFillUpPage() {
               )}
             </form>
 
-            {rejection && (
+            {effectiveRejection && canRecordException && (
               <PillButton
                 data-testid="fillup-mobile-record-exception"
                 variant="danger"
@@ -1052,196 +1549,7 @@ export function RecordFillUpPage() {
               selectedExceptionType={selectedExceptionType}
               onSubmit={onSubmitException}
               idSuffix="-mobile"
-            />
-          </Card>
-        )}
-      </div>
-
-      {/* ── Desktop single-page form (unchanged from round 6/7) ─────── */}
-      <div className="hidden sm:block">
-        <h1 className="mb-4 text-lg font-extrabold text-ink">تسجيل تعبئة وقود</h1>
-
-        <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp)} className="space-y-3">
-          <Card className="p-3.5">
-            <label className={fieldLabelClass}>المحطة</label>
-            <StationSelect
-              value={fillUpForm.watch('stationId')}
-              onChange={(v) => fillUpForm.setValue('stationId', v, { shouldValidate: true })}
-              disabled={!canViewAllStations}
-              className={textInputClass}
-            />
-            {fillUpForm.formState.errors.stationId && (
-              <p className={fieldErrorClass}>{fillUpForm.formState.errors.stationId.message}</p>
-            )}
-          </Card>
-
-          <Card className="p-3.5">
-            <label className={fieldLabelClass}>المركبة</label>
-            {showNewVehicleForm ? (
-              <VehicleCreateForm
-                initialPlate={vehicleQuery}
-                onCreated={(vehicle) => {
-                  fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
-                  setNewlyCreatedVehicleLabel(vehicle.currentPlate);
-                  setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
-                  setShowNewVehicleForm(false);
-                }}
-                onDuplicateFound={(vehicle) => {
-                  fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
-                  setNewlyCreatedVehicleLabel(vehicle.currentPlate);
-                  setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
-                  setShowNewVehicleForm(false);
-                }}
-                onCancel={() => setShowNewVehicleForm(false)}
-              />
-            ) : (
-              <>
-                <VehicleSearchSelect
-                  value={fillUpForm.watch('vehicleId')}
-                  onChange={(id, label) => {
-                    fillUpForm.setValue('vehicleId', id, { shouldValidate: true });
-                    setSelectedVehicleLabel(formatLicensePlate(label));
-                  }}
-                  initialLabel={newlyCreatedVehicleLabel}
-                  onQueryChange={setVehicleQuery}
-                  onCreateNew={canCreateVehicle ? () => setShowNewVehicleForm(true) : undefined}
-                />
-                {canCreateVehicle && (
-                  <button
-                    type="button"
-                    disabled={vehicleQuery.replace(/\D/g, '').length === 0}
-                    onClick={() => setShowNewVehicleForm(true)}
-                    className="mt-1.5 text-[11.5px] font-bold text-accent-dark disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    مركبة جديدة؟ إضافة مركبة جديدة
-                  </button>
-                )}
-                {fillUpForm.watch('vehicleId') && <VehiclePreviewCard vehicleId={fillUpForm.watch('vehicleId')} />}
-              </>
-            )}
-            {fillUpForm.formState.errors.vehicleId && (
-              <p className={fieldErrorClass}>{fillUpForm.formState.errors.vehicleId.message}</p>
-            )}
-          </Card>
-
-          <Card className="p-3.5">
-            <label className={fieldLabelClass}>نوع الوقود</label>
-            <div className="flex gap-2">
-              {FUEL_TYPES.map((ft) => {
-                const selected = fillUpForm.watch('fuelType') === ft.value;
-                return (
-                  <button
-                    key={ft.value}
-                    type="button"
-                    onClick={() => {
-                      fillUpForm.setValue('fuelType', ft.value, { shouldValidate: true });
-                      applyAmount(amountLyd, ft.value);
-                    }}
-                    className={`h-11 flex-1 rounded-sm text-[13px] font-bold transition ${
-                      selected
-                        ? 'bg-accent text-white shadow-[0_6px_16px_-6px_rgba(232,165,61,.6)]'
-                        : 'bg-surface-alt text-ink-soft'
-                    }`}
-                  >
-                    {ft.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
-          <Card className="p-3.5">
-            <label className={fieldLabelClass}>المبلغ المدفوع (د.ل)</label>
-            {(() => {
-              const fuelType = fillUpForm.watch('fuelType');
-              const price = fuelPrices?.[fuelType];
-              return (
-                <>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      step="0.01"
-                      data-testid="fillup-amount-input"
-                      value={amountLyd}
-                      onChange={(e) => applyAmount(e.target.value, fuelType)}
-                      dir="ltr"
-                      disabled={!price}
-                      className="w-28 rounded-sm bg-transparent font-mono text-[30px] font-extrabold text-primary-dark focus:outline-none disabled:opacity-50"
-                    />
-                    <div className="flex flex-1 justify-end gap-1.5">
-                      {AMOUNT_QUICK_PICKS.map((amount) => {
-                        const selected = amountLyd === amount;
-                        return (
-                          <button
-                            key={amount}
-                            type="button"
-                            onClick={() => applyAmount(amount, fuelType)}
-                            className={`h-10 w-12 rounded-sm font-mono text-[13px] font-bold ${
-                              selected ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
-                            }`}
-                          >
-                            {amount}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {!price && (
-                    <p className="mt-1.5 text-[11px] text-ink-faint">...جارٍ تحميل سعر الوقود</p>
-                  )}
-                </>
-              );
-            })()}
-            {fillUpForm.formState.errors.quantityLiters && (
-              <p className={fieldErrorClass}>{fillUpForm.formState.errors.quantityLiters.message}</p>
-            )}
-            {(() => {
-              const quantity = fillUpForm.watch('quantityLiters');
-              if (!quantity) return null;
-              return (
-                <div className="mt-3 flex items-center justify-between rounded-sm bg-surface-alt px-3 py-2.5">
-                  <span className="text-[11px] font-bold text-ink-soft">الكمية المقدَّرة</span>
-                  <span className="text-[14px] font-extrabold text-ink" data-testid="fillup-estimated-liters">
-                    <LtrText>{quantity}</LtrText> لتر
-                  </span>
-                </div>
-              );
-            })()}
-          </Card>
-
-          {selectedVehicleId && (
-            <Card data-testid="rule-review-card" className={`p-3.5 ${rejection ? 'border-t-4 border-danger' : ''}`}>
-              <RuleReviewChecks
-                checks={rulePreviewQuery.data?.checks}
-                isLoading={rulePreviewQuery.isLoading}
-                isError={rulePreviewQuery.isError}
-                rejection={rejection}
-              />
-            </Card>
-          )}
-
-          {submitError && <p className="text-[13px] text-danger">{submitError}</p>}
-
-          <PillButton
-            type="submit"
-            data-testid="fillup-submit"
-            disabled={fillUpForm.formState.isSubmitting || (!!selectedVehicleId && rulePreviewQuery.isLoading)}
-            size="md"
-            className="h-14 w-full text-[15px]"
-          >
-            {fillUpForm.formState.isSubmitting ? '...جارٍ التسجيل' : 'تسجيل التعبئة'}
-          </PillButton>
-          <p className="text-center text-[11px] text-ink-faint">تُفحص القواعد عند التسجيل</p>
-        </form>
-
-        {rejection && (
-          <Card data-testid="fillup-rejection" className="mt-4 p-5">
-            <p className="mb-3 text-[13px] font-bold text-ink">تسجيلها كاستثناء</p>
-            <ExceptionFormFields
-              exceptionForm={exceptionForm}
-              exceptionTypes={exceptionTypes}
-              selectedExceptionType={selectedExceptionType}
-              onSubmit={onSubmitException}
+              submitError={submitError}
             />
           </Card>
         )}
@@ -1257,7 +1565,16 @@ export function RecordFillUpPage() {
 // come back as a 422 body handled by isRejected()/RULE_VIOLATION_MESSAGES
 // above, which is the real Arabic path. This only fires for a genuinely
 // unexpected error, and per the code-leak audit it must not surface the raw
-// English message in this Arabic UI even then.
-function formatAxiosError(_error: AxiosError<{ message?: string | string[] }>): string {
+// English message in this Arabic UI even then — EXCEPT the one
+// machine-checkable marker below, which is deliberately not prose.
+function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): string {
+  // Round 11 item 1: FillUpsService.create's provisional-owner-identity
+  // hard gate (see OWNER_IDENTITY_PROVISIONAL there) — a 403 with this
+  // exact marker string as its message, checked here rather than shown as
+  // the generic fallback, since the client specifically wants this case
+  // to read as "go fix the owner's identity," not "something went wrong."
+  if (error.response?.status === 403 && error.response.data?.message === 'OWNER_IDENTITY_PROVISIONAL') {
+    return 'هوية مالك هذه المركبة مؤقتة (رخصة قيادة) وصالحة لأول تعبئة فقط. أضف رقمًا وطنيًا أو إداريًا حقيقيًا لبيانات المالك قبل تسجيل تعبئة أخرى.';
+  }
   return 'تعذر إتمام العملية. حاول مرة أخرى.';
 }

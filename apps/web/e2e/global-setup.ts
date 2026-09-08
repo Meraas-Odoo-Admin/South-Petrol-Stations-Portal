@@ -137,6 +137,10 @@ async function main() {
       identityType: 'NATIONAL_ID',
       identityNumber: ownerIdentityNumber,
       fullName: `PW Test Owner ${runId}`,
+      // Round 20: CreateOwnerDto.phone is required now (the WhatsApp-share
+      // button opens a chat with this number directly) — a fixed test
+      // number is fine here, this owner is never actually messaged.
+      phone: '0910000000',
     },
     { headers: sysadminHeaders },
   );

@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 import { IdentityType } from '@prisma/client';
 import { IsValidIdentityNumber } from '../../common/validators/identity-number.validator';
+import { LIBYAN_MOBILE_REGEX } from '../../common/validators/libyan-formats';
 
 // Same (identityType, identityNumber) shape as CreateDriverDto — round 6:
 // the vehicle owner, not the driver, is the identity that matters for
@@ -24,10 +25,19 @@ export class CreateOwnerDto {
   @IsValidIdentityNumber()
   identityNumber!: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  // Round 20: required going forward — the client's own reasoning is that
+  // the vehicle-detail QR/share button now opens a WhatsApp chat directly
+  // with this number, so a vehicle onboarded without one has no working
+  // share target at all. Existing VehicleOwner rows created before this
+  // change keep phone nullable in the schema/UpdateOwnerDto (no backfill
+  // decision has been made for them, same "mandatory going forward, not
+  // retroactive" pattern already used for CreateVehicleDto.ownerId in
+  // round 11) — this DTO is what actually enforces it for every owner
+  // created from here on.
+  @ApiProperty({ description: 'Required — must look like a real Libyan mobile number (the WhatsApp-share target).' })
   @IsString()
-  phone?: string;
+  @Matches(LIBYAN_MOBILE_REGEX, { message: 'phone must be a valid Libyan mobile number.' })
+  phone!: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

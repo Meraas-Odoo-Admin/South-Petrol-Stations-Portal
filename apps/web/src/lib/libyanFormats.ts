@@ -19,6 +19,20 @@ export const ADMINISTRATIVE_ID_REGEX = /^9\d{11}$/;
 export const NATIONAL_OR_ADMINISTRATIVE_ID_REGEX = /^([12]\d{11}|9\d{11})$/;
 export const LICENSE_PLATE_REGEX = /^\d{1,2}[-\s]?\d{1,7}$/;
 export const CHASSIS_NUMBER_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
+export const REGISTRATION_BOOKLET_REGEX = /^[A-Za-z0-9]{6,12}$/;
+// Round 20: mirrors apps/api/src/common/validators/libyan-formats.ts —
+// 09[1-9]xxxxxxx locally, or the same 9 digits with a +218/00218 prefix
+// instead of the leading 0. Can only confirm the SHAPE looks like a real
+// Libyan mobile line, never that WhatsApp is actually installed on it —
+// the UI copy says so rather than implying this regex guarantees it.
+export const LIBYAN_MOBILE_REGEX = /^(?:\+?218)?0?9\d{8}$/;
+
+// Strips everything but digits, a leading +, and hard-caps at 13 chars
+// (covers "+218" + 9 digits) — for a controlled phone <input>'s onChange.
+export function restrictToPhoneNumber(raw: string): string {
+  const plus = raw.trim().startsWith('+') ? '+' : '';
+  return plus + raw.replace(/[^\d]/g, '').slice(0, 13 - plus.length);
+}
 
 // Strips everything but digits and hard-caps at 12 — for a controlled
 // <input>'s onChange, e.g. onChange={(e) => setValue(restrictToNationalId(e.target.value))}.
@@ -39,6 +53,12 @@ export function restrictToChassisNumber(raw: string): string {
     .toUpperCase()
     .replace(/[^A-HJ-NPR-Z0-9]/g, '')
     .slice(0, 17);
+}
+
+// Strips anything but letters/digits, hard-capped at 12 — for a controlled
+// <input>'s onChange on a registrationBooklet field.
+export function restrictToRegistrationBooklet(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9]/g, '').slice(0, 12);
 }
 
 // Physical plates read as "city code - sequence" regardless of how the
