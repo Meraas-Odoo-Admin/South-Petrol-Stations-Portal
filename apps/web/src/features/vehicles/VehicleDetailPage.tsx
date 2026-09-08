@@ -9,6 +9,7 @@ import { formatLicensePlate } from '../../lib/libyanFormats';
 import {
   fuelTypeLabel,
   vehicleChangeTypeLabel,
+  identityTypeLabel,
   isProvisionalOwnerIdentity,
   PROVISIONAL_OWNER_LABEL,
   PROVISIONAL_OWNER_VARIANT,
@@ -27,6 +28,8 @@ import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { ChangeRequestForm } from './ChangeRequestForm';
 import { VehicleEditForm } from './VehicleEditForm';
+import { OwnerEditForm } from './OwnerEditForm';
+import { OwnerIdentityChangeRequestForm } from './OwnerIdentityChangeRequestForm';
 import type { VehicleBasicInfo } from './types';
 
 type ChangeFormType = 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | 'OWNER_CHANGE' | 'PLATE_CHANGE' | 'VEHICLE_TYPE_CHANGE';
@@ -50,9 +53,13 @@ export function VehicleDetailPage() {
   const permissions = user?.permissions ?? [];
   const canRequestChange = hasPermission('vehicles:request_change');
   const canEditVehicle = hasPermission('vehicles:manage');
+  const canEditOwner = hasPermission('owners:manage');
+  const canRequestOwnerChange = hasPermission('owners:request_change');
   const [skip, setSkip] = useState(0);
   const [openChangeForm, setOpenChangeForm] = useState<ChangeFormType | null>(null);
   const [editingCosmetic, setEditingCosmetic] = useState(false);
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [requestingOwnerIdentityChange, setRequestingOwnerIdentityChange] = useState(false);
   // Matches design 5d — mobile gets tabs (identity / plate history /
   // fill-up history) instead of everything stacked with scrolling tables.
   // Desktop ignores this entirely: sections stay permanently visible via
@@ -170,26 +177,49 @@ export function VehicleDetailPage() {
               <Field
                 label="المالك"
                 value={
-                  <>
-                    {vehicle.owner?.fullName ?? '—'}
-                    {vehicle.owner && isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
-                      <div className="mt-1">
-                        <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
-                      </div>
-                    )}
-                  </>
+                  vehicle.owner && editingOwner ? (
+                    <div className="col-span-2 -mt-1 sm:col-span-3">
+                      <OwnerEditForm
+                        ownerId={vehicle.owner.id}
+                        fullName={vehicle.owner.fullName}
+                        phone={vehicle.owner.phone}
+                        onDone={() => setEditingOwner(false)}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      {vehicle.owner?.fullName ?? '—'}
+                      {vehicle.owner && isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
+                        <div className="mt-1">
+                          <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
+                        </div>
+                      )}
+                      {vehicle.owner && canEditOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingOwner(true)}
+                          className="mt-1 block text-[11px] font-bold text-accent hover:underline"
+                        >
+                          تعديل
+                        </button>
+                      )}
+                    </>
+                  )
                 }
               />
               <Field
                 label="رقم هوية المالك"
                 value={
                   vehicle.owner ? (
-                    <span data-testid="vehicle-owner-identity-number">
-                      <OwnerIdentityReveal
-                        ownerId={vehicle.owner.id}
-                        maskedValue={maskIdentityNumber(vehicle.owner.identityNumber, permissions)}
-                      />
-                    </span>
+                    <>
+                      <p className="mb-1 text-[10.5px] text-ink-faint">{identityTypeLabel(vehicle.owner.identityType)}</p>
+                      <span data-testid="vehicle-owner-identity-number">
+                        <OwnerIdentityReveal
+                          ownerId={vehicle.owner.id}
+                          maskedValue={maskIdentityNumber(vehicle.owner.identityNumber, permissions)}
+                        />
+                      </span>
+                    </>
                   ) : (
                     '—'
                   )
@@ -274,6 +304,38 @@ export function VehicleDetailPage() {
                   </PillButton>
                   <PillButton variant="secondary" onClick={() => setOpenChangeForm('VEHICLE_TYPE_CHANGE')}>
                     طلب تغيير نوع المركبة
+                  </PillButton>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {canRequestOwnerChange && vehicle.owner && (
+          <Card
+            className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}
+            style={{ animationDelay: '160ms' }}
+          >
+            <CardHeader title="تصحيح هوية المالك — يتطلب اعتمادًا" />
+            <div className="p-4">
+              {requestingOwnerIdentityChange ? (
+                <OwnerIdentityChangeRequestForm
+                  ownerId={vehicle.owner.id}
+                  currentIdentityType={vehicle.owner.identityType}
+                  onDone={() => setRequestingOwnerIdentityChange(false)}
+                />
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {/* Round 20: correcting a typo'd owner NAME is a direct
+                      OwnerEditForm edit above (no approval) — only the
+                      identity number/type itself (the field fill-up quotas
+                      key on) goes through this approval-gated request,
+                      requestable by any station employee
+                      (owners:request_change), approved only by
+                      supervisor/directorate-admin/system-admin
+                      (owners:approve_change). */}
+                  <PillButton variant="secondary" onClick={() => setRequestingOwnerIdentityChange(true)}>
+                    طلب تصحيح رقم الهوية
                   </PillButton>
                 </div>
               )}

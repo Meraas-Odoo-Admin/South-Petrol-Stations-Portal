@@ -158,6 +158,15 @@ const PERMISSIONS = [
     description:
       "Reveal a vehicle owner's unmasked national/administrative ID on demand (audited — action REVEAL_NATIONAL_ID). Round 6: replaces drivers:reveal_identity now that the owner, not the driver, carries the identity number that matters for fill-up rules.",
   },
+  {
+    key: 'owners:request_change',
+    description:
+      "Request a correction to a vehicle owner's identityType/identityNumber (always requires approval — see OwnersService.requestIdentityChange). A typo'd owner NAME is a direct owners:manage edit, not this — only the identity number/type itself is approval-gated.",
+  },
+  {
+    key: 'owners:approve_change',
+    description: 'Approve or reject a pending owner identity change request',
+  },
 ];
 
 // drivers:manage/owners:manage/vehicles:manage follow the same single-tier
@@ -208,6 +217,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     // station_supervisor/directorate_admin/system_admin below), so an
     // employee can request but never self-approve.
     'vehicles:request_change',
+    // Round 20: same "request but never self-approve" split, for
+    // correcting an owner's identity number/type instead of a vehicle
+    // field — see OwnerChangeRequest's schema comment.
+    'owners:request_change',
   ],
   station_supervisor: [
     // Round: station-card-field-spec's create/edit form needs these
@@ -227,6 +240,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicles:read',
     'vehicles:request_change',
     'vehicles:approve_change',
+    'owners:request_change',
+    'owners:approve_change',
     'fillups:create',
     'fillups:update',
     'fillups:approve_exception',
@@ -253,6 +268,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicles:read',
     'vehicles:request_change',
     'vehicles:approve_change',
+    'owners:request_change',
+    'owners:approve_change',
     // Same as station_supervisor. The §5 role table only lists
     // reports:view_all_stations for this role, but directorate_admin
     // already holds manage-tier permissions in every other domain beyond

@@ -227,6 +227,8 @@ model User {
   recordedFillUps              FillUpTransaction[]    @relation("RecordedBy")
   vehicleChangeRequestsMade    VehicleChangeRequest[] @relation("VehicleChangeRequestedBy")
   vehicleChangeRequestsDecided VehicleChangeRequest[] @relation("VehicleChangeDecidedBy")
+  ownerChangeRequestsMade      OwnerChangeRequest[]   @relation("OwnerChangeRequestedBy")
+  ownerChangeRequestsDecided   OwnerChangeRequest[]   @relation("OwnerChangeDecidedBy")
   standingExceptionsGranted    StandingException[]    @relation("StandingExceptionGrantedBy")
   standingExceptionsRevoked    StandingException[]    @relation("StandingExceptionRevokedBy")
   auditLogs                    AuditLog[]
@@ -319,18 +321,55 @@ model Driver {
 // needs to vary independently of it yet; add a real status field instead
 // if that ever changes.
 model VehicleOwner {
-  id                 String              @id @default(cuid())
+  id                 String               @id @default(cuid())
   identityType       IdentityType
-  identityNumber     String // immutable together with identityType after creation, like Driver.identityNumber/User.username
+  identityNumber     String // immutable together with identityType after creation, like Driver.identityNumber/User.username — the ONLY sanctioned way to change it is via OwnerChangeRequest approval, same anti-fraud posture as VehicleChangeRequest for chassis/booklet
   fullName           String
   phone              String?
   address            String?
   vehicles           Vehicle[]
   standingExceptions StandingException[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  changeRequests     OwnerChangeRequest[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   @@unique([identityType, identityNumber])
+}
+
+// Round 20: mirrors VehicleChangeRequest's anti-fraud gate, but for the
+// owner's own identityType/identityNumber pair — the client asked that a
+// typo'd owner NAME be directly editable (see UpdateOwnerDto), but a wrong
+// identity NUMBER (the field fill-up rules and quotas key on) must go
+// through the same request/approve flow as a vehicle's chassis/plate.
+// identityType and identityNumber change TOGETHER (they're compound-unique
+// on VehicleOwner) — unlike VehicleChangeRequest's single currentValue/
+// requestedValue string, this needs both fields on each side explicitly.
+// No "first-time null -> value set bypasses approval" case exists here
+// (unlike vehicle chassis/booklet): identityType/identityNumber are
+// required at owner creation, so every correction is a genuine
+// displacement of an already-established identity and always goes through
+// this table.
+model OwnerChangeRequest {
+  id                      String                     @id @default(cuid())
+  ownerId                 String
+  owner                   VehicleOwner               @relation(fields: [ownerId], references: [id])
+  currentIdentityType     IdentityType
+  currentIdentityNumber   String
+  requestedIdentityType   IdentityType
+  requestedIdentityNumber String
+  reason                  String
+  proofReference          String // mandatory, same as VehicleChangeRequest
+  status                  VehicleChangeRequestStatus @default(PENDING)
+  requestedById           String
+  requestedBy             User                       @relation("OwnerChangeRequestedBy", fields: [requestedById], references: [id])
+  decidedById             String?
+  decidedBy               User?                      @relation("OwnerChangeDecidedBy", fields: [decidedById], references: [id])
+  decidedAt               DateTime?
+  rejectionReason         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
 }
 
 enum VehicleUsageType {

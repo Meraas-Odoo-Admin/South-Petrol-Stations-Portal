@@ -51,6 +51,7 @@ describe('Owners/Vehicles (e2e)', () => {
   // Fixtures shared across the success-path tests below.
   let ownerId: string;
   let vehicleId: string;
+  let identityChangeConflictOwnerId: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -99,6 +100,17 @@ describe('Owners/Vehicles (e2e)', () => {
       create: { key: 'vehicles:approve_change' },
       update: {},
     });
+    // Round 20: owner identity change-request permissions.
+    const ownersRequestChangePermission = await prisma.permission.upsert({
+      where: { key: 'owners:request_change' },
+      create: { key: 'owners:request_change' },
+      update: {},
+    });
+    const ownersApproveChangePermission = await prisma.permission.upsert({
+      where: { key: 'owners:approve_change' },
+      create: { key: 'owners:approve_change' },
+      update: {},
+    });
 
     // Dedicated test-only role — never the real seeded station_supervisor.
     const managerRole = await prisma.role.create({ data: { name: `e2e_dov_manager_role_${runId}` } });
@@ -110,6 +122,8 @@ describe('Owners/Vehicles (e2e)', () => {
         { roleId: managerRole.id, permissionId: vehiclesReadPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesRequestChangePermission.id },
         { roleId: managerRole.id, permissionId: vehiclesApproveChangePermission.id },
+        { roleId: managerRole.id, permissionId: ownersRequestChangePermission.id },
+        { roleId: managerRole.id, permissionId: ownersApproveChangePermission.id },
       ],
     });
 
@@ -139,7 +153,14 @@ describe('Owners/Vehicles (e2e)', () => {
       await prisma.vehicle.deleteMany({ where: { id: vehicleId } });
     }
     if (ownerId) {
+      // Round 20: OwnerChangeRequest rows referencing this owner must go
+      // before the owner delete, same FK-order reasoning as the vehicle
+      // change requests above.
+      await prisma.ownerChangeRequest.deleteMany({ where: { ownerId } });
       await prisma.vehicleOwner.deleteMany({ where: { id: ownerId } });
+    }
+    if (identityChangeConflictOwnerId) {
+      await prisma.vehicleOwner.deleteMany({ where: { id: identityChangeConflictOwnerId } });
     }
 
     const allUserIds = [managerUserId, noPermUserId];
@@ -254,6 +275,107 @@ describe('Owners/Vehicles (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ identityNumber: `9${numericId11}` })
       .expect(400);
+  });
+
+  // ── Owner identity change requests (round 20) ───────────────────────
+
+  it('blocks an actor without owners:request_change/owners:approve_change from the owner change-request endpoints', async () => {
+    const accessToken = await loginAsNoPerm();
+    const server = app.getHttpServer();
+    const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
+
+    await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
+      .send({ identityType: 'NATIONAL_ID', identityNumber: `1${randomDigits(11)}`, reason: 'x', proofReference: 'y' })
+      .expect(403);
+    await auth(request(server).get('/api/v1/owners/change-requests')).expect(403);
+  });
+
+  it('creates a pending owner identity change request, blocks a second pending request for the same owner, then approves it', async () => {
+    const accessToken = await loginAsManager();
+    const server = app.getHttpServer();
+    const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
+    const newIdentityNumber = `1${randomDigits(11)}`;
+
+    const requestRes = await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
+      .send({
+        identityType: 'NATIONAL_ID',
+        identityNumber: newIdentityNumber,
+        reason: 'Typed the wrong national ID at onboarding.',
+        proofReference: 'ref-001',
+      })
+      .expect(201);
+    expect(requestRes.body.status).toBe('PENDING');
+    const changeRequestId = requestRes.body.id;
+
+    // A second pending request for the same owner is a 409, same as the
+    // vehicle change-request flow.
+    await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
+      .send({
+        identityType: 'NATIONAL_ID',
+        identityNumber: `1${randomDigits(11)}`,
+        reason: 'Another attempt',
+        proofReference: 'ref-002',
+      })
+      .expect(409);
+
+    const listRes = await auth(request(server).get('/api/v1/owners/change-requests')).query({ status: 'PENDING' }).expect(200);
+    expect(listRes.body.map((r: { id: string }) => r.id)).toContain(changeRequestId);
+
+    const approveRes = await auth(request(server).post(`/api/v1/owners/change-requests/${changeRequestId}/approve`)).expect(201);
+    expect(approveRes.body.status).toBe('APPROVED');
+
+    // The owner's identityNumber actually changed.
+    const ownerRes = await auth(request(server).get(`/api/v1/owners/${ownerId}`)).expect(200);
+    expect(ownerRes.body.identityNumber).toBe(newIdentityNumber);
+
+    // Approving an already-decided request is a 409.
+    await auth(request(server).post(`/api/v1/owners/change-requests/${changeRequestId}/approve`)).expect(409);
+  });
+
+  it('rejects an owner identity change request when the target identity is already used by another owner', async () => {
+    const accessToken = await loginAsManager();
+    const server = app.getHttpServer();
+    const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
+
+    const conflictOwnerRes = await auth(request(server).post('/api/v1/owners'))
+      .send({
+        fullName: 'E2E DOV Owner Conflict Target',
+        identityType: 'NATIONAL_ID',
+        identityNumber: `2${randomDigits(11)}`,
+        phone: '0940000000',
+      })
+      .expect(201);
+    identityChangeConflictOwnerId = conflictOwnerRes.body.id;
+
+    await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
+      .send({
+        identityType: 'NATIONAL_ID',
+        identityNumber: conflictOwnerRes.body.identityNumber,
+        reason: 'Trying to reuse another owner\'s identity',
+        proofReference: 'ref-003',
+      })
+      .expect(409);
+  });
+
+  it('lets a pending owner identity change request be rejected with a reason', async () => {
+    const accessToken = await loginAsManager();
+    const server = app.getHttpServer();
+    const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
+
+    const requestRes = await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
+      .send({
+        identityType: 'ADMINISTRATIVE_ID',
+        identityNumber: `9${randomDigits(11)}`,
+        reason: 'Second correction attempt',
+        proofReference: 'ref-004',
+      })
+      .expect(201);
+
+    const rejectRes = await auth(request(server).post(`/api/v1/owners/change-requests/${requestRes.body.id}/reject`))
+      .send({ reason: 'Proof reference does not match records.' })
+      .expect(201);
+    expect(rejectRes.body.status).toBe('REJECTED');
+    expect(rejectRes.body.rejectionReason).toBe('Proof reference does not match records.');
   });
 
   // ── Vehicle CRUD + search ────────────────────────────────────────────

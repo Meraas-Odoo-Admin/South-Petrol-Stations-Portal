@@ -44,6 +44,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'reports:view': 'عرض تقارير المحطة',
   'owners:manage': 'إدارة بيانات ملاك المركبات',
   'owners:reveal_identity': 'إظهار رقم هوية المالك الكامل',
+  'owners:request_change': 'طلب تصحيح هوية مالك (يتطلب اعتمادًا)',
+  'owners:approve_change': 'اعتماد طلبات تصحيح هوية المالك',
   'vehicles:manage': 'إضافة/تعديل المركبات',
   'vehicles:read': 'عرض سجل المركبات',
   'vehicles:request_change': 'طلب تعديل بيانات مركبة (يتطلب اعتمادًا)',

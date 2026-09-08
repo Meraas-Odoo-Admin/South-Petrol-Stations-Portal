@@ -4,6 +4,9 @@ import { OwnersService } from './owners.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { UpdateOwnerDto } from './dto/update-owner.dto';
 import { FindOwnersQueryDto } from './dto/find-owners-query.dto';
+import { CreateOwnerChangeRequestDto } from './dto/create-owner-change-request.dto';
+import { RejectOwnerChangeRequestDto } from './dto/reject-owner-change-request.dto';
+import { FindOwnerChangeRequestsQueryDto } from './dto/find-owner-change-requests-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
@@ -23,6 +26,15 @@ export class OwnersController {
   @Get()
   findAll(@Query() query: FindOwnersQueryDto) {
     return this.owners.findAll(query);
+  }
+
+  // Registered BEFORE @Get(':id') — a static path segment must win over
+  // the dynamic :id route it would otherwise collide with (same ordering
+  // discipline as VehiclesController.listChangeRequests).
+  @RequirePermission('owners:approve_change')
+  @Get('change-requests')
+  listChangeRequests(@Query() query: FindOwnerChangeRequestsQueryDto) {
+    return this.owners.listChangeRequests(query);
   }
 
   @RequirePermission('owners:manage')
@@ -45,5 +57,33 @@ export class OwnersController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.owners.update(id, dto, actor.id);
+  }
+
+  // Always creates a PENDING request — see OwnersService.requestIdentityChange
+  // for why there's no "first-time set" bypass, unlike vehicles.
+  @RequirePermission('owners:request_change')
+  @Post(':id/change-requests')
+  requestChange(
+    @Param('id') id: string,
+    @Body() dto: CreateOwnerChangeRequestDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.owners.requestIdentityChange(id, dto, actor.id);
+  }
+
+  @RequirePermission('owners:approve_change')
+  @Post('change-requests/:id/approve')
+  approveChangeRequest(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.owners.approveChangeRequest(id, actor.id);
+  }
+
+  @RequirePermission('owners:approve_change')
+  @Post('change-requests/:id/reject')
+  rejectChangeRequest(
+    @Param('id') id: string,
+    @Body() dto: RejectOwnerChangeRequestDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.owners.rejectChangeRequest(id, dto, actor.id);
   }
 }
