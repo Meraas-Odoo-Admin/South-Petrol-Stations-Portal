@@ -139,6 +139,27 @@ Run it deliberately, and only after reading what it does:
 docker compose -f infra/docker-compose.prod.yml exec api npx prisma db seed
 ```
 
+**For a real deployment**, use `bootstrap-prod.ts` instead — it seeds only
+what the app cannot function without (the permissions/roles catalog, and the
+tunable `SystemSetting` rows the fill-up rule engine reads at request time
+and throws on if missing), plus exactly one real admin account, with **zero**
+demo companies/stations/vehicles/owners/test users. Everything else
+(companies, stations, further user accounts, ...) gets created afterward
+through that admin's own account in the app's admin screens:
+
+```sh
+docker compose -f infra/docker-compose.prod.yml exec \
+  -e BOOTSTRAP_ADMIN_USERNAME=<a real username> \
+  -e BOOTSTRAP_ADMIN_PASSWORD='<a real password, 8+ chars>' \
+  api npx ts-node --transpile-only prisma/bootstrap-prod.ts
+```
+
+The account is created with `mustChangePassword: true` and the
+`system_admin` role (every permission) — log in with it once to set a real
+password, then use its own Users admin screen to create the rest of the
+team's accounts. Safe to re-run (every write is an upsert); it never resets
+an already-created admin's password.
+
 ### Ports
 
 | Port | Where | Purpose |
