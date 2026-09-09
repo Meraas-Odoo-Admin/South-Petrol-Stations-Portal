@@ -52,8 +52,24 @@ WORKDIR /app
 # loop on every startup in testing.
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
-COPY --from=build /deploy .
+# Runs as a dedicated non-root user — the API needs no privileged port
+# (listens on 3000) and no reason to hold root inside the container.
+# -m gives it a real home directory; some npx/prisma runs want a
+# writable $HOME for their own cache files.
+RUN groupadd --system --gid 1001 nodejs \
+  && useradd --system --uid 1001 --gid nodejs --create-home nestjs
+COPY --from=build --chown=nestjs:nodejs /deploy .
+USER nestjs
 EXPOSE 3000
+# node's own built-in fetch (Node 22) — avoids installing curl/wget just
+# for this. 127.0.0.1, not localhost — this base image resolves
+# "localhost" to the IPv6 loopback first, which the app doesn't listen
+# on, and the healthcheck failed with a false "connection refused" until
+# caught in testing. start-period gives `prisma migrate deploy` (which
+# runs before the app starts listening) room to finish before healthcheck
+# failures count against the container.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 # migrate deploy (never migrate dev — that's a local-only command that
 # can prompt or reset) applies any pending migrations non-interactively,
 # then starts the API. Requires DATABASE_URL, JWT_ACCESS_SECRET, and

@@ -33,3 +33,17 @@ FROM nginx:1.27-alpine AS runtime
 COPY apps/web/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
+# wget ships with this base image (busybox) — nothing extra to install.
+# 127.0.0.1, not localhost — this image resolves "localhost" to the
+# IPv6 loopback first, which nginx doesn't listen on here, and the
+# healthcheck failed with a false "connection refused" until caught in
+# testing.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
+# Not run as a fully unprivileged user: nginx's master process needs root
+# to bind port 80, then drops its worker processes (the ones that
+# actually handle requests) to the unprivileged `nginx` user by default
+# in this image — the standard, accepted posture for this exact image,
+# not an oversight. Swapping to the nginx-unprivileged image would avoid
+# even that if a stricter policy ever requires it, at the cost of moving
+# the listen port to 8080 and updating docker-compose.prod.yml to match.

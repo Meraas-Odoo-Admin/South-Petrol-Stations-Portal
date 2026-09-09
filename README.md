@@ -80,6 +80,148 @@ pnpm typecheck   # TypeScript project checks across all workspaces
 pnpm test        # test suites across all workspaces
 ```
 
+## Deployment (Docker)
+
+Full checklist (secrets, TLS, backups) lives in
+[infra/DEPLOYMENT.md](infra/DEPLOYMENT.md) — read it before deploying anything
+real. This section is the quick-reference version.
+
+### Project path
+
+This repo was developed at a Windows path local to one developer's machine
+(`C:\Users\...\South Petrol Stations Portal`). **Nothing in the application
+depends on that path** — it's not baked into any config, script, or Docker
+build; every path used at build/run time is either relative to the repo root
+or a container-internal path. DevOps can check this repo out anywhere.
+
+### Requirements
+
+- Docker + Docker Compose v2 (`docker compose`, not the old `docker-compose`)
+- Nothing else needs to be installed on the deployment host — Node, pnpm, and
+  all dependencies are built into the images.
+
+### Environment variables
+
+Copy `infra/.env.prod.example` to `infra/.env.prod` and fill in every value
+that has no default — compose refuses to start without them
+(`${VAR:?message}` syntax), rather than silently using a dev-shaped secret.
+Required: `POSTGRES_PASSWORD`, `CORS_ORIGINS`, `JWT_ACCESS_SECRET`. See the
+example file for what each one is for.
+
+### Docker build
+
+```sh
+cp infra/.env.prod.example infra/.env.prod   # then fill in real values
+docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod build
+```
+
+Run from the **repo root** — both Dockerfiles build the whole pnpm workspace
+(the API and web app both depend on `packages/shared-types`), so the build
+context matters.
+
+### Docker startup
+
+```sh
+docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d
+```
+
+### Database / migrations
+
+Migrations run **automatically** on every API container startup
+(`prisma migrate deploy` — the non-interactive production form, never
+`migrate dev`). Nothing manual to run for a normal deploy.
+
+The seed script (`apps/api/prisma/seed.ts`) is **not** run automatically — it
+creates demo accounts and sample data with no place in a real deployment.
+Run it deliberately, and only after reading what it does:
+
+```sh
+docker compose -f infra/docker-compose.prod.yml exec api npx prisma db seed
+```
+
+### Ports
+
+| Port | Where | Purpose |
+|---|---|---|
+| `80` (container) → `${WEB_PORT:-8080}` (host) | `web` | The only port meant to be reached from outside — serves the app and reverse-proxies `/api/v1/*` to `api` internally. This is what Cloudflare (or any reverse proxy) should point at. |
+| `3000` (container only, not published) | `api` | Reached only by `web`'s nginx over the internal Docker network (service name `api`), not exposed to the host by default. Uncomment the `ports:` block in `docker-compose.prod.yml` only for direct Swagger/debugging access, behind your own auth. |
+| `5432` (container only, not published) | `postgres` | Reached only by `api` over the internal Docker network. Never expose this publicly. |
+
+### Volumes
+
+Only one thing needs to survive a container recreation: **the Postgres
+database** (`postgres-data` named volume, mounted at
+`/var/lib/postgresql/data`). Nothing else — this app has no file uploads and
+generates its Excel/PDF reports in memory, streamed straight to the HTTP
+response, never written to disk.
+
+### Cloudflare
+
+**No Cloudflare configuration exists in this repository** — no Tunnel config,
+no Workers/Pages, no `wrangler.toml`. If Cloudflare sits in front of this
+deployment, that setup lives entirely outside this repo (Cloudflare
+dashboard, or a `cloudflared` service configured directly on the deployment
+host) and DevOps needs to point it at:
+
+```
+Cloudflare → [Tunnel / proxy — configured outside this repo] → deployment host → web container, port ${WEB_PORT:-8080}
+```
+
+The `web` container is the only thing that should ever be reached from
+outside — never point anything directly at `api` or `postgres`. Whichever
+Cloudflare product is used, it needs to terminate (or forward) HTTPS to that
+one port — see the TLS note in `infra/DEPLOYMENT.md`, since the app's session
+cookie requires the browser-facing hop to be HTTPS to work at all.
+
+### Updates (deploying a new version)
+
+```sh
+git pull
+docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
+```
+
+Migrations apply automatically on the API container's next start, same as a
+fresh deploy.
+
+### Logs
+
+```sh
+docker compose -f infra/docker-compose.prod.yml logs -f          # all services
+docker compose -f infra/docker-compose.prod.yml logs -f api      # one service
+```
+
+### Restart
+
+```sh
+docker compose -f infra/docker-compose.prod.yml restart api      # one service
+docker compose -f infra/docker-compose.prod.yml restart          # everything
+```
+
+### Backup
+
+Only the Postgres volume needs backing up — a standard `pg_dump` against the
+`postgres` service (or a volume-level snapshot of `postgres-data`) covers
+100% of this app's persistent state:
+
+```sh
+docker compose -f infra/docker-compose.prod.yml exec postgres \
+  pg_dump -U fuel_tracking fuel_tracking > backup-$(date +%F).sql
+```
+
+### Rollback
+
+```sh
+git checkout <previous-tag-or-commit>
+docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
+```
+
+Migrations are additive-only by convention (see `CLAUDE.md`), so rolling the
+app back to an older commit while the database is on a newer schema is safe
+in the common case — an older commit's Prisma client just won't know about
+newer columns it doesn't query. Rolling back a database schema change itself
+would need its own down-migration, decided at the time, not a generic
+command.
+
 ## Roadmap
 
 Work proceeds in phases (M0–M6), one per branch/session — see
