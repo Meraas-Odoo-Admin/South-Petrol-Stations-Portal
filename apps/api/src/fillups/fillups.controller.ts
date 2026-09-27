@@ -109,10 +109,19 @@ export class FillUpsController {
   // getFuelPrices/listExceptionTypes rather than vehicles:read.
   @RequirePermission('fillups:create')
   @Get('rule-preview')
-  previewRules(@Query('vehicleId') vehicleId: string) {
+  previewRules(
+    @Query('vehicleId') vehicleId: string,
+    @Query('stationId') stationId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
     if (!vehicleId) {
       throw new BadRequestException('vehicleId is required.');
     }
-    return this.fillups.previewRules(vehicleId);
+    // Allowances are counted per municipality, and the station decides
+    // which one — without it the preview can't match a real submit.
+    if (!stationId) {
+      throw new BadRequestException('stationId is required.');
+    }
+    return this.fillups.previewRules(vehicleId, stationId, actor.id);
   }
 }

@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // M6 (item: standing/continuous exceptions). fill-up-rule-engine.spec.ts
 // already unit-tests FillUpRuleEngine.evaluate() resolving a violation
@@ -35,6 +36,7 @@ describe('Standing exceptions (e2e)', () => {
 
   let company: { id: string };
   let station: { id: string };
+  let municipality: { id: string };
   let vehicleId: string;
 
   beforeAll(async () => {
@@ -67,8 +69,15 @@ describe('Standing exceptions (e2e)', () => {
     }
 
     company = await prisma.company.create({ data: { name: `E2E SE Company ${runId}` } });
+    municipality = await createMunicipality(prisma, `E2E SE Municipality ${runId}`);
     station = await prisma.station.create({
-      data: { internalCode: `E2E-SE-A-${runId}`, stationNumber: '1', name: 'E2E SE Station', companyId: company.id },
+      data: {
+        internalCode: `E2E-SE-A-${runId}`,
+        stationNumber: '1',
+        name: 'E2E SE Station',
+        companyId: company.id,
+        municipalityId: municipality.id,
+      },
     });
 
     const vehicle = await prisma.vehicle.create({
@@ -83,6 +92,7 @@ describe('Standing exceptions (e2e)', () => {
       data: {
         vehicleId,
         stationId: station.id,
+        municipalityId: municipality.id,
         fuelType: 'PETROL_95',
         quantityLiters: 20,
         occurredAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
@@ -169,6 +179,7 @@ describe('Standing exceptions (e2e)', () => {
     await prisma.vehicle.delete({ where: { id: vehicleId } });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.company.delete({ where: { id: company.id } });
+    await deleteMunicipalities(prisma, [municipality.id]);
     await app.close();
   });
 

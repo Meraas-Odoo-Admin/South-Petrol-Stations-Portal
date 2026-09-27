@@ -83,9 +83,14 @@ const MUNICIPALITIES = [
   'البدير',
 ];
 const ROUTES = ['خط سبها', 'خط الشاطئ', 'خط مرزق', 'خط اوباري', 'خط البارك'];
-// station-card-field-spec item 6 / docs/OPEN_ITEMS.md #4 — still scope-
-// pending, but the client's own spec names this one concrete example.
-const SECURITY_AUTHORITIES = ['مديرية أمن سبها'];
+// One security authority per municipality (docs/OPEN_ITEMS.md #4, answered).
+const SECURITY_AUTHORITIES = [{ name: 'مديرية أمن سبها', municipality: 'سبها' }];
+
+// Registration pivot, phase 1: only سبها is live. Every other seeded
+// municipality stays PREPARING (the schema default) — its stations are
+// admin-only and take no fill-ups. Removing the non-Sabha rows is a later
+// phase, waiting on the client's list of which names fall inside Sabha.
+const LIVE_MUNICIPALITIES = new Set(['سبها']);
 
 // Round 12: starting list for the new VehicleType lookup — admin/
 // system_admin can add more from the admin panel, this just keeps the
@@ -877,10 +882,11 @@ async function main() {
   // ── Municipalities, routes, security authorities ────────────────────
   const municipalitiesByName = new Map<string, { id: string }>();
   for (const name of MUNICIPALITIES) {
+    const status = LIVE_MUNICIPALITIES.has(name) ? ('LIVE' as const) : undefined;
     const municipality = await prisma.municipality.upsert({
       where: { name },
-      create: { name },
-      update: {},
+      create: { name, status },
+      update: status ? { status } : {},
     });
     municipalitiesByName.set(name, municipality);
   }
@@ -891,12 +897,15 @@ async function main() {
     routesByName.set(name, route);
   }
 
-  // No lookup Map needed — none of the worked examples below specify a
-  // security authority (docs/OPEN_ITEMS.md #4's scope question is still
-  // open), this just seeds the one name the spec itself names so the
-  // dropdown isn't empty.
-  for (const name of SECURITY_AUTHORITIES) {
-    await prisma.securityAuthority.upsert({ where: { name }, create: { name }, update: {} });
+  // Each authority is tied to its one municipality; stations get their
+  // authority from there (no per-station field any more).
+  for (const authority of SECURITY_AUTHORITIES) {
+    const municipalityId = municipalitiesByName.get(authority.municipality)!.id;
+    await prisma.securityAuthority.upsert({
+      where: { name: authority.name },
+      create: { name: authority.name, municipalityId },
+      update: { municipalityId },
+    });
   }
 
   const vehicleTypesByName = new Map<string, { id: string }>();
@@ -961,6 +970,7 @@ async function main() {
   // (companyId, stationNumber) exists to allow.
   const raheela = companiesByName.get('الراحلة')!;
   const sharara = companiesByName.get('الشرارة الذهبية')!;
+  const sabhaMunicipalityId = municipalitiesByName.get('سبها')!.id;
 
   const stationA = await prisma.station.upsert({
     where: { internalCode: 'STN-TEST-0001' },
@@ -969,8 +979,11 @@ async function main() {
       stationNumber: '1',
       name: 'Test Station (Raheela) — synthetic fixture',
       companyId: raheela.id,
+      municipalityId: sabhaMunicipalityId,
     },
-    update: {},
+    // Placed in سبها (live) so the scoped test accounts (employee1,
+    // supervisor1) can record fill-ups here — also on an existing DB.
+    update: { municipalityId: sabhaMunicipalityId },
   });
 
   const stationB = await prisma.station.upsert({
@@ -980,8 +993,9 @@ async function main() {
       stationNumber: '1', // same number as stationA, different company — proves the composite key
       name: 'Test Station (Sharara) — synthetic fixture',
       companyId: sharara.id,
+      municipalityId: sabhaMunicipalityId,
     },
-    update: {},
+    update: { municipalityId: sabhaMunicipalityId },
   });
 
   // station-card-field-spec's own three worked examples — small,
@@ -1054,7 +1068,7 @@ async function main() {
   });
 
   // ── Real station rosters (round 17) ─────────────────────────────────
-  const realStationsByInternalCode = new Map<string, { id: string }>();
+  const realStationsByInternalCode = new Map<string, { id: string; municipalityId: string | null }>();
   for (const spec of REAL_STATIONS) {
     const company = companiesByName.get(spec.company)!;
     let municipality = municipalitiesByName.get(spec.municipality);
@@ -1281,6 +1295,9 @@ async function main() {
           vehicleId: vehicle.id,
           driverId: driver?.id,
           stationId: station.id,
+          // Stamped like FillUpsService does: the station's municipality
+          // at the time of the fill-up.
+          municipalityId: station.municipalityId,
           fuelType: fillUpSpec.fuelType,
           quantityLiters: fillUpSpec.quantityLiters,
           occurredAt,

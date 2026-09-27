@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { MunicipalityStatus } from '@prisma/client';
+import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class UpdateMunicipalityDto {
   @ApiProperty({ required: false })
@@ -8,8 +9,11 @@ export class UpdateMunicipalityDto {
   @MinLength(1)
   name?: string;
 
-  @ApiProperty({ required: false })
+  // PREPARING -> LIVE is the go-live switch for a municipality (see the
+  // schema comment on Municipality.status). Replaces the old, unused
+  // isActive flag here.
+  @ApiProperty({ required: false, enum: MunicipalityStatus })
   @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @IsEnum(MunicipalityStatus)
+  status?: MunicipalityStatus;
 }

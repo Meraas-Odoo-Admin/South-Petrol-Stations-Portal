@@ -62,7 +62,11 @@ model Station {
   // station-card-field-spec — location/status known, ownership not).
   ownershipType StationOwnershipType?
 
-  securityAuthorityId String? // TBD — see docs/OPEN_ITEMS.md #4. Nullable until scope question is answered.
+  // DEPRECATED — no longer written or read. A station's authority is its
+  // municipality's (Municipality.securityAuthority; OPEN_ITEMS.md #4,
+  // answered). The column stays (always null in practice) so the
+  // migration is additive rather than a drop.
+  securityAuthorityId String?
   securityAuthority   SecurityAuthority?        @relation(fields: [securityAuthorityId], references: [id])
   fuelAvailability    StationFuelAvailability[]
 
@@ -93,15 +97,37 @@ enum StationOwnershipType {
 }
 
 // station-card-field-spec item 4 / item 5 — Settings-managed, same CRUD
-// shape as Company (companies.module.ts): a plain admin-editable list,
-// nothing in the rule engine or reporting branches on which municipality a
-// station is in.
+// shape as Company (companies.module.ts).
+//
+// Registration pivot, phase 1: a municipality is now also the unit the
+// system rolls out by, and the unit fill-up allowances are counted in —
+// FillUpRuleEngine counts a vehicle's/owner's history only within the
+// municipality stamped on each FillUpTransaction (see there).
 model Municipality {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  isActive  Boolean   @default(true)
+  id        String             @id @default(cuid())
+  name      String             @unique
+  // Superseded by `status` — nothing reads it. Left in place rather than
+  // dropped so the migration stays additive (CLAUDE.md working style).
+  isActive  Boolean            @default(true)
+  // PREPARING: being set up — its stations are visible only on admin
+  // screens (holders of stations:manage) and no fill-up can be recorded
+  // at them. LIVE: in normal use. New rows start PREPARING; switching to
+  // LIVE requires the municipality's security authority to exist first.
+  status    MunicipalityStatus @default(PREPARING)
+  // Exactly one per municipality (client-confirmed, OPEN_ITEMS.md #4) —
+  // the authority overseeing every petrol station in it. Stations get
+  // their authority from here, never picked per station.
+  securityAuthority SecurityAuthority?
   stations  Station[]
-  createdAt DateTime  @default(now())
+  fillUps   FillUpTransaction[]
+  createdAt DateTime           @default(now())
+}
+
+// Fixed, not Settings-managed — code branches on these values (same
+// reasoning as StationStatus below).
+enum MunicipalityStatus {
+  PREPARING // قيد الإعداد
+  LIVE // مُفعَّلة
 }
 
 // station-card-field-spec item 5 — the client's ownership/haulage route
@@ -150,12 +176,20 @@ enum FuelType {
   KEROSENE // currently unused per client, but the enum stays open for the future
 }
 
-// Placeholder for the لجنة إعادة تنظيم المدن scope question — left unseeded until
-// docs/OPEN_ITEMS.md #4 is answered.
+// The security authority (الجهة الأمنية) overseeing one municipality's
+// petrol stations — client-confirmed (docs/OPEN_ITEMS.md #4, answered):
+// every municipality has exactly one, e.g. مديرية أمن سبها for سبها.
 model SecurityAuthority {
-  id       String    @id @default(cuid())
-  name     String    @unique // "مديرية أمن سبها", "الحرس البلدي", "الجمارك", ...
-  stations Station[]
+  id             String        @id @default(cuid())
+  name           String        @unique // e.g. "مديرية أمن سبها"
+  // @unique enforces "one authority per municipality". Nullable only so
+  // the migration that introduced it stays additive for any pre-existing
+  // row; the API requires it on create.
+  municipalityId String?       @unique
+  municipality   Municipality? @relation(fields: [municipalityId], references: [id])
+  // Legacy per-station link (Station.securityAuthorityId) — no longer
+  // written; see the note on that column.
+  stations       Station[]
 }
 
 // ── RBAC ──────────────────────────────────────────────────────────────
@@ -566,6 +600,16 @@ model FillUpTransaction {
   driver              Driver?            @relation(fields: [driverId], references: [id])
   stationId           String
   station             Station            @relation(fields: [stationId], references: [id])
+  // The municipality this fill-up happened in — stamped from the
+  // station's municipality at creation and NEVER updated afterward. The
+  // rule engine counts allowances per vehicle/owner per municipality
+  // against THIS column, not a live lookup through the station: if an
+  // admin later corrects a station's municipality, past fill-ups keep
+  // the municipality they actually happened in. Nullable only because
+  // pre-existing rows at stations with no municipality can't be
+  // backfilled; FillUpsService refuses to create a fill-up without one.
+  municipalityId      String?
+  municipality        Municipality?      @relation(fields: [municipalityId], references: [id])
   fuelType            FuelType
   quantityLiters      Decimal
   occurredAt          DateTime           @default(now())
@@ -591,6 +635,10 @@ model FillUpTransaction {
   createdAt           DateTime           @default(now())
 
   @@index([vehicleId, occurredAt]) // the rule engine's hottest query path
+  // Per-vehicle-per-municipality history — FillUpsRepository's vehicle
+  // lookups, and the per-vehicle leg of the owner lookups (which join
+  // through Vehicle.ownerId).
+  @@index([vehicleId, municipalityId, occurredAt])
   @@index([driverId, occurredAt])
   @@index([stationId, occurredAt])
 }

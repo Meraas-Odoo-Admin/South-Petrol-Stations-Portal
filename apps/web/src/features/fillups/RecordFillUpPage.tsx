@@ -71,12 +71,16 @@ function RuleReviewChecks({
   checks,
   isLoading,
   isError,
+  errorMessage,
   rejection,
   idSuffix = '',
 }: {
   checks: RuleCheckDetail[] | undefined;
   isLoading: boolean;
   isError: boolean;
+  // A specific Arabic reason the preview failed (e.g. the station can't
+  // take fill-ups) — falls back to the generic line when absent.
+  errorMessage?: string | null;
   rejection: Rejection | null;
   idSuffix?: string;
 }) {
@@ -97,7 +101,7 @@ function RuleReviewChecks({
       )}
 
       {isLoading && <p className="text-[12.5px] text-ink-soft">...جارٍ فحص القواعد</p>}
-      {isError && <p className="text-[12.5px] text-danger">تعذر تحميل مراجعة القواعد.</p>}
+      {isError && <p className="text-[12.5px] text-danger">{errorMessage ?? 'تعذر تحميل مراجعة القواعد.'}</p>}
 
       {checks && (
         <div className="space-y-2">
@@ -584,13 +588,27 @@ export function RecordFillUpPage() {
   // /fillups's 422 path below). Round 8: this is now what the mobile
   // wizard's 'review' step actually renders, per the client's complaint
   // that it wasn't reachable as its own guided step.
+  //
+  // Registration pivot, phase 1: allowances are counted per municipality,
+  // and the station decides which one — so the preview is per
+  // (vehicle, station) and waits until both are chosen.
+  const previewStationId = fillUpForm.watch('stationId');
   const rulePreviewQuery = useQuery({
-    queryKey: ['fillups', 'rule-preview', selectedVehicleId],
+    queryKey: ['fillups', 'rule-preview', selectedVehicleId, previewStationId],
     queryFn: async () =>
-      (await apiClient.get<RulePreviewResponse>('/fillups/rule-preview', { params: { vehicleId: selectedVehicleId } }))
-        .data,
-    enabled: !!selectedVehicleId,
+      (
+        await apiClient.get<RulePreviewResponse>('/fillups/rule-preview', {
+          params: { vehicleId: selectedVehicleId, stationId: previewStationId },
+        })
+      ).data,
+    enabled: !!selectedVehicleId && !!previewStationId,
+    // A station that can't take fill-ups (no municipality / not live) is
+    // a definitive answer, not a transient failure — don't retry it.
+    retry: (failureCount, error) => !(isAxiosError(error) && error.response?.status === 409) && failureCount < 3,
   });
+  const rulePreviewErrorMessage = isAxiosError(rulePreviewQuery.error)
+    ? stationBlockedMessage(rulePreviewQuery.error)
+    : null;
 
   // Round 11 item 7: confirmed live (docs/screenshots/verify/round11/
   // 05-item7-before-submit.png) that this is genuinely the state the
@@ -1507,6 +1525,7 @@ export function RecordFillUpPage() {
                   checks={rulePreviewQuery.data?.checks}
                   isLoading={rulePreviewQuery.isLoading}
                   isError={rulePreviewQuery.isError}
+                  errorMessage={rulePreviewErrorMessage}
                   rejection={effectiveRejection}
                   idSuffix="-mobile"
                 />
@@ -1567,7 +1586,27 @@ export function RecordFillUpPage() {
 // unexpected error, and per the code-leak audit it must not surface the raw
 // English message in this Arabic UI even then — EXCEPT the one
 // machine-checkable marker below, which is deliberately not prose.
+// Registration pivot, phase 1: FillUpsService refuses a fill-up (and its
+// rule preview) at a station that isn't in a live municipality — a 409
+// with one of these markers, which the employee can't fix themselves, so
+// the message says who can.
+function stationBlockedMessage(error: AxiosError<{ message?: string | string[] }>): string | null {
+  if (error.response?.status !== 409) return null;
+  switch (error.response.data?.message) {
+    case 'STATION_HAS_NO_MUNICIPALITY':
+      return 'لا يمكن تسجيل تعبئة في هذه المحطة لأن البلدية التابعة لها غير محددة. يرجى التواصل مع مسؤول المنظومة لتحديد بلدية المحطة.';
+    case 'MUNICIPALITY_NOT_LIVE':
+      return 'لا يمكن تسجيل تعبئة في هذه المحطة لأن بلديتها لم تُفعَّل في المنظومة بعد.';
+    default:
+      return null;
+  }
+}
+
 function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): string {
+  const stationBlocked = stationBlockedMessage(error);
+  if (stationBlocked) {
+    return stationBlocked;
+  }
   // Round 11 item 1: FillUpsService.create's provisional-owner-identity
   // hard gate (see OWNER_IDENTITY_PROVISIONAL there) — a 403 with this
   // exact marker string as its message, checked here rather than shown as

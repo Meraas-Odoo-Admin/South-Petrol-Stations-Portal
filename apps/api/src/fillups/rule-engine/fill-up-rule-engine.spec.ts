@@ -33,6 +33,10 @@ class FakeSettings implements SettingsReader {
   }
 }
 
+// Municipality-blind: returns the same history whatever municipality is
+// asked for — i.e. every record is treated as being in the municipality
+// under evaluation. The original single-municipality tests below use it
+// unchanged; StampedFakeHistory (further down) is the per-municipality one.
 class FakeHistory implements FillUpHistoryReader {
   constructor(
     private readonly byVehicle: Record<string, FillUpHistoryRecord[]> = {},
@@ -85,17 +89,18 @@ describe('FillUpRuleEngine', () => {
   const vehicleId = 'veh-1';
   const otherVehicleId = 'veh-2';
   const ownerId = 'own-1';
+  const municipalityId = 'mun-a';
 
   it('allows a fill-up with no prior history at all', async () => {
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), new FakeHistory());
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({ allowed: true });
   });
 
   it('allows a fill-up when the vehicle has no owner set at all (ownerId null) — owner-scoped checks are skipped entirely', async () => {
     const history = new FakeHistory({}, { [ownerId]: [record(otherVehicleId, daysAgo(now, 1))] });
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, null, now);
+    const result = await engine.evaluate(vehicleId, null, municipalityId, now);
     expect(result).toEqual({ allowed: true });
   });
 
@@ -103,7 +108,7 @@ describe('FillUpRuleEngine', () => {
     const priorAt = daysAgo(now, 1); // 1 day < min_gap_days (2)
     const history = new FakeHistory({ [vehicleId]: [record(vehicleId, priorAt)] });
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({
       allowed: false,
       reason: 'VEHICLE_GAP_TOO_SHORT',
@@ -120,7 +125,7 @@ describe('FillUpRuleEngine', () => {
       ],
     });
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({ allowed: false, reason: 'VEHICLE_WEEKLY_CAP_REACHED' });
   });
 
@@ -131,7 +136,7 @@ describe('FillUpRuleEngine', () => {
       { [ownerId]: [record(otherVehicleId, priorAt)] }, // on some other vehicle
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({
       allowed: false,
       reason: 'OWNER_GAP_TOO_SHORT',
@@ -151,7 +156,7 @@ describe('FillUpRuleEngine', () => {
       },
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({ allowed: false, reason: 'OWNER_WEEKLY_CAP_REACHED' });
   });
 
@@ -167,7 +172,7 @@ describe('FillUpRuleEngine', () => {
       },
     );
     const engine = new FillUpRuleEngine(new FakeSettings(settings), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({ allowed: false, reason: 'LITERS_PER_PERSON_CAP_REACHED' });
   });
 
@@ -186,7 +191,7 @@ describe('FillUpRuleEngine', () => {
       },
     );
     const engine = new FillUpRuleEngine(new FakeSettings(settings), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({ allowed: true });
   });
 
@@ -197,7 +202,7 @@ describe('FillUpRuleEngine', () => {
       { [ownerId]: [record(vehicleId, priorAt)] }, // owner gap would also fail
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({
       allowed: false,
       reason: 'VEHICLE_GAP_TOO_SHORT',
@@ -211,7 +216,7 @@ describe('FillUpRuleEngine', () => {
       { [ownerId]: [record(vehicleId, daysAgo(now, 3))] },
     );
     const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-    const result = await engine.evaluate(vehicleId, ownerId, now);
+    const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
     expect(result).toEqual({ allowed: true });
   });
 
@@ -222,7 +227,7 @@ describe('FillUpRuleEngine', () => {
   describe('evaluateWithChecks', () => {
     it('returns actual: null for a vehicle/owner with no prior fill-up history at all, all checks passed', async () => {
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), new FakeHistory());
-      const { result, checks } = await engine.evaluateWithChecks(vehicleId, ownerId, now);
+      const { result, checks } = await engine.evaluateWithChecks(vehicleId, ownerId, municipalityId, now);
       expect(result).toEqual({ allowed: true });
       expect(checks).toHaveLength(5);
       for (const check of checks) {
@@ -235,7 +240,7 @@ describe('FillUpRuleEngine', () => {
 
     it('omits owner-scoped checks entirely when ownerId is null (vehicle has no owner set)', async () => {
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), new FakeHistory());
-      const { result, checks } = await engine.evaluateWithChecks(vehicleId, null, now);
+      const { result, checks } = await engine.evaluateWithChecks(vehicleId, null, municipalityId, now);
       expect(result).toEqual({ allowed: true });
       expect(checks).toHaveLength(2);
       expect(checks.map((c) => c.reason)).toEqual(['VEHICLE_GAP_TOO_SHORT', 'VEHICLE_WEEKLY_CAP_REACHED']);
@@ -245,7 +250,7 @@ describe('FillUpRuleEngine', () => {
       const priorAt = daysAgo(now, 1); // 1 day < min_gap_days (2)
       const history = new FakeHistory({ [vehicleId]: [record(vehicleId, priorAt)] });
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-      const { result, checks } = await engine.evaluateWithChecks(vehicleId, ownerId, now);
+      const { result, checks } = await engine.evaluateWithChecks(vehicleId, ownerId, municipalityId, now);
       expect(result).toEqual({
         allowed: false,
         reason: 'VEHICLE_GAP_TOO_SHORT',
@@ -271,7 +276,7 @@ describe('FillUpRuleEngine', () => {
         },
       );
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-      const { checks } = await engine.evaluateWithChecks(vehicleId, ownerId, now);
+      const { checks } = await engine.evaluateWithChecks(vehicleId, ownerId, municipalityId, now);
       const ownerWeekly = checks.find((c) => c.reason === 'OWNER_WEEKLY_CAP_REACHED')!;
       expect(ownerWeekly.passed).toBe(false);
       expect(ownerWeekly.actual).toBe(3);
@@ -287,7 +292,7 @@ describe('FillUpRuleEngine', () => {
         rule: 'VEHICLE_GAP_TOO_SHORT',
       });
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history, standingExceptions);
-      const result = await engine.evaluate(vehicleId, ownerId, now);
+      const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
       expect(result).toEqual({
         allowed: true,
         coveredBy: { standingExceptionId: 'grant-1', rule: 'VEHICLE_GAP_TOO_SHORT' },
@@ -301,7 +306,7 @@ describe('FillUpRuleEngine', () => {
         rule: 'OWNER_GAP_TOO_SHORT', // covers a different rule
       });
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history, standingExceptions);
-      const result = await engine.evaluate(vehicleId, ownerId, now);
+      const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
       expect(result).toEqual({
         allowed: false,
         reason: 'VEHICLE_GAP_TOO_SHORT',
@@ -312,8 +317,259 @@ describe('FillUpRuleEngine', () => {
     it('still rejects normally when no StandingExceptionReader is supplied at all (real controller wiring always supplies one, but the constructor param is optional for tests)', async () => {
       const history = new FakeHistory({ [vehicleId]: [record(vehicleId, daysAgo(now, 1))] });
       const engine = new FillUpRuleEngine(new FakeSettings(DEFAULT_SETTINGS), history);
-      const result = await engine.evaluate(vehicleId, ownerId, now);
+      const result = await engine.evaluate(vehicleId, ownerId, municipalityId, now);
       expect(result.allowed).toBe(false);
+    });
+  });
+});
+
+// ── Registration pivot, phase 1: allowances are per municipality ──────────
+//
+// A fill-up only counts against the allowance of the municipality it was
+// stamped with (FillUpTransaction.municipalityId). This fake stores one flat
+// list of stamped fill-ups and answers exactly the way FillUpsRepository's
+// queries do — same vehicle (or same owner), same municipality, inside the
+// lookback window, strictly before `before`, newest first — so these tests
+// exercise the engine against realistic mixed-municipality history.
+interface StampedFillUp extends FillUpHistoryRecord {
+  ownerId: string | null;
+  municipalityId: string;
+}
+
+class StampedFakeHistory implements FillUpHistoryReader {
+  constructor(private readonly fillUps: StampedFillUp[]) {}
+
+  private select(
+    matches: (f: StampedFillUp) => boolean,
+    municipalityId: string,
+    before: Date,
+    lookbackDays: number,
+  ): FillUpHistoryRecord[] {
+    const from = before.getTime() - lookbackDays * DAY_MS;
+    return this.fillUps
+      .filter(
+        (f) =>
+          matches(f) &&
+          f.municipalityId === municipalityId &&
+          f.occurredAt.getTime() >= from &&
+          f.occurredAt < before,
+      )
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      .map(({ vehicleId, occurredAt, quantityLiters }) => ({ vehicleId, occurredAt, quantityLiters }));
+  }
+
+  async getRecentForVehicle(vehicleId: string, municipalityId: string, before: Date, lookbackDays: number) {
+    return this.select((f) => f.vehicleId === vehicleId, municipalityId, before, lookbackDays);
+  }
+
+  async getRecentForOwner(ownerId: string, municipalityId: string, before: Date, lookbackDays: number) {
+    return this.select((f) => f.ownerId === ownerId, municipalityId, before, lookbackDays);
+  }
+}
+
+describe('FillUpRuleEngine — per-municipality allowances', () => {
+  const vehicleId = 'veh-1';
+  const otherVehicleId = 'veh-2';
+  const ownerId = 'own-1';
+  const muniA = 'mun-a'; // e.g. سبها
+  const muniB = 'mun-b'; // a second, later-launched municipality
+
+  // A Saturday, matching the client's own example.
+  const saturdayMorning = new Date('2026-08-22T07:00:00.000Z');
+  const saturdayAfternoon = new Date('2026-08-22T13:00:00.000Z');
+  const sunday = new Date('2026-08-23T09:00:00.000Z');
+
+  function stamped(
+    municipalityId: string,
+    occurredAt: Date,
+    opts: { vehicleId?: string; ownerId?: string | null; quantityLiters?: number } = {},
+  ): StampedFillUp {
+    return {
+      vehicleId: opts.vehicleId ?? vehicleId,
+      ownerId: opts.ownerId === undefined ? ownerId : opts.ownerId,
+      municipalityId,
+      occurredAt,
+      quantityLiters: opts.quantityLiters ?? 30,
+    };
+  }
+
+  function engineFor(fillUps: StampedFillUp[], settings: Record<string, string> = DEFAULT_SETTINGS) {
+    return new FillUpRuleEngine(new FakeSettings(settings), new StampedFakeHistory(fillUps));
+  }
+
+  it('allows a fill-up in municipality B the same day as one in municipality A', async () => {
+    const engine = engineFor([stamped(muniA, saturdayMorning)]);
+    const result = await engine.evaluate(vehicleId, ownerId, muniB, saturdayAfternoon);
+    expect(result).toEqual({ allowed: true });
+  });
+
+  it('blocks a second fill-up back in municipality A too soon (gap rule), citing the A fill-up — not the one in B', async () => {
+    const engine = engineFor([stamped(muniA, saturdayMorning), stamped(muniB, saturdayAfternoon)]);
+    const result = await engine.evaluate(vehicleId, ownerId, muniA, sunday);
+    expect(result).toEqual({
+      allowed: false,
+      reason: 'VEHICLE_GAP_TOO_SHORT',
+      trigger: { vehicleId, occurredAt: saturdayMorning },
+    });
+  });
+
+  it('a fill-up in B does not reset or shorten the gap measured in A', async () => {
+    // A three days ago (gap satisfied in A), B an hour ago (would fail the
+    // gap if it counted). Back in A now: only the A fill-up is compared.
+    const now = new Date('2026-08-25T12:00:00.000Z');
+    const engine = engineFor([
+      stamped(muniA, new Date('2026-08-22T12:00:00.000Z')),
+      stamped(muniB, new Date('2026-08-25T11:00:00.000Z')),
+    ]);
+    const { result, checks } = await engine.evaluateWithChecks(vehicleId, ownerId, muniA, now);
+    expect(result).toEqual({ allowed: true });
+    expect(checks.find((c) => c.reason === 'VEHICLE_GAP_TOO_SHORT')!.actual).toBe(3);
+  });
+
+  describe('vehicle weekly cap is counted per municipality', () => {
+    const now = new Date('2026-08-28T12:00:00.000Z');
+    const threeInA = [
+      stamped(muniA, new Date('2026-08-22T12:00:00.000Z')),
+      stamped(muniA, new Date('2026-08-24T12:00:00.000Z')),
+      stamped(muniA, new Date('2026-08-26T12:00:00.000Z')),
+    ];
+
+    it('A at its cap blocks A', async () => {
+      const result = await engineFor(threeInA).evaluate(vehicleId, ownerId, muniA, now);
+      expect(result).toEqual({ allowed: false, reason: 'VEHICLE_WEEKLY_CAP_REACHED' });
+    });
+
+    it('A at its cap does not block B, whose count is still zero', async () => {
+      const { result, checks } = await engineFor(threeInA).evaluateWithChecks(vehicleId, ownerId, muniB, now);
+      expect(result).toEqual({ allowed: true });
+      expect(checks.find((c) => c.reason === 'VEHICLE_WEEKLY_CAP_REACHED')!.actual).toBe(0);
+    });
+
+    it('two in A plus two in B is two per municipality, not four — both still allowed', async () => {
+      const fillUps = [
+        stamped(muniA, new Date('2026-08-22T08:00:00.000Z')),
+        stamped(muniB, new Date('2026-08-22T14:00:00.000Z')),
+        stamped(muniA, new Date('2026-08-25T08:00:00.000Z')),
+        stamped(muniB, new Date('2026-08-25T14:00:00.000Z')),
+      ];
+      for (const municipality of [muniA, muniB]) {
+        const { result, checks } = await engineFor(fillUps).evaluateWithChecks(vehicleId, ownerId, municipality, now);
+        expect(result).toEqual({ allowed: true });
+        expect(checks.find((c) => c.reason === 'VEHICLE_WEEKLY_CAP_REACHED')!.actual).toBe(2);
+      }
+    });
+  });
+
+  describe('owner-level rules are split the same way', () => {
+    it("owner gap: a fill-up on the owner's other vehicle in A blocks A, not B", async () => {
+      const fillUps = [stamped(muniA, saturdayMorning, { vehicleId: otherVehicleId })];
+
+      const inA = await engineFor(fillUps).evaluate(vehicleId, ownerId, muniA, saturdayAfternoon);
+      expect(inA).toEqual({
+        allowed: false,
+        reason: 'OWNER_GAP_TOO_SHORT',
+        trigger: { vehicleId: otherVehicleId, occurredAt: saturdayMorning },
+      });
+
+      const inB = await engineFor(fillUps).evaluate(vehicleId, ownerId, muniB, saturdayAfternoon);
+      expect(inB).toEqual({ allowed: true });
+    });
+
+    it("owner weekly cap: three fill-ups across the owner's vehicles in A blocks A, not B", async () => {
+      const now = new Date('2026-08-28T12:00:00.000Z');
+      const fillUps = [
+        stamped(muniA, new Date('2026-08-22T12:00:00.000Z'), { vehicleId: otherVehicleId }),
+        stamped(muniA, new Date('2026-08-24T12:00:00.000Z'), { vehicleId: otherVehicleId }),
+        stamped(muniA, new Date('2026-08-26T12:00:00.000Z'), { vehicleId: 'veh-3' }),
+      ];
+
+      const inA = await engineFor(fillUps).evaluate(vehicleId, ownerId, muniA, now);
+      expect(inA).toEqual({ allowed: false, reason: 'OWNER_WEEKLY_CAP_REACHED' });
+
+      const { result: inB, checks } = await engineFor(fillUps).evaluateWithChecks(vehicleId, ownerId, muniB, now);
+      expect(inB).toEqual({ allowed: true });
+      expect(checks.find((c) => c.reason === 'OWNER_WEEKLY_CAP_REACHED')!.actual).toBe(0);
+    });
+
+    it("owner liters: liters drawn in A count toward A's cap only", async () => {
+      const settings = { ...DEFAULT_SETTINGS, 'fillup.max_liters_per_week_per_owner': '100' };
+      const now = new Date('2026-08-28T12:00:00.000Z');
+      const fillUps = [
+        stamped(muniA, new Date('2026-08-24T12:00:00.000Z'), { vehicleId: otherVehicleId, quantityLiters: 60 }),
+        stamped(muniA, new Date('2026-08-26T12:00:00.000Z'), { vehicleId: otherVehicleId, quantityLiters: 40 }),
+        stamped(muniB, new Date('2026-08-24T12:00:00.000Z'), { vehicleId: otherVehicleId, quantityLiters: 25 }),
+      ];
+
+      const inA = await engineFor(fillUps, settings).evaluate(vehicleId, ownerId, muniA, now);
+      expect(inA).toEqual({ allowed: false, reason: 'LITERS_PER_PERSON_CAP_REACHED' });
+
+      const { result: inB, checks } = await engineFor(fillUps, settings).evaluateWithChecks(
+        vehicleId,
+        ownerId,
+        muniB,
+        now,
+      );
+      expect(inB).toEqual({ allowed: true });
+      expect(checks.find((c) => c.reason === 'LITERS_PER_PERSON_CAP_REACHED')!.actual).toBe(25);
+    });
+  });
+
+  // With every fill-up in one municipality, per-municipality counting must
+  // be indistinguishable from the pre-pivot, municipality-blind engine.
+  // Each scenario runs twice — against StampedFakeHistory with everything
+  // stamped A, and against the municipality-blind FakeHistory fed the same
+  // records — and the full per-rule breakdown and verdict must match.
+  describe('with only one municipality, results are identical to the municipality-blind behavior', () => {
+    const now = new Date('2026-08-28T12:00:00.000Z');
+    const at = (iso: string) => new Date(iso);
+    const scenarios: Array<{ name: string; fillUps: StampedFillUp[]; settings?: Record<string, string> }> = [
+      { name: 'no history', fillUps: [] },
+      { name: 'gap too short', fillUps: [stamped(muniA, at('2026-08-27T20:00:00.000Z'))] },
+      {
+        name: 'vehicle at weekly cap',
+        fillUps: [
+          stamped(muniA, at('2026-08-22T12:00:00.000Z')),
+          stamped(muniA, at('2026-08-24T12:00:00.000Z')),
+          stamped(muniA, at('2026-08-26T12:00:00.000Z')),
+        ],
+      },
+      {
+        name: 'owner gap via another vehicle',
+        fillUps: [stamped(muniA, at('2026-08-28T08:00:00.000Z'), { vehicleId: otherVehicleId })],
+      },
+      {
+        name: 'owner liters cap',
+        settings: { ...DEFAULT_SETTINGS, 'fillup.max_liters_per_week_per_owner': '50' },
+        fillUps: [stamped(muniA, at('2026-08-24T12:00:00.000Z'), { vehicleId: otherVehicleId, quantityLiters: 55 })],
+      },
+      { name: 'all passing, prior fill-up three days ago', fillUps: [stamped(muniA, at('2026-08-25T12:00:00.000Z'))] },
+    ];
+
+    function municipalityBlind(fillUps: StampedFillUp[]): FakeHistory {
+      const newestFirst = [...fillUps].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+      const strip = ({ vehicleId: v, occurredAt, quantityLiters }: StampedFillUp) => ({
+        vehicleId: v,
+        occurredAt,
+        quantityLiters,
+      });
+      return new FakeHistory(
+        { [vehicleId]: newestFirst.filter((f) => f.vehicleId === vehicleId).map(strip) },
+        { [ownerId]: newestFirst.filter((f) => f.ownerId === ownerId).map(strip) },
+      );
+    }
+
+    it.each(scenarios)('$name', async ({ fillUps, settings = DEFAULT_SETTINGS }) => {
+      for (const owner of [ownerId, null]) {
+        const perMunicipality = await new FillUpRuleEngine(
+          new FakeSettings(settings),
+          new StampedFakeHistory(fillUps),
+        ).evaluateWithChecks(vehicleId, owner, muniA, now);
+        const blind = await new FillUpRuleEngine(
+          new FakeSettings(settings),
+          municipalityBlind(fillUps),
+        ).evaluateWithChecks(vehicleId, owner, muniA, now);
+        expect(perMunicipality).toEqual(blind);
+      }
     });
   });
 });

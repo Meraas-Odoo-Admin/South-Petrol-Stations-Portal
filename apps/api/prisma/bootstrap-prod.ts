@@ -13,8 +13,11 @@ const prisma = new PrismaClient();
 // tables, not a hardcoded role check) and the tunable SystemSetting rows
 // the fill-up rule engine reads at request time and throws on if missing
 // (see SystemSettingsService — "SystemSetting is not seeded" is a real
-// crash, not a soft default) — then creates exactly ONE real system_admin
-// account. Everything else (companies, stations, municipalities, vehicle
+// crash, not a soft default) — plus the one live municipality, سبها, with
+// its security authority (registration pivot, phase 1: Sabha goes live
+// first; there's no admin UI for municipalities yet) — then creates
+// exactly ONE real system_admin account. Everything else (companies,
+// stations, other municipalities, vehicle
 // types, exception types, additional users, ...) is left for that admin
 // to create through the app's own admin UI, which is the whole point of
 // running this instead of the demo seed.
@@ -79,6 +82,21 @@ async function main() {
     });
   }
 
+  // ── سبها: the live municipality and its security authority ─────────
+  // One authority per municipality (docs/OPEN_ITEMS.md #4). Upserts, so a
+  // re-run only fills in what's missing — and re-asserts LIVE, which is
+  // this deployment's intended state for سبها.
+  const sabha = await prisma.municipality.upsert({
+    where: { name: 'سبها' },
+    create: { name: 'سبها', status: 'LIVE' },
+    update: { status: 'LIVE' },
+  });
+  await prisma.securityAuthority.upsert({
+    where: { name: 'مديرية أمن سبها' },
+    create: { name: 'مديرية أمن سبها', municipalityId: sabha.id },
+    update: { municipalityId: sabha.id },
+  });
+
   // ── The one real admin account ──────────────────────────────────────
   const passwordHash = await argon2.hash(password);
   const user = await prisma.user.upsert({
@@ -105,6 +123,7 @@ async function main() {
   console.log(`  Permissions: ${PERMISSIONS.length}`);
   console.log(`  Roles: ${Object.keys(ROLE_PERMISSIONS).length}`);
   console.log(`  System settings: ${SYSTEM_SETTINGS.length}`);
+  console.log('  Live municipality: سبها (security authority: مديرية أمن سبها)');
   console.log(`  Admin account: ${username} (system_admin role, must change password on first login)`);
   console.log('  No companies, stations, or demo data were created — add them from the admin UI.');
 }

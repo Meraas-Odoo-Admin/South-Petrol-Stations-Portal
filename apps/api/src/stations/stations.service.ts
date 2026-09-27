@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -9,6 +10,15 @@ import { UpdateStationDto } from './dto/update-station.dto';
 // controller and not in the UI. Every read goes through the caller's scope
 // from UserStationScope before touching the database result.
 // See docs/IMPLEMENTATION_PLAN.md §5 and CLAUDE.md rule 3.
+//
+// Registration pivot, phase 1: on top of scope, a station in a PREPARING
+// municipality is visible only on admin screens — i.e. to holders of
+// stations:view_preparing (a permission check, never a role-name check;
+// not stations:manage, which station supervisors also hold). Everyone else sees only
+// stations whose municipality is LIVE, plus stations with no municipality
+// yet, which stay visible so that recording at one fails with the fill-up
+// screen's clear "no municipality" message instead of the station silently
+// vanishing. Fill-ups at either kind are refused by FillUpsService.
 @Injectable()
 export class StationsService {
   constructor(
@@ -105,17 +115,30 @@ export class StationsService {
   // route, and security-authority NAMES, not their ids — include the
   // relations here rather than making every reader join them itself, same
   // reasoning as VehiclesService.findAll including `owner`.
+  //
+  // The security authority is read through the municipality (one per
+  // municipality); the legacy Station.securityAuthority relation is no
+  // longer included.
   private readonly cardInclude = {
-    municipality: true,
+    municipality: { include: { securityAuthority: { select: { id: true, name: true } } } },
     route: true,
-    securityAuthority: true,
     fuelAvailability: true,
   } as const;
 
+  private async canSeePreparingStations(userId: string): Promise<boolean> {
+    const permissions = await this.rbac.getPermissionsForUser(userId);
+    return permissions.has('stations:view_preparing');
+  }
+
   async findAll(userId: string) {
     const scope = await this.rbac.getStationScope(userId);
+    const includePreparing = await this.canSeePreparingStations(userId);
+    const where: Prisma.StationWhereInput = {
+      ...(scope !== null ? { id: { in: scope } } : {}),
+      ...(includePreparing ? {} : { OR: [{ municipalityId: null }, { municipality: { status: 'LIVE' } }] }),
+    };
     return this.prisma.station.findMany({
-      where: scope !== null ? { id: { in: scope } } : undefined,
+      where,
       include: this.cardInclude,
       orderBy: { internalCode: 'asc' },
     });
@@ -124,6 +147,10 @@ export class StationsService {
   async findOne(id: string, userId: string) {
     const station = await this.prisma.station.findUnique({ where: { id }, include: this.cardInclude });
     if (!station) {
+      throw new NotFoundException('Station not found.');
+    }
+    if (station.municipality?.status === 'PREPARING' && !(await this.canSeePreparingStations(userId))) {
+      // Not live yet — outside admin screens it doesn't exist.
       throw new NotFoundException('Station not found.');
     }
 

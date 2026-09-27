@@ -14,9 +14,16 @@ export const PERMISSIONS = [
   { key: 'routes:read', description: 'View the station route/haulage-line list' },
   { key: 'routes:manage', description: 'Create/update station routes' },
   { key: 'security_authorities:read', description: 'View the security authority list' },
-  { key: 'security_authorities:manage', description: 'Create security authorities' },
+  { key: 'security_authorities:manage', description: 'Create/update security authorities (one per municipality)' },
   { key: 'stations:read', description: 'View stations (subject to station scope)' },
   { key: 'stations:manage', description: 'Create/update stations' },
+  // Registration pivot, phase 1: stations in a PREPARING municipality are
+  // visible only on admin screens. Deliberately separate from
+  // stations:manage, which station_supervisor also holds.
+  {
+    key: 'stations:view_preparing',
+    description: 'See stations in municipalities that are still being prepared (not live yet)',
+  },
   { key: 'users:manage', description: 'Create/update users and station scope' },
   { key: 'roles:manage', description: 'Assign/remove roles' },
   { key: 'reports:view_all_stations', description: 'View directorate-wide reports' },
@@ -144,6 +151,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicle_types:manage',
     'stations:read',
     'stations:manage',
+    'stations:view_preparing',
     'reports:view_all_stations',
     'reports:view',
     'owners:manage',

@@ -82,6 +82,10 @@ export interface FillUpTransactionRaw {
   vehicleId: string;
   driverId: string | null;
   stationId: string;
+  // The municipality the fill-up happened in, stamped at creation from
+  // the station and never updated. Null only on legacy rows at stations
+  // that had no municipality.
+  municipalityId: string | null;
   fuelType: FuelType;
   quantityLiters: string;
   occurredAt: string;
@@ -98,7 +102,7 @@ export type CreateFillUpResult =
   | { allowed: false; reason: RuleFailureReason; trigger: RuleTriggerDetail | null; requiresException: true }
   | FillUpTransactionRaw;
 
-// GET /fillups/rule-preview?vehicleId=X — round 7 item 1's pre-submit
+// GET /fillups/rule-preview?vehicleId=X&stationId=Y — round 7 item 1's pre-submit
 // rule-review breakdown. `actual: null` means there's no prior history to
 // compare against (the check trivially passes). Computed by the same
 // FillUpRuleEngine a real submission uses — never a separate client-side

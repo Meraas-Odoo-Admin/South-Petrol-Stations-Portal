@@ -40,10 +40,10 @@ export class CreateStationDto {
   @IsString()
   routeId?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  securityAuthorityId?: string;
+  // No securityAuthorityId: a station's security authority is its
+  // municipality's (one per municipality — OPEN_ITEMS.md #4, answered),
+  // never chosen per station. With forbidNonWhitelisted, sending it is
+  // now a 400 rather than silently ignored.
 
   @ApiProperty({ enum: StationStatus, required: false })
   @IsOptional()

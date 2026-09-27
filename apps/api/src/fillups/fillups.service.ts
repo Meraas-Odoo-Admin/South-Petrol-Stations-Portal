@@ -66,13 +66,54 @@ export class FillUpsService {
   // fillups:create (not vehicles:read) since it's part of the fill-up
   // recording flow specifically, same reasoning as getFuelPrices/
   // listExceptionTypes below.
-  async previewRules(vehicleId: string) {
+  //
+  // Registration pivot, phase 1: allowances are per municipality, so the
+  // preview needs the station too — it resolves the municipality exactly
+  // the way create() does (same scope check, same refusal for a station
+  // with no municipality or one that isn't live), so the numbers shown are
+  // the ones a real submit at that station will be judged by.
+  async previewRules(vehicleId: string, stationId: string, actorId: string) {
+    const scope = await this.rbac.getStationScope(actorId);
+    if (scope !== null && !scope.includes(stationId)) {
+      throw new ForbiddenException('You do not have access to this station.');
+    }
     const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) {
       throw new NotFoundException('Vehicle not found.');
     }
-    const { checks } = await this.ruleEngine.evaluateWithChecks(vehicleId, vehicle.ownerId, new Date());
+    const municipalityId = await this.resolveRecordingMunicipality(stationId);
+    const { checks } = await this.ruleEngine.evaluateWithChecks(
+      vehicleId,
+      vehicle.ownerId,
+      municipalityId,
+      new Date(),
+    );
     return { checks };
+  }
+
+  // The municipality a fill-up at this station is recorded in — stamped
+  // onto the FillUpTransaction and used to scope every rule-engine count.
+  // Refuses (machine-checkable markers, mapped to Arabic by the fill-up
+  // screen — same convention as OWNER_IDENTITY_PROVISIONAL) rather than
+  // ever stamping null:
+  //  - STATION_HAS_NO_MUNICIPALITY: Station.municipalityId is still null.
+  //  - MUNICIPALITY_NOT_LIVE: the municipality is still PREPARING — no
+  //    fill-up can be recorded there until an admin switches it to LIVE.
+  private async resolveRecordingMunicipality(stationId: string): Promise<string> {
+    const station = await this.prisma.station.findUnique({
+      where: { id: stationId },
+      select: { municipality: { select: { id: true, status: true } } },
+    });
+    if (!station) {
+      throw new NotFoundException('Station not found.');
+    }
+    if (!station.municipality) {
+      throw new ConflictException('STATION_HAS_NO_MUNICIPALITY');
+    }
+    if (station.municipality.status !== 'LIVE') {
+      throw new ConflictException('MUNICIPALITY_NOT_LIVE');
+    }
+    return station.municipality.id;
   }
 
   // Human-readable snapshot of the specific prior fill-up that triggered a
@@ -135,10 +176,11 @@ export class FillUpsService {
     if (!vehicle) {
       throw new NotFoundException('Vehicle not found.');
     }
-    const station = await this.prisma.station.findUnique({ where: { id: dto.stationId } });
-    if (!station) {
-      throw new NotFoundException('Station not found.');
-    }
+    // Resolved once here and stamped onto the row below — never looked up
+    // again through the station afterward (see the schema comment on
+    // FillUpTransaction.municipalityId). Runs before either branch, so an
+    // exception-mode submission can't bypass it either.
+    const municipalityId = await this.resolveRecordingMunicipality(dto.stationId);
 
     // Round 11 item 1: a DRIVERS_LICENSE-identified owner is a one-time,
     // provisional stand-in — the client's own framing was "only the first
@@ -169,7 +211,12 @@ export class FillUpsService {
     );
 
     if (!exceptionModeFieldsPresent) {
-      const ruleResult = await this.ruleEngine.evaluate(dto.vehicleId, vehicle.ownerId, occurredAt);
+      const ruleResult = await this.ruleEngine.evaluate(
+        dto.vehicleId,
+        vehicle.ownerId,
+        municipalityId,
+        occurredAt,
+      );
       if (!ruleResult.allowed) {
         return {
           status: 'rejected' as const,
@@ -183,6 +230,7 @@ export class FillUpsService {
           data: {
             vehicleId: dto.vehicleId,
             stationId: dto.stationId,
+            municipalityId,
             fuelType: dto.fuelType,
             quantityLiters: dto.quantityLiters,
             occurredAt,
@@ -207,6 +255,7 @@ export class FillUpsService {
             newValue: {
               vehicleId: created.vehicleId,
               stationId: created.stationId,
+              municipalityId: created.municipalityId,
               isException: false,
               standingExceptionId: ruleResult.coveredBy?.standingExceptionId ?? undefined,
               coveredRule: ruleResult.coveredBy?.rule ?? undefined,
@@ -231,7 +280,12 @@ export class FillUpsService {
     // prior fill-up triggered it (item 8). Never trust a client-supplied
     // diagnostic for this — always re-derive it server-side, same as any
     // other authoritative check.
-    const diagnostic = await this.ruleEngine.evaluate(dto.vehicleId, vehicle.ownerId, occurredAt);
+    const diagnostic = await this.ruleEngine.evaluate(
+      dto.vehicleId,
+      vehicle.ownerId,
+      municipalityId,
+      occurredAt,
+    );
     const triggerReason = diagnostic.allowed ? null : diagnostic.reason;
     const triggerDetail = diagnostic.allowed ? null : await this.describeTrigger(diagnostic.trigger);
 
@@ -272,6 +326,7 @@ export class FillUpsService {
         data: {
           vehicleId: dto.vehicleId,
           stationId: dto.stationId,
+          municipalityId,
           fuelType: dto.fuelType,
           quantityLiters: dto.quantityLiters,
           occurredAt,
@@ -310,6 +365,7 @@ export class FillUpsService {
           newValue: {
             vehicleId: created.vehicleId,
             stationId: created.stationId,
+            municipalityId: created.municipalityId,
             isException: true,
             exceptionTypeId: dto.exceptionTypeId,
           },
@@ -329,12 +385,11 @@ export class FillUpsService {
   // Ordinary station scoping (CLAUDE.md rule 3, non-negotiable) IS enforced
   // below. What's still provisional is narrower than that: any holder of
   // fillups:approve_exception may approve any exception at any station
-  // within their scope — §13 item 4 (security-authority scope for a
-  // station) is still pending from the client, and once answered, approval
-  // may additionally need to be restricted to the station's specific
-  // SecurityAuthority rather than "the caller's scope includes this
-  // station" being sufficient. That further restriction is NOT implemented
-  // now; flagged so it isn't mistaken for a finished design.
+  // within their scope. §13 item 4 is now answered (one SecurityAuthority
+  // per municipality, OPEN_ITEMS.md #4), but whether approval should
+  // additionally be restricted to that authority's people is part of the
+  // later supervisor-roles phase, not implemented here; flagged so it
+  // isn't mistaken for a finished design.
   async approveException(fillUpId: string, actorId: string) {
     const transaction = await this.prisma.fillUpTransaction.findUnique({
       where: { id: fillUpId },

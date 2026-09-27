@@ -38,6 +38,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'security_authorities:manage': 'إدارة الجهات الأمنية',
   'stations:read': 'عرض المحطات',
   'stations:manage': 'إدارة المحطات',
+  'stations:view_preparing': 'عرض محطات البلديات قيد الإعداد',
   'users:manage': 'إدارة الحسابات',
   'roles:manage': 'إسناد الأدوار والصلاحيات الفردية',
   'reports:view_all_stations': 'عرض تقارير كل المحطات',

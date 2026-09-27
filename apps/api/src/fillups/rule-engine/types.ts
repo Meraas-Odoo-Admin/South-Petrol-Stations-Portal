@@ -49,19 +49,28 @@ export interface FillUpHistoryRecord {
 // Read-only slice of fill-up history the engine needs. FillUpRepository
 // (Prisma-backed) implements this for the real controller wiring; unit
 // tests pass an in-memory fake instead.
+//
+// Registration pivot, phase 1: every lookup is scoped to ONE municipality
+// — the one the fill-up being evaluated is happening in. Allowances are
+// counted per vehicle/owner per municipality, keyed on the municipality
+// stamped on each FillUpTransaction when it was recorded (never a live
+// lookup through its station).
 export interface FillUpHistoryReader {
-  // Most recent fill-ups for the vehicle, strictly before `before`, within
-  // `lookbackDays`, ordered newest-first.
+  // Most recent fill-ups for the vehicle in `municipalityId`, strictly
+  // before `before`, within `lookbackDays`, ordered newest-first.
   getRecentForVehicle(
     vehicleId: string,
+    municipalityId: string,
     before: Date,
     lookbackDays: number,
   ): Promise<FillUpHistoryRecord[]>;
 
   // Same, scoped to the vehicle's owner instead — the aggregate per-owner
-  // cap looks across all vehicles that owner has, not just one.
+  // cap looks across all vehicles that owner has, not just one (still
+  // within the one municipality).
   getRecentForOwner(
     ownerId: string,
+    municipalityId: string,
     before: Date,
     lookbackDays: number,
   ): Promise<FillUpHistoryRecord[]>;

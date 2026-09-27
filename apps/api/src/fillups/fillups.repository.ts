@@ -10,19 +10,24 @@ import type {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Prisma-backed implementation of FillUpHistoryReader — the only place the
-// rule engine's data access touches the database.
+// rule engine's data access touches the database. Both lookups filter on
+// the municipality STAMPED on each fill-up (FillUpTransaction.
+// municipalityId), never on its station's current municipality — see the
+// schema comment on that column.
 @Injectable()
 export class FillUpsRepository implements FillUpHistoryReader {
   constructor(private readonly prisma: PrismaService) {}
 
   async getRecentForVehicle(
     vehicleId: string,
+    municipalityId: string,
     before: Date,
     lookbackDays: number,
   ): Promise<FillUpHistoryRecord[]> {
     const rows = await this.prisma.fillUpTransaction.findMany({
       where: {
         vehicleId,
+        municipalityId,
         occurredAt: { gte: new Date(before.getTime() - lookbackDays * DAY_MS), lt: before },
       },
       orderBy: { occurredAt: 'desc' },
@@ -33,12 +38,14 @@ export class FillUpsRepository implements FillUpHistoryReader {
 
   async getRecentForOwner(
     ownerId: string,
+    municipalityId: string,
     before: Date,
     lookbackDays: number,
   ): Promise<FillUpHistoryRecord[]> {
     const rows = await this.prisma.fillUpTransaction.findMany({
       where: {
         vehicle: { ownerId },
+        municipalityId,
         occurredAt: { gte: new Date(before.getTime() - lookbackDays * DAY_MS), lt: before },
       },
       orderBy: { occurredAt: 'desc' },

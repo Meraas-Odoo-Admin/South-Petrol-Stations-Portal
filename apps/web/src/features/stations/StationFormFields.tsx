@@ -4,7 +4,7 @@ import {
   OWNERSHIP_TYPE_LABELS,
   FUEL_TYPE_LABELS,
 } from '../../lib/labels';
-import type { LookupRef, StationBasicInfo, StationOwnershipType } from './types';
+import type { LookupRef, MunicipalityRef, StationBasicInfo, StationOwnershipType } from './types';
 
 interface CompanyRow {
   id: string;
@@ -30,7 +30,6 @@ export interface StationFormValues {
   companyId: string;
   municipalityId: string;
   routeId: string;
-  securityAuthorityId: string;
   ownershipType: StationOwnershipType | '';
   status: StationStatus;
   statusNote: string;
@@ -48,7 +47,6 @@ export const EMPTY_STATION_FORM: StationFormValues = {
   companyId: '',
   municipalityId: '',
   routeId: '',
-  securityAuthorityId: '',
   ownershipType: '',
   status: 'ACTIVE',
   statusNote: '',
@@ -67,7 +65,6 @@ export function stationToFormValues(station: StationBasicInfo): StationFormValue
     companyId: station.companyId,
     municipalityId: station.municipalityId ?? '',
     routeId: station.routeId ?? '',
-    securityAuthorityId: station.securityAuthorityId ?? '',
     ownershipType: station.ownershipType ?? '',
     status: (station.status as StationStatus) ?? 'ACTIVE',
     statusNote: station.statusNote ?? '',
@@ -87,7 +84,6 @@ export function stationFormToPayload(values: StationFormValues) {
     companyId: values.companyId,
     municipalityId: values.municipalityId || undefined,
     routeId: values.routeId || undefined,
-    securityAuthorityId: values.securityAuthorityId || undefined,
     ownershipType: values.ownershipType || undefined,
     status: values.status,
     // Only meaningful once status !== ACTIVE — still sent as-is either
@@ -119,8 +115,9 @@ function Field({ label, children, className }: { label: string; children: ReactN
 
 // station-card-field-spec: the create/edit form follows the field
 // hierarchy and ordering the spec lays out — internalCode auto-generated
-// (never typed), company/municipality/route/security-authority as
-// Settings-managed dropdowns (never free text, which the spec's own
+// (never typed), company/municipality/route as Settings-managed
+// dropdowns — the security authority is shown read-only, derived from the
+// chosen municipality (one per municipality, OPEN_ITEMS.md #4) — (never free text, which the spec's own
 // research found causes real spelling drift), ownership/status as fixed
 // enums, fuel types as a multi-select, and the operator-same-as-supervisor
 // toggle so the "same person" case (the spec's own most common real-data
@@ -131,7 +128,6 @@ export function StationFormFields({
   companies,
   municipalities,
   routes,
-  securityAuthorities,
   disableCompany,
   // Set when editing an EXISTING station — it already has a real
   // internalCode, so the field shows that (read-only, still never
@@ -142,15 +138,19 @@ export function StationFormFields({
   values: StationFormValues;
   onChange: (values: StationFormValues) => void;
   companies: CompanyRow[] | undefined;
-  municipalities: LookupRef[] | undefined;
+  municipalities: MunicipalityRef[] | undefined;
   routes: LookupRef[] | undefined;
-  securityAuthorities: LookupRef[] | undefined;
   disableCompany?: boolean;
   existingInternalCode?: string;
 }) {
   function set<K extends keyof StationFormValues>(key: K, value: StationFormValues[K]) {
     onChange({ ...values, [key]: value });
   }
+
+  const selectedMunicipality = municipalities?.find((m) => m.id === values.municipalityId);
+  const derivedAuthorityLabel = !selectedMunicipality
+    ? 'تُحدَّد تلقائيًا من البلدية'
+    : (selectedMunicipality.securityAuthority?.name ?? 'لا توجد جهة أمنية لهذه البلدية بعد');
 
   return (
     <div className="space-y-4">
@@ -203,7 +203,7 @@ export function StationFormFields({
             <option value="">اختر البلدية</option>
             {municipalities?.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.status === 'PREPARING' ? `${m.name} (قيد الإعداد)` : m.name}
               </option>
             ))}
           </select>
@@ -218,19 +218,8 @@ export function StationFormFields({
             ))}
           </select>
         </Field>
-        <Field label="الجهة الأمنية المشرفة (اختياري)">
-          <select
-            value={values.securityAuthorityId}
-            onChange={(e) => set('securityAuthorityId', e.target.value)}
-            className={inputClass}
-          >
-            <option value="">— غير محدَّد —</option>
-            {securityAuthorities?.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+        <Field label="الجهة الأمنية المشرفة">
+          <input value={derivedAuthorityLabel} disabled className={`opacity-60 ${inputClass}`} />
         </Field>
       </div>
 

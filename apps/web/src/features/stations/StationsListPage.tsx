@@ -18,7 +18,7 @@ import {
   stationFormToPayload,
   type StationFormValues,
 } from './StationFormFields';
-import type { LookupRef, StationBasicInfo } from './types';
+import type { LookupRef, MunicipalityRef, StationBasicInfo } from './types';
 
 const STATUS_FILTER_OPTIONS = ['ACTIVE', 'NOT_YET_SUPPLIED', 'SUSPENDED_LEGAL', 'SUSPENDED_COMMITTEE', 'SUSPENDED_OWNER', 'UNVERIFIED'];
 
@@ -31,6 +31,15 @@ function matches(station: StationBasicInfo, term: string): boolean {
   if (!term) return true;
   const haystack = `${station.name} ${station.internalCode} ${station.stationNumber} ${station.municipality?.name ?? ''}`.toLowerCase();
   return haystack.includes(term.toLowerCase());
+}
+
+// Only admins (stations:manage) ever receive a PREPARING municipality's
+// stations — marked so it's clear they aren't live yet.
+function municipalityLabel(station: StationBasicInfo): string {
+  if (!station.municipality) return '—';
+  return station.municipality.status === 'PREPARING'
+    ? `${station.municipality.name} (قيد الإعداد)`
+    : station.municipality.name;
 }
 
 // Round 16 (UX pass): the previous version of this screen was, in its own
@@ -84,17 +93,12 @@ export function StationsListPage() {
   });
   const municipalitiesQuery = useQuery({
     queryKey: ['admin', 'municipalities'],
-    queryFn: async () => (await apiClient.get<LookupRef[]>('/municipalities')).data,
+    queryFn: async () => (await apiClient.get<MunicipalityRef[]>('/municipalities')).data,
     enabled: canManage,
   });
   const routesQuery = useQuery({
     queryKey: ['admin', 'routes'],
     queryFn: async () => (await apiClient.get<LookupRef[]>('/routes')).data,
-    enabled: canManage,
-  });
-  const securityAuthoritiesQuery = useQuery({
-    queryKey: ['admin', 'security-authorities'],
-    queryFn: async () => (await apiClient.get<LookupRef[]>('/security-authorities')).data,
     enabled: canManage,
   });
 
@@ -187,7 +191,6 @@ export function StationsListPage() {
             companies={companiesQuery.data}
             municipalities={municipalitiesQuery.data}
             routes={routesQuery.data}
-            securityAuthorities={securityAuthoritiesQuery.data}
           />
           <PillButton
             className="mt-4"
@@ -258,7 +261,7 @@ export function StationsListPage() {
                       </StatusPill>
                     </div>
                     <p className="mt-0.5 text-[11px] text-ink-faint">
-                      {station.municipality?.name ?? '—'}
+                      {municipalityLabel(station)}
                       {station.ownershipType && ` · ملكية ${ownershipTypeLabel(station.ownershipType)}`}
                     </p>
                   </div>
@@ -305,7 +308,6 @@ export function StationsListPage() {
                       companies={companiesQuery.data}
                       municipalities={municipalitiesQuery.data}
                       routes={routesQuery.data}
-                      securityAuthorities={securityAuthoritiesQuery.data}
                       disableCompany
                       existingInternalCode={station.internalCode}
                     />
@@ -360,7 +362,7 @@ export function StationsListPage() {
                           <CodeText>{station.internalCode}</CodeText>
                           <span className="ms-1.5 text-[11px] text-ink-faint">#{station.stationNumber}</span>
                         </td>
-                        <td className="px-[18px] py-3 text-ink">{station.municipality?.name ?? '—'}</td>
+                        <td className="px-[18px] py-3 text-ink">{municipalityLabel(station)}</td>
                         <td className="px-[18px] py-3 text-ink">{ownershipTypeLabel(station.ownershipType)}</td>
                         <td className="px-[18px] py-3">
                           {station.fuelAvailability.filter((f) => f.isAvailable).length > 0 ? (
@@ -399,7 +401,6 @@ export function StationsListPage() {
                               companies={companiesQuery.data}
                               municipalities={municipalitiesQuery.data}
                               routes={routesQuery.data}
-                              securityAuthorities={securityAuthoritiesQuery.data}
                               disableCompany
                               existingInternalCode={station.internalCode}
                             />

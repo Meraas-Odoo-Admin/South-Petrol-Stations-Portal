@@ -70,9 +70,15 @@ export class FillUpRuleEngine {
   // ownerId is null when the vehicle has no VehicleOwner set yet — owner-
   // scoped checks are skipped entirely in that case (nothing to aggregate
   // against, not a failure), vehicle-scoped checks still run.
+  //
+  // municipalityId is the municipality this fill-up is happening in (the
+  // station's). Every history count below is limited to it: a vehicle
+  // draws on a separate allowance in each municipality. The limits
+  // themselves stay system-wide SystemSetting values.
   private async computeChecks(
     vehicleId: string,
     ownerId: string | null,
+    municipalityId: string,
     occurredAt: Date,
   ): Promise<{ checks: (RuleCheckDetail & { record?: FillUpHistoryRecord })[] }> {
     const maxPerWeekVehicle = await this.settings.getNumber('fillup.max_per_week');
@@ -88,12 +94,17 @@ export class FillUpRuleEngine {
     const windowStrategy = resolveWeekWindowStrategy(weekWindowMode);
     const windowStart = windowStrategy.windowStart(occurredAt, weekStartDay);
 
-    const recentForVehicle = await this.history.getRecentForVehicle(vehicleId, occurredAt, LOOKBACK_DAYS);
+    const recentForVehicle = await this.history.getRecentForVehicle(
+      vehicleId,
+      municipalityId,
+      occurredAt,
+      LOOKBACK_DAYS,
+    );
     const lastVehicleFillUp = recentForVehicle[0];
     const vehicleCountThisWeek = recordsInWindow(recentForVehicle, windowStart).length;
 
     const recentForOwner = ownerId
-      ? await this.history.getRecentForOwner(ownerId, occurredAt, LOOKBACK_DAYS)
+      ? await this.history.getRecentForOwner(ownerId, municipalityId, occurredAt, LOOKBACK_DAYS)
       : [];
     const lastOwnerFillUp = recentForOwner[0];
     const ownerCountThisWeek = recordsInWindow(recentForOwner, windowStart).length;
@@ -178,8 +189,13 @@ export class FillUpRuleEngine {
     return { allowed: true };
   }
 
-  async evaluate(vehicleId: string, ownerId: string | null, occurredAt: Date): Promise<RuleResult> {
-    const { checks } = await this.computeChecks(vehicleId, ownerId, occurredAt);
+  async evaluate(
+    vehicleId: string,
+    ownerId: string | null,
+    municipalityId: string,
+    occurredAt: Date,
+  ): Promise<RuleResult> {
+    const { checks } = await this.computeChecks(vehicleId, ownerId, municipalityId, occurredAt);
     const violations: Violation[] = checks
       .filter((c) => !c.passed)
       .map((c) => ({ reason: c.reason, record: c.record }));
@@ -194,9 +210,10 @@ export class FillUpRuleEngine {
   async evaluateWithChecks(
     vehicleId: string,
     ownerId: string | null,
+    municipalityId: string,
     occurredAt: Date,
   ): Promise<{ result: RuleResult; checks: RuleCheckDetail[] }> {
-    const { checks } = await this.computeChecks(vehicleId, ownerId, occurredAt);
+    const { checks } = await this.computeChecks(vehicleId, ownerId, municipalityId, occurredAt);
     const violations: Violation[] = checks
       .filter((c) => !c.passed)
       .map((c) => ({ reason: c.reason, record: c.record }));

@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // M3 (docs/IMPLEMENTATION_PLAN.md §11): fill-up transactions + rule engine.
 // The rule engine itself is unit-tested independently (rule-engine/*.spec.ts)
@@ -46,6 +47,7 @@ describe('Fill-ups (e2e)', () => {
   let company: { id: string };
   let stationA: { id: string };
   let stationB: { id: string };
+  let municipality: { id: string };
   let exceptionTypeId: string;
   let exceptionTypeRequiresProofId: string;
 
@@ -103,11 +105,27 @@ describe('Fill-ups (e2e)', () => {
     exceptionTypeRequiresProofId = exceptionTypeRequiresProof.id;
 
     company = await prisma.company.create({ data: { name: `E2E FU Company ${runId}` } });
+    // Both stations in the same live municipality — this file tests the
+    // single-municipality behavior; per-municipality counting has its own
+    // spec (municipality-foundation.e2e-spec.ts).
+    municipality = await createMunicipality(prisma, `E2E FU Municipality ${runId}`);
     stationA = await prisma.station.create({
-      data: { internalCode: `E2E-FU-A-${runId}`, stationNumber: '1', name: 'E2E FU Station A', companyId: company.id },
+      data: {
+        internalCode: `E2E-FU-A-${runId}`,
+        stationNumber: '1',
+        name: 'E2E FU Station A',
+        companyId: company.id,
+        municipalityId: municipality.id,
+      },
     });
     stationB = await prisma.station.create({
-      data: { internalCode: `E2E-FU-B-${runId}`, stationNumber: '2', name: 'E2E FU Station B', companyId: company.id },
+      data: {
+        internalCode: `E2E-FU-B-${runId}`,
+        stationNumber: '2',
+        name: 'E2E FU Station B',
+        companyId: company.id,
+        municipalityId: municipality.id,
+      },
     });
 
     const vehicle1 = await prisma.vehicle.create({
@@ -247,6 +265,7 @@ describe('Fill-ups (e2e)', () => {
     await prisma.vehicle.deleteMany({ where: { id: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
     await prisma.station.deleteMany({ where: { id: { in: [stationA.id, stationB.id] } } });
     await prisma.company.delete({ where: { id: company.id } });
+    await deleteMunicipalities(prisma, [municipality.id]);
     await app.close();
   });
 
@@ -464,6 +483,7 @@ describe('Fill-ups (e2e)', () => {
       data: [6, 4, 2].map((daysAgo, index) => ({
         vehicleId: vehicle2Id,
         stationId: stationA.id,
+        municipalityId: municipality.id,
         fuelType: 'PETROL_95' as const,
         quantityLiters: 10,
         occurredAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
@@ -619,6 +639,7 @@ describe('Fill-ups (e2e)', () => {
       data: {
         vehicleId: vehicle1Id,
         stationId: stationB.id,
+        municipalityId: municipality.id,
         fuelType: 'PETROL_95',
         quantityLiters: 10,
         recordedById: recorderOtherStationUserId,
@@ -656,7 +677,7 @@ describe('Fill-ups (e2e)', () => {
   describe('GET /fillups/rule-preview', () => {
     it('rejects unauthenticated requests and requires fillups:create', async () => {
       const server = app.getHttpServer();
-      await request(server).get('/api/v1/fillups/rule-preview').query({ vehicleId: vehicle3Id }).expect(401);
+      await request(server).get('/api/v1/fillups/rule-preview').query({ vehicleId: vehicle3Id, stationId: stationA.id }).expect(401);
 
       const noPermToken = await loginAsRecorder(); // reuse a real token but hit with no vehicleId first
       await request(server)
@@ -669,7 +690,7 @@ describe('Fill-ups (e2e)', () => {
       const token = await loginAsRecorder();
       await request(app.getHttpServer())
         .get('/api/v1/fillups/rule-preview')
-        .query({ vehicleId: 'does-not-exist' })
+        .query({ vehicleId: 'does-not-exist', stationId: stationA.id })
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
     });
@@ -679,7 +700,7 @@ describe('Fill-ups (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get('/api/v1/fillups/rule-preview')
-        .query({ vehicleId: vehicle4Id })
+        .query({ vehicleId: vehicle4Id, stationId: stationA.id })
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
@@ -696,7 +717,7 @@ describe('Fill-ups (e2e)', () => {
       // breakdown never disagrees with the real enforcement path.
       const preview2 = await request(app.getHttpServer())
         .get('/api/v1/fillups/rule-preview')
-        .query({ vehicleId: vehicle2Id })
+        .query({ vehicleId: vehicle2Id, stationId: stationA.id })
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
       const vehicleWeekly = preview2.body.checks.find(
