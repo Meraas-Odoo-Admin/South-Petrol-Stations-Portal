@@ -1,7 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src"
+    "rootDir": "src",
+    // Kept inside dist/ so nest-cli's deleteOutDir wipes it together with
+    // the output. Outside dist/, it survived the wipe and made every
+    // restart after the first emit nothing ("Cannot find module dist/main").
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
   },
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }
