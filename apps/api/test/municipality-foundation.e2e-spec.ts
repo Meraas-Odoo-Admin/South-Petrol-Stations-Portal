@@ -413,5 +413,22 @@ describe('Municipality foundation (e2e)', () => {
       const res = await submit(vehicle(3), stationPreparing.id, 201);
       expect(res.body.municipalityId).toBe(muniPreparing.id);
     });
+
+    it('switching LIVE back to PREPARING requires typing the municipality\'s exact name', async () => {
+      const token = await login(usernameAdmin);
+      const patch = (body: object) =>
+        request(app.getHttpServer())
+          .patch(`/api/v1/municipalities/${muniPreparing.id}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send(body);
+
+      const missing = await patch({ status: 'PREPARING' }).expect(400);
+      expect(missing.body.message).toBe('CONFIRMATION_NAME_MISMATCH');
+      await patch({ status: 'PREPARING', confirmName: 'wrong name' }).expect(400);
+      expect((await prisma.municipality.findUniqueOrThrow({ where: { id: muniPreparing.id } })).status).toBe('LIVE');
+
+      const ok = await patch({ status: 'PREPARING', confirmName: `E2E MF Preparing ${runId}` }).expect(200);
+      expect(ok.body.status).toBe('PREPARING');
+    });
   });
 });

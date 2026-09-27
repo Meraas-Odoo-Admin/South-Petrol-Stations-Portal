@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // M2 (docs/IMPLEMENTATION_PLAN.md §11): Owners, Vehicles CRUD and plate
 // history tracking. The one explicit acceptance bar the plan states is that
@@ -47,6 +48,10 @@ describe('Owners/Vehicles (e2e)', () => {
   let managerUserId: string;
   let noPermUserId: string;
   let managerRoleId: string;
+  // Registration pivot, phase 2: owners/vehicles are registered AT a
+  // registration station the actor is scoped to.
+  let municipalityId: string;
+  let registrationStationId: string;
 
   // Fixtures shared across the success-path tests below.
   let ownerId: string;
@@ -112,12 +117,21 @@ describe('Owners/Vehicles (e2e)', () => {
       update: {},
     });
 
+    // Registration pivot, phase 2: owner lookup (GET /owners, /owners/:id)
+    // is its own read permission now.
+    const ownersReadPermission = await prisma.permission.upsert({
+      where: { key: 'owners:read' },
+      create: { key: 'owners:read' },
+      update: {},
+    });
+
     // Dedicated test-only role — never the real seeded station_supervisor.
     const managerRole = await prisma.role.create({ data: { name: `e2e_dov_manager_role_${runId}` } });
     managerRoleId = managerRole.id;
     await prisma.rolePermission.createMany({
       data: [
         { roleId: managerRole.id, permissionId: ownersPermission.id },
+        { roleId: managerRole.id, permissionId: ownersReadPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesManagePermission.id },
         { roleId: managerRole.id, permissionId: vehiclesReadPermission.id },
         { roleId: managerRole.id, permissionId: vehiclesRequestChangePermission.id },
@@ -136,6 +150,21 @@ describe('Owners/Vehicles (e2e)', () => {
     const managerUser = await createUser(usernameManager);
     managerUserId = managerUser.id;
     await prisma.userRole.create({ data: { userId: managerUser.id, roleId: managerRole.id } });
+
+    municipalityId = (await createMunicipality(prisma, `E2E DOV Municipality ${runId}`)).id;
+    registrationStationId = (
+      await prisma.registrationStation.create({
+        data: {
+          internalCode: `E2E-DOV-REG-${runId}`,
+          name: 'E2E DOV registration station',
+          municipalityId,
+          address: 'E2E',
+        },
+      })
+    ).id;
+    await prisma.userRegistrationStationScope.create({
+      data: { userId: managerUser.id, registrationStationId },
+    });
 
     // No role at all — zero permissions, used for every 403 case.
     const noPermUser = await createUser(usernameNoPerm);
@@ -167,6 +196,15 @@ describe('Owners/Vehicles (e2e)', () => {
     await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
+    await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
+    // Vehicles registered here (including auto-coded ones this file doesn't
+    // track individually) reference the station and the manager.
+    await prisma.vehicle.updateMany({
+      where: { registeredAtRegistrationStationId: registrationStationId },
+      data: { registeredAtRegistrationStationId: null, registeredById: null },
+    });
+    await prisma.registrationStation.delete({ where: { id: registrationStationId } });
+    await deleteMunicipalities(prisma, [municipalityId]);
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: managerRoleId } });
     await prisma.role.delete({ where: { id: managerRoleId } });
@@ -210,7 +248,7 @@ describe('Owners/Vehicles (e2e)', () => {
 
     await auth(request(server).post('/api/v1/owners')).send({ fullName: 'Nope' }).expect(403);
     await auth(request(server).get('/api/v1/owners')).expect(403);
-    await auth(request(server).post('/api/v1/vehicles')).send({
+    await auth(request(server).post('/api/v1/vehicles')).send({ registrationStationId,
       internalCode: `should-not-exist-${runId}`,
       currentPlate: `should-not-exist-${runId}`,
     }).expect(403);
@@ -226,7 +264,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const createRes = await request(server)
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({
+      .send({ registrationStationId,
         fullName: 'E2E DOV Owner One',
         identityType: 'NATIONAL_ID',
         identityNumber: `1${numericId11}`,
@@ -255,7 +293,7 @@ describe('Owners/Vehicles (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({
+      .send({ registrationStationId,
         fullName: 'Duplicate Attempt',
         identityType: 'NATIONAL_ID',
         identityNumber: `1${numericId11}`, // same pair as the owner created above
@@ -338,7 +376,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
 
     const conflictOwnerRes = await auth(request(server).post('/api/v1/owners'))
-      .send({
+      .send({ registrationStationId,
         fullName: 'E2E DOV Owner Conflict Target',
         identityType: 'NATIONAL_ID',
         identityNumber: `2${randomDigits(11)}`,
@@ -387,7 +425,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const createRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({
+      .send({ registrationStationId,
         internalCode: `VEH-${runId}`,
         currentPlate: `5-${plateSeqA}`,
         chassisNumber: chassis17,
@@ -400,13 +438,13 @@ describe('Owners/Vehicles (e2e)', () => {
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}`, ownerId })
+      .send({ registrationStationId, internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}`, ownerId })
       .expect(409);
 
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}`, ownerId })
+      .send({ registrationStationId, internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}`, ownerId })
       .expect(409);
   });
 
@@ -420,7 +458,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const res = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ currentPlate: `12-${randomDigits(7)}`, ownerId })
+      .send({ registrationStationId, currentPlate: `12-${randomDigits(7)}`, ownerId })
       .expect(201);
 
     expect(res.body.internalCode).toMatch(/^V-\d{6}$/);
@@ -430,7 +468,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const secondRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ currentPlate: `12-${randomDigits(7)}`, ownerId })
+      .send({ registrationStationId, currentPlate: `12-${randomDigits(7)}`, ownerId })
       .expect(201);
     expect(secondRes.body.internalCode).toMatch(/^V-\d{6}$/);
     expect(secondRes.body.internalCode).not.toBe(res.body.internalCode);
@@ -479,7 +517,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const secondOwnerRes = await request(app.getHttpServer())
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({
+      .send({ registrationStationId,
         fullName: 'E2E DOV Owner Two',
         identityType: 'NATIONAL_ID',
         identityNumber: `2${numericId11}`,
@@ -607,7 +645,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const otherVehicleRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}`, ownerId })
+      .send({ registrationStationId, internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}`, ownerId })
       .expect(201);
     const otherVehicleId = otherVehicleRes.body.id;
 

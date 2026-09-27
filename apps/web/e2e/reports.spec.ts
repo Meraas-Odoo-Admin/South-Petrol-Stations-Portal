@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadFixtures, loginAs } from './helpers';
+import { loadFixtures, loginAs, navigateInApp } from './helpers';
 
 const fixtures = loadFixtures();
 
@@ -33,7 +33,7 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   // driver detail page this used to check is gone — the owner's identity
   // number on the vehicle detail page is the equivalent surface now (see
   // docs/DESIGN_owner_based_fillups.md).
-  await page.goto(`/vehicles/${fixtures.vehicleId}`);
+  await navigateInApp(page, `/vehicles/${fixtures.vehicleId}`);
   const last4 = fixtures.ownerIdentityNumber.slice(-4);
   const maskedField = page.getByTestId('vehicle-owner-identity-number');
   await expect(maskedField).toContainText('*');
@@ -52,7 +52,7 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   // phase's item 2 fix) — the selected <option>'s label carries the
   // internalCode, not the element's value (that's the stationId).
   // Exporting must trigger a real file download, not just render a button.
-  await page.goto('/reports/daily');
+  await navigateInApp(page, '/reports/daily');
   const stationSelect = page.locator('select[disabled]');
   await expect(stationSelect.locator('option:checked')).toHaveText(
     new RegExp(fixtures.stationInternalCode),
@@ -82,6 +82,6 @@ test('directorate_admin session: dashboard link visible, and the same owner\'s i
   // المحطات"), otherwise ambiguous alongside the sidebar's exact-text link.
   await expect(page.getByRole('link', { name: 'لوحة المتابعة', exact: true })).toBeVisible();
 
-  await page.goto(`/vehicles/${fixtures.vehicleId}`);
+  await navigateInApp(page, `/vehicles/${fixtures.vehicleId}`);
   await expect(page.getByTestId('vehicle-owner-identity-number')).toHaveText(fixtures.ownerIdentityNumber);
 });

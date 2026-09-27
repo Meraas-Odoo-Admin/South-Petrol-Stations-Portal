@@ -20,23 +20,21 @@ const fixtures = loadFixtures();
 // below rather than duplicated). Viewport is switched mid-test (same
 // session, no extra navigation/login) to prove the wizard genuinely renders
 // — and works — at a real desktop/laptop width, not just narrow ones.
-test('supervisor completes the guided wizard for a new vehicle at mobile width, then trips a rule at desktop width and resolves it as an exception', async ({
+test('supervisor: an unknown plate is "not registered" with no way to create it, a registered one completes the wizard at mobile width, then trips a rule at desktop width and resolves it as an exception', async ({
   page,
 }) => {
   await loginAs(page, fixtures.supervisorUsername, fixtures.supervisorPassword);
 
+  // Registration pivot, phase 2: petrol-station roles never register
+  // vehicles — no registration entry point anywhere in their navigation.
+  await expect(page.getByRole('link', { name: 'تسجيل المركبات' })).toHaveCount(0);
+
   // Client-side nav (click the link), not page.goto() — goto() is a real
   // browser navigation, which remounts the app and re-triggers
-  // AuthProvider's silent /auth/refresh (throttled 10/min). AuthProvider
-  // has no retry-on-429 for that call (a real, separate gap — see the
-  // summary), so stacking up avoidable full reloads across this suite's
-  // tests risks tipping a LATER, unrelated test into a throttled refresh
-  // that bounces it back to /login. Prefer in-app navigation wherever a
-  // link exists.
+  // AuthProvider's silent /auth/refresh (throttled 10/min). Prefer in-app
+  // navigation wherever a link exists.
   // exact: true — HomePage's own permission-gated quick-link card carries
-  // the same heading plus a hint line as its accessible name ("تسجيل
-  // تعبئة تسجيل عملية تعبئة جديدة لمركبة"), which otherwise makes this
-  // locator ambiguous alongside the sidebar's nav link.
+  // the same heading plus a hint line as its accessible name.
   await page.getByRole('link', { name: 'تسجيل تعبئة', exact: true }).click();
   await expect(page).toHaveURL('/fillups/new');
 
@@ -44,69 +42,57 @@ test('supervisor completes the guided wizard for a new vehicle at mobile width, 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId('fillup-mobile-wizard')).toBeVisible();
 
-  // Step 1 — plate: boxed digit entry (round 7's DigitBoxInput, now
-  // reached through the actual guided step the client complained was
-  // missing). Only the RIGHT digit of the 2-box city-code group is
-  // mandatory. Round 10 fixed a bug where a single digit landed in the
-  // FAR-LEFT box of that group (box-0), leaving the box touching the dash
-  // (box-1) empty — backwards from the spec ("only the rightmost
-  // mandatory, left one optional"). Round 11 refined WHEN that
-  // right-alignment kicks in: round 10's version repositioned on every
-  // keystroke, which broke typing a genuine two-digit prefix (the 2nd
-  // digit had nowhere left to land, since focus had already jumped past
-  // the group). Now a single digit stays put in box-0 (left-aligned)
-  // WHILE the group is still active — it only migrates to box-1 (the
-  // dash-adjacent box) once focus actually leaves the group, e.g. moving
-  // on to type the sequence number.
-  const runSeq = Date.now().toString().slice(-7);
+  // Step 1 — plate: boxed digit entry. Only the RIGHT digit of the 2-box
+  // city-code group is mandatory: a single digit stays put in box-0 while
+  // the group is active, and migrates to box-1 (dash-adjacent) once focus
+  // leaves the group.
+  async function typePlate(cityDigit: string, sequence: string) {
+    await page.getByTestId('fillup-mobile-plate-input-box-0').fill(cityDigit);
+    await page.getByTestId('fillup-mobile-plate-input-box-2').click();
+    for (const digit of sequence) {
+      await page.keyboard.type(digit);
+    }
+  }
+
+  // An unregistered plate: "not registered", and nothing to create it with.
+  const unknownSeq = Date.now().toString().slice(-7);
   await page.getByTestId('fillup-mobile-plate-input-box-0').fill('9');
   await expect(page.getByTestId('fillup-mobile-plate-input-box-0')).toHaveValue('9'); // still active — left-aligned
   await expect(page.getByTestId('fillup-mobile-plate-input-box-1')).toHaveValue('');
   await page.getByTestId('fillup-mobile-plate-input-box-2').click(); // focus leaves the group — finalizes
   await expect(page.getByTestId('fillup-mobile-plate-input-box-1')).toHaveValue('9'); // now right-aligned to the dash
   await expect(page.getByTestId('fillup-mobile-plate-input-box-0')).toHaveValue(''); // left (optional) box empty
-  for (const digit of runSeq) {
+  for (const digit of `0${unknownSeq.slice(1)}`) {
     await page.keyboard.type(digit);
   }
+  await expect(page.getByTestId('fillup-not-registered')).toBeVisible();
+  await expect(page.getByTestId('fillup-not-registered')).toContainText('غير مسجّلة');
+  await expect(page.getByText('إضافة كمركبة جديدة')).toHaveCount(0);
 
-  // No vehicle registered under this fresh plate — the wizard offers to
-  // create one inline rather than dead-ending.
-  await expect(page.getByTestId('fillup-mobile-no-match')).toBeVisible();
-  await page.getByTestId('fillup-mobile-add-vehicle').click();
+  // The manual search fallback says the same, with no create option either.
+  await page.getByTestId('fillup-mobile-manual-search-toggle').click();
+  await page.getByTestId('vehicle-search-input').fill(`9-0${unknownSeq.slice(1)}`);
+  await expect(page.getByTestId('vehicle-search-not-registered')).toBeVisible();
+  await expect(page.getByTestId('vehicle-create-new-inline')).toHaveCount(0);
+  // Emptying the field closes the results dropdown, which otherwise
+  // covers the "back" link below.
+  await page.getByTestId('vehicle-search-input').fill('');
+  await expect(page.getByTestId('vehicle-search-not-registered')).toHaveCount(0);
+  await page.getByRole('button', { name: 'الرجوع لإدخال رقم اللوحة' }).click();
 
-  // The plate typed above carries over as-is (VehicleCreateForm's
-  // initialPlate) — only owner data needs filling here. Round 11 item 1:
-  // owner data is now mandatory and always shown (no more "add owner"
-  // toggle to click through first). Exercises the OTHER digit-box shape
-  // (12 mandatory boxes) plus a backspace-across-boxes check, same as
-  // round 7's coverage, just reached via the wizard now instead of a
-  // standalone detour.
-  await page.getByTestId('new-owner-fullname-input').fill(`PW Wizard Owner ${runSeq}`);
-  // Round 20: owner phone is now required (the WhatsApp-share button opens
-  // a chat with it directly) — without this the form silently fails
-  // validation on save and the wizard never advances past this step.
-  await page.getByTestId('new-owner-phone-input').fill('0912345678');
-  const ownerDigits = `1${runSeq}0000`; // 12 digits, valid NATIONAL_ID prefix
-  await page.getByTestId('new-owner-identity-input-box-0').click();
-  for (const digit of ownerDigits) {
-    await page.keyboard.type(digit);
+  // Clear the boxes (Backspace clears a filled box in place, then steps
+  // back through the empty ones), then type the clean fixture vehicle's
+  // plate — registered at a registration station, no fill-up history.
+  await page.getByTestId('fillup-mobile-plate-input-box-8').click();
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.press('Backspace');
   }
-  // Backspace on a filled box clears it in place; a second Backspace, now
-  // that the box is empty, moves to the previous box and clears that too.
-  await page.keyboard.press('Backspace');
-  await expect(page.getByTestId('new-owner-identity-input-box-11')).toHaveValue('');
-  await page.keyboard.press('Backspace');
-  await expect(page.getByTestId('new-owner-identity-input-box-10')).toHaveValue('');
-  await page.keyboard.type(ownerDigits.slice(10));
-  await page.getByTestId('new-vehicle-save').click();
+  const [cleanCity, cleanSeq] = fixtures.cleanVehicleCurrentPlate.split('-') as [string, string];
+  await typePlate(cleanCity, cleanSeq);
 
-  // Step 2 — vehicle-match confirmation: the wizard auto-advances once the
-  // vehicle exists, showing the same inline preview (make/model/usage-
-  // type/owner) the desktop form uses.
-  // -mobile suffix: the desktop layout's own VehiclePreviewCard is CSS-
-  // hidden but still mounted at this viewport (shared react-hook-form
-  // state across both layouts), so a bare testid would match two elements.
-  await expect(page.getByTestId('vehicle-preview-card-mobile')).toContainText(`PW Wizard Owner ${runSeq}`);
+  // Step 2 — vehicle-match confirmation: the wizard auto-advances on the
+  // exact plate match.
+  await expect(page.getByTestId('vehicle-preview-card-mobile')).toContainText(fixtures.cleanVehicleOwnerFullName);
   await page.getByTestId('fillup-mobile-continue-to-fuel').click();
 
   // Step 3 — fuel + quantity.
@@ -114,7 +100,7 @@ test('supervisor completes the guided wizard for a new vehicle at mobile width, 
   await expect(page.getByTestId('fillup-estimated-liters-mobile')).toBeVisible();
   await page.getByTestId('fillup-mobile-continue-to-review').click();
 
-  // Step 4 — rule review: a brand-new vehicle/owner with no history at all
+  // Step 4 — rule review: a vehicle/owner with no history at all
   // passes every check, computed by the real GET /fillups/rule-preview
   // endpoint (not a client-side estimate).
   await expect(page.getByTestId('rule-review-card-mobile')).toBeVisible();
@@ -124,6 +110,8 @@ test('supervisor completes the guided wizard for a new vehicle at mobile width, 
   // Step 5 — confirmation (shared with the desktop layout, renders the
   // same at both widths).
   await expect(page.getByTestId('fillup-success-heading')).toContainText('تم تسجيل التعبئة');
+  // Phase 2: no vehicle-QR/share block on the success screen any more.
+  await expect(page.getByText('رمز المركبة')).toHaveCount(0);
   await page.getByRole('button', { name: 'تعبئة جديدة' }).click();
 
   // ── Same wizard, now at a real desktop/laptop width: the violation +

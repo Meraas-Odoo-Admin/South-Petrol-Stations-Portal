@@ -84,4 +84,14 @@ export class CreateVehicleDto {
   @IsString()
   @MinLength(1)
   ownerId!: string;
+
+  // Registration pivot, phase 2: every registration happens AT a
+  // registration station — recorded on the vehicle as
+  // registeredAtRegistrationStationId, with the actor as registeredById.
+  // The actor must be scoped to it, and it must be ACTIVE in a LIVE
+  // municipality (RegistrationStationsService.assertCanRegisterAt).
+  @ApiProperty({ description: 'The registration station this vehicle is being registered at.' })
+  @IsString()
+  @MinLength(1)
+  registrationStationId!: string;
 }

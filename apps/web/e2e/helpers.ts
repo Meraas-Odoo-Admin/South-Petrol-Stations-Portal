@@ -6,24 +6,8 @@ import { expect } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export interface Fixtures {
-  runId: string;
-  stationId: string;
-  stationInternalCode: string;
-  stationName: string;
-  ownerId: string;
-  ownerFullName: string;
-  ownerIdentityNumber: string;
-  vehicleId: string;
-  vehicleCurrentPlate: string;
-  supervisorUsername: string;
-  supervisorPassword: string;
-  supervisorUserId: string;
-  adminUsername: string;
-  adminPassword: string;
-  needsChangeUsername: string;
-  needsChangePassword: string;
-}
+export type { Fixtures } from './global-setup';
+import type { Fixtures } from './global-setup';
 
 export function loadFixtures(): Fixtures {
   return JSON.parse(readFileSync(path.join(__dirname, '.fixtures.json'), 'utf-8'));
@@ -86,4 +70,18 @@ export async function loginAs(page: Page, username: string, password: string): P
   await submitLogin(page, username, password);
   await expect(page).toHaveURL('/');
   await dismissOnboardingTourIfPresent(page);
+}
+
+// Client-side navigation to a route with no link on the current screen.
+// page.goto() is a real browser load: it remounts the app and re-runs
+// AuthProvider's silent /auth/refresh, which is throttled (10/min) with no
+// retry-on-429 — enough full reloads in one run and a later test gets
+// bounced to /login. pushState + popstate is what react-router listens to,
+// so this changes route without reloading the page.
+export async function navigateInApp(page: Page, path: string): Promise<void> {
+  // A string, not a function: e2e/tsconfig.json has no DOM lib.
+  await page.evaluate(
+    `window.history.pushState({}, '', ${JSON.stringify(path)}); window.dispatchEvent(new PopStateEvent('popstate'));`,
+  );
+  await expect(page).toHaveURL(path);
 }

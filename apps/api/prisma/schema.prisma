@@ -62,11 +62,7 @@ model Station {
   // station-card-field-spec — location/status known, ownership not).
   ownershipType StationOwnershipType?
 
-  // DEPRECATED — no longer written or read. A station's authority is its
-  // municipality's (Municipality.securityAuthority; OPEN_ITEMS.md #4,
-  // answered). The column stays (always null in practice) so the
-  // migration is additive rather than a drop.
-  securityAuthorityId String?
+  securityAuthorityId String? // No longer used — since Phase 1 a station's authority is its municipality's (Municipality.securityAuthority).
   securityAuthority   SecurityAuthority?        @relation(fields: [securityAuthorityId], references: [id])
   fuelAvailability    StationFuelAvailability[]
 
@@ -104,23 +100,22 @@ enum StationOwnershipType {
 // FillUpRuleEngine counts a vehicle's/owner's history only within the
 // municipality stamped on each FillUpTransaction (see there).
 model Municipality {
-  id        String             @id @default(cuid())
-  name      String             @unique
-  // Superseded by `status` — nothing reads it. Left in place rather than
-  // dropped so the migration stays additive (CLAUDE.md working style).
-  isActive  Boolean            @default(true)
+  id                   String                @id @default(cuid())
+  name                 String                @unique
+  isActive             Boolean               @default(true) // No longer used — superseded by `status` in Phase 1; kept so migrations stay additive.
   // PREPARING: being set up — its stations are visible only on admin
   // screens (holders of stations:manage) and no fill-up can be recorded
   // at them. LIVE: in normal use. New rows start PREPARING; switching to
   // LIVE requires the municipality's security authority to exist first.
-  status    MunicipalityStatus @default(PREPARING)
+  status               MunicipalityStatus    @default(PREPARING)
   // Exactly one per municipality (client-confirmed, OPEN_ITEMS.md #4) —
   // the authority overseeing every petrol station in it. Stations get
   // their authority from here, never picked per station.
-  securityAuthority SecurityAuthority?
-  stations  Station[]
-  fillUps   FillUpTransaction[]
-  createdAt DateTime           @default(now())
+  securityAuthority    SecurityAuthority?
+  stations             Station[]
+  registrationStations RegistrationStation[]
+  fillUps              FillUpTransaction[]
+  createdAt            DateTime              @default(now())
 }
 
 // Fixed, not Settings-managed — code branches on these values (same
@@ -128,6 +123,40 @@ model Municipality {
 enum MunicipalityStatus {
   PREPARING // قيد الإعداد
   LIVE // مُفعَّلة
+}
+
+// Registration pivot, phase 2: a police-station registration desk
+// (مكتب تسجيل) — the only place vehicles and owners are registered. Not a
+// petrol Station: no fuel, no company, no fill-ups. Its security authority
+// comes from its municipality (one per municipality), so there's no
+// authority field here. Desks/printers arrive in Phase 3.
+model RegistrationStation {
+  id                 String                         @id @default(cuid())
+  // Auto-generated, same pattern as Station.internalCode (REG-000001).
+  internalCode       String                         @unique
+  // The official code, if the police station has one — many won't.
+  officialCode       String?
+  name               String
+  municipalityId     String
+  municipality       Municipality                   @relation(fields: [municipalityId], references: [id])
+  address            String
+  latitude           Decimal?                       @db.Decimal(9, 6)
+  longitude          Decimal?                       @db.Decimal(9, 6)
+  contactPhone       String?
+  workingHours       String? // free text, e.g. "السبت–الخميس 8:00–14:00"
+  status             RegistrationStationStatus      @default(ACTIVE)
+  statusNote         String?
+  userScopes         UserRegistrationStationScope[]
+  vehiclesRegistered Vehicle[]
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+}
+
+// Fixed, not Settings-managed — registration is refused unless ACTIVE.
+enum RegistrationStationStatus {
+  ACTIVE // تعمل
+  TEMPORARILY_CLOSED // مغلقة مؤقتًا
+  CLOSED // مغلقة
 }
 
 // station-card-field-spec item 5 — the client's ownership/haulage route
@@ -203,8 +232,21 @@ model Role {
   // stations must see NOTHING, not everything. Only directorate-wide roles
   // (directorate_admin, system_admin) get this set to true.
   unrestrictedStationAccess Boolean          @default(false)
+  // Registration pivot, phase 2: which side of the two-building split this
+  // role belongs to. A user may never hold a PETROL_STATION role and a
+  // REGISTRATION role at once (UsersService enforces it) — the person who
+  // creates a vehicle's identity must never be the one recording its fuel.
+  // Null = neither side (admin roles, which sit above both). Data, set from
+  // rbac-catalog.ts's ROLE_KINDS by the seed/bootstrap sync — code checks
+  // this column, never a role name (CLAUDE.md rule 2).
+  kind                      RoleKind?
   permissions               RolePermission[]
   users                     UserRole[]
+}
+
+enum RoleKind {
+  PETROL_STATION
+  REGISTRATION
 }
 
 model Permission {
@@ -244,30 +286,32 @@ model RolePermission {
 }
 
 model User {
-  id                           String                 @id @default(cuid())
-  username                     String                 @unique
+  id                           String                         @id @default(cuid())
+  username                     String                         @unique
   passwordHash                 String
   fullName                     String
   phone                        String?
-  isActive                     Boolean                @default(true)
-  mustChangePassword           Boolean                @default(false)
-  failedLoginAttempts          Int                    @default(0)
+  isActive                     Boolean                        @default(true)
+  mustChangePassword           Boolean                        @default(false)
+  failedLoginAttempts          Int                            @default(0)
   lockedUntil                  DateTime?
   roles                        UserRole[]
   directPermissions            UserPermission[]
-  permissionsGranted           UserPermission[]       @relation("UserPermissionGrantedBy")
+  permissionsGranted           UserPermission[]               @relation("UserPermissionGrantedBy")
+  registrationStationScope     UserRegistrationStationScope[] // same semantics as stationScope, for registration stations
+  registeredVehicles           Vehicle[]                      @relation("VehicleRegisteredBy")
   stationScope                 UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
   refreshTokens                RefreshToken[]
-  recordedFillUps              FillUpTransaction[]    @relation("RecordedBy")
-  vehicleChangeRequestsMade    VehicleChangeRequest[] @relation("VehicleChangeRequestedBy")
-  vehicleChangeRequestsDecided VehicleChangeRequest[] @relation("VehicleChangeDecidedBy")
-  ownerChangeRequestsMade      OwnerChangeRequest[]   @relation("OwnerChangeRequestedBy")
-  ownerChangeRequestsDecided   OwnerChangeRequest[]   @relation("OwnerChangeDecidedBy")
-  standingExceptionsGranted    StandingException[]    @relation("StandingExceptionGrantedBy")
-  standingExceptionsRevoked    StandingException[]    @relation("StandingExceptionRevokedBy")
+  recordedFillUps              FillUpTransaction[]            @relation("RecordedBy")
+  vehicleChangeRequestsMade    VehicleChangeRequest[]         @relation("VehicleChangeRequestedBy")
+  vehicleChangeRequestsDecided VehicleChangeRequest[]         @relation("VehicleChangeDecidedBy")
+  ownerChangeRequestsMade      OwnerChangeRequest[]           @relation("OwnerChangeRequestedBy")
+  ownerChangeRequestsDecided   OwnerChangeRequest[]           @relation("OwnerChangeDecidedBy")
+  standingExceptionsGranted    StandingException[]            @relation("StandingExceptionGrantedBy")
+  standingExceptionsRevoked    StandingException[]            @relation("StandingExceptionRevokedBy")
   auditLogs                    AuditLog[]
-  createdAt                    DateTime               @default(now())
-  updatedAt                    DateTime               @updatedAt
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime                       @updatedAt
 }
 
 model UserRole {
@@ -287,6 +331,19 @@ model UserStationScope {
   station   Station @relation(fields: [stationId], references: [id])
 
   @@id([userId, stationId])
+}
+
+// Registration pivot, phase 2: mirrors UserStationScope for registration
+// stations. A registration employee/supervisor can only register at the
+// stations listed here, UNLESS one of their roles has
+// unrestrictedStationAccess (admins). Empty = no stations, never "all".
+model UserRegistrationStationScope {
+  userId                String
+  registrationStationId String
+  user                  User                @relation(fields: [userId], references: [id])
+  registrationStation   RegistrationStation @relation(fields: [registrationStationId], references: [id])
+
+  @@id([userId, registrationStationId])
 }
 
 model RefreshToken {
@@ -428,20 +485,20 @@ model VehicleType {
 }
 
 model Vehicle {
-  id                  String                  @id @default(cuid())
-  internalCode        String                  @unique // fixed forever, even if the plate changes
-  currentPlate        String                  @unique
-  chassisNumber       String?                 @unique
+  id                                String                  @id @default(cuid())
+  internalCode                      String                  @unique // fixed forever, even if the plate changes
+  currentPlate                      String                  @unique
+  chassisNumber                     String?                 @unique
   // رقم كتيب السيارة — added for the anti-fraud chassis/booklet linkage
   // (docs/IMPLEMENTATION_PLAN.md phase note: chassis-booklet-linkage
   // proposal). Nullable: not every vehicle has one recorded yet.
-  registrationBooklet String?                 @unique
-  vehicleTypeId       String?
-  vehicleType         VehicleType?            @relation(fields: [vehicleTypeId], references: [id])
-  model               String?
-  color               String?
-  manufactureYear     Int?
-  usageType           VehicleUsageType?
+  registrationBooklet               String?                 @unique
+  vehicleTypeId                     String?
+  vehicleType                       VehicleType?            @relation(fields: [vehicleTypeId], references: [id])
+  model                             String?
+  color                             String?
+  manufactureYear                   Int?
+  usageType                         VehicleUsageType?
   // Round 11 item 1: the client confirmed owner information should be
   // mandatory going forward — enforced at CreateVehicleDto (application
   // level: ownerId is now required on create), NOT here. Left nullable in
@@ -450,17 +507,25 @@ model Vehicle {
   // right now), and forcing it NOT NULL would need a migration/backfill
   // decision for those rows that hasn't been made — see docs/OPEN_ITEMS.md.
   // Don't silently pick a backfill strategy by flipping this to required.
-  ownerId             String?
-  owner               VehicleOwner?           @relation(fields: [ownerId], references: [id])
-  plateHistory        VehiclePlateHistory[]
-  chassisHistory      VehicleChassisHistory[]
-  bookletHistory      VehicleBookletHistory[]
-  changeRequests      VehicleChangeRequest[]
-  drivers             DriverVehicle[]
-  fillUps             FillUpTransaction[]
-  standingExceptions  StandingException[]
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
+  ownerId                           String?
+  owner                             VehicleOwner?           @relation(fields: [ownerId], references: [id])
+  // Registration pivot, phase 2: where and by whom this vehicle was
+  // registered. Set once at creation, never updated. Null for vehicles
+  // that predate registration stations. Phase 4's monitoring reports
+  // count on these.
+  registeredAtRegistrationStationId String?
+  registeredAtRegistrationStation   RegistrationStation?    @relation(fields: [registeredAtRegistrationStationId], references: [id])
+  registeredById                    String?
+  registeredBy                      User?                   @relation("VehicleRegisteredBy", fields: [registeredById], references: [id])
+  plateHistory                      VehiclePlateHistory[]
+  chassisHistory                    VehicleChassisHistory[]
+  bookletHistory                    VehicleBookletHistory[]
+  changeRequests                    VehicleChangeRequest[]
+  drivers                           DriverVehicle[]
+  fillUps                           FillUpTransaction[]
+  standingExceptions                StandingException[]
+  createdAt                         DateTime                @default(now())
+  updatedAt                         DateTime                @updatedAt
 }
 
 // Plates change (sale, re-registration, damage) — never lose fill-up history

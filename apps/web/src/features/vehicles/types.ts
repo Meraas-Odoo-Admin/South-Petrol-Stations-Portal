@@ -32,9 +32,8 @@ export interface VehicleBasicInfo {
     // fallback identity type. See isProvisionalOwnerIdentity in lib/labels.ts.
     identityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE';
     identityNumber: string;
-    // Round 20: required for new owners (the WhatsApp-share button opens a
-    // chat with this number directly) — still nullable in the type since
-    // owners created before this round have none.
+    // Round 20: required for new owners — still nullable in the type since
+    // owners created before that round have none.
     phone: string | null;
   } | null;
   plateHistory: VehiclePlateHistoryEntry[];

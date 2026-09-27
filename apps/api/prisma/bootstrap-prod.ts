@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { PERMISSIONS, ROLE_PERMISSIONS, UNRESTRICTED_STATION_ACCESS_ROLES, SYSTEM_SETTINGS } from './rbac-catalog';
+import { PERMISSIONS, ROLE_PERMISSIONS, SYSTEM_SETTINGS } from './rbac-catalog';
+import { syncRbacCatalog } from './rbac-sync';
 
 const prisma = new PrismaClient();
 
@@ -26,10 +27,11 @@ const prisma = new PrismaClient();
 //   BOOTSTRAP_ADMIN_USERNAME=realadmin BOOTSTRAP_ADMIN_PASSWORD='a-real-password' \
 //     npx ts-node --transpile-only prisma/bootstrap-prod.ts
 //
-// Safe to re-run: every write here is an upsert, so running it again
-// (e.g. after a schema update added a new permission) only fills in
-// what's missing — it never touches or resets the admin account's
-// password once created.
+// Safe to re-run: running it again (e.g. after rbac-catalog.ts changed)
+// makes role permissions match the catalog — adding new grants AND
+// removing ones the catalog dropped, logging each removal — creates any
+// missing settings without overwriting tuned values, and never touches or
+// resets the admin account's password once created.
 async function main() {
   const username = process.env.BOOTSTRAP_ADMIN_USERNAME;
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
@@ -44,41 +46,22 @@ async function main() {
     throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be at least 8 characters.');
   }
 
-  // ── Permissions & Roles — identical logic to seed.ts's own block ────
-  for (const permission of PERMISSIONS) {
-    await prisma.permission.upsert({
-      where: { key: permission.key },
-      create: permission,
-      update: { description: permission.description },
-    });
-  }
-
-  const rolesByName = new Map<string, { id: string }>();
-  for (const [roleName, permissionKeys] of Object.entries(ROLE_PERMISSIONS)) {
-    const unrestrictedStationAccess = UNRESTRICTED_STATION_ACCESS_ROLES.has(roleName);
-    const role = await prisma.role.upsert({
-      where: { name: roleName },
-      create: { name: roleName, unrestrictedStationAccess },
-      update: { unrestrictedStationAccess },
-    });
-    rolesByName.set(roleName, role);
-
-    for (const key of permissionKeys) {
-      const permission = await prisma.permission.findUniqueOrThrow({ where: { key } });
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-        create: { roleId: role.id, permissionId: permission.id },
-        update: {},
-      });
-    }
-  }
+  // ── Permissions & Roles — same sync seed.ts uses ────────────────────
+  // Adds what's missing AND removes role grants rbac-catalog.ts no longer
+  // lists (see rbac-sync.ts) — so a permission taken off a role in the
+  // catalog is actually taken off in this database too.
+  const { rolesByName } = await syncRbacCatalog(prisma);
 
   // ── System settings ───────────────────────────────────────────────
   for (const setting of SYSTEM_SETTINGS) {
     await prisma.systemSetting.upsert({
       where: { key: setting.key },
       create: setting,
-      update: { value: setting.value, description: setting.description },
+      // Never overwrite a value on re-run: this script is re-run on a LIVE
+      // deployment (e.g. to pick up rbac-catalog.ts changes), and an
+      // admin may have tuned these rule numbers since. Only the
+      // description is refreshed; new keys are still created above.
+      update: { description: setting.description },
     });
   }
 

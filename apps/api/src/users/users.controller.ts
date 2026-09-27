@@ -4,6 +4,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { AssignPermissionDto } from './dto/assign-permission.dto';
+import { AssignRegistrationStationScopeDto } from './dto/assign-registration-station-scope.dto';
 import { AssignStationScopeDto } from './dto/assign-station-scope.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -92,5 +93,27 @@ export class UsersController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.users.removeStationScope(id, stationId, actor.id);
+  }
+
+  // Registration pivot, phase 2: registration-station scope, mirroring
+  // station-scope above.
+  @RequirePermission('users:manage')
+  @Post(':id/registration-station-scope')
+  addRegistrationStationScope(
+    @Param('id') id: string,
+    @Body() dto: AssignRegistrationStationScopeDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.users.addRegistrationStationScope(id, dto.registrationStationId, actor.id);
+  }
+
+  @RequirePermission('users:manage')
+  @Delete(':id/registration-station-scope/:registrationStationId')
+  removeRegistrationStationScope(
+    @Param('id') id: string,
+    @Param('registrationStationId') registrationStationId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.users.removeRegistrationStationScope(id, registrationStationId, actor.id);
   }
 }

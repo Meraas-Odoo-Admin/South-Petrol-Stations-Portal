@@ -23,13 +23,28 @@ export function AdminLayout() {
         <div>
           <h1 className="text-xl font-extrabold text-ink">الإدارة</h1>
           <div className="text-[11px] text-ink-faint">
-            الحسابات · إعدادات المنظومة · أنواع الاستثناءات · أنواع المركبات · سجل التغييرات
+            الحسابات · مكاتب التسجيل · البلديات والجهات الأمنية · الإعدادات · سجل التغييرات
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {hasPermission('users:manage') && (
             <NavLink to="/admin/users" className={tabClass}>
               الحسابات
+            </NavLink>
+          )}
+          {hasPermission('registration_stations:manage') && (
+            <NavLink to="/admin/registration-stations" className={tabClass}>
+              مكاتب التسجيل
+            </NavLink>
+          )}
+          {hasPermission('municipalities:manage') && (
+            <NavLink to="/admin/municipalities" className={tabClass}>
+              البلديات
+            </NavLink>
+          )}
+          {hasPermission('security_authorities:manage') && (
+            <NavLink to="/admin/security-authorities" className={tabClass}>
+              الجهات الأمنية
             </NavLink>
           )}
           {hasPermission('settings:manage') && (

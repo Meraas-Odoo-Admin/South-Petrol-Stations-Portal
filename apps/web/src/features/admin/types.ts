@@ -3,6 +3,14 @@ export interface AdminRole {
   name: string;
   description: string | null;
   unrestrictedStationAccess: boolean;
+  // Registration pivot, phase 2: which side of the petrol-station /
+  // registration split this role is on; null = admin (neither side).
+  kind: 'PETROL_STATION' | 'REGISTRATION' | null;
+}
+
+export interface AdminUserRegistrationStationScope {
+  registrationStationId: string;
+  registrationStation: { id: string; internalCode: string; name: string };
 }
 
 export interface AdminUserStationScope {
@@ -38,6 +46,7 @@ export interface AdminUser {
   createdAt: string;
   roles: AdminUserRole[];
   stationScope: AdminUserStationScope[];
+  registrationStationScope: AdminUserRegistrationStationScope[];
   directPermissions: AdminUserPermission[];
 }
 

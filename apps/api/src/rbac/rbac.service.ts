@@ -123,4 +123,22 @@ export class RbacService {
     });
     return scopes.map((s) => s.stationId);
   }
+
+  // Registration pivot, phase 2: the same contract as getStationScope, for
+  // registration stations (UserRegistrationStationScope). The same
+  // unrestrictedStationAccess flag covers both — the admin roles that see
+  // every petrol station also see every registration station. [] means
+  // none, never all.
+  async getRegistrationStationScope(userId: string): Promise<string[] | null> {
+    const info = await this.loadUserRbacInfo(userId);
+    if (info.unrestrictedStationAccess) {
+      return null;
+    }
+
+    const scopes = await this.prisma.userRegistrationStationScope.findMany({
+      where: { userId },
+      select: { registrationStationId: true },
+    });
+    return scopes.map((s) => s.registrationStationId);
+  }
 }

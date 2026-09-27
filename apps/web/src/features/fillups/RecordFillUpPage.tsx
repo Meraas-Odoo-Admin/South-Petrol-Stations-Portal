@@ -30,10 +30,8 @@ import { KpiCard } from '../../components/design/KpiCard';
 import { CodeText } from '../../components/design/CodeText';
 import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { VehicleSearchSelect } from './VehicleSearchSelect';
-import { VehicleCreateForm } from '../vehicles/VehicleCreateForm';
 import { VehiclePreviewCard } from './VehiclePreviewCard';
 import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
-import { VehicleQrPanel } from '../../components/VehicleQrPanel';
 import { QrScanPanel } from '../../components/QrScanPanel';
 import { RULE_VIOLATION_MESSAGES, RULE_CHECK_LABELS, describeRuleCheck } from './ruleViolationMessages';
 import { useFuelPrices } from './useFuelPrice';
@@ -398,17 +396,6 @@ interface ConfirmationSummary {
   // fill-up, but for an exception it now genuinely varies, so the
   // confirmation screen can no longer assume every exception is pending.
   isApproved: boolean;
-  // Round 15: set only when THIS submission's vehicle was created inline
-  // during the same transaction (via VehicleCreateForm's onCreated, never
-  // onDuplicateFound/matchedVehicle/a clicked live-search candidate) — the
-  // compact vehicle-QR block on this success screen is gated on this being
-  // present, not on "the vehicle has a code" (every vehicle does). An
-  // already-registered vehicle's success screen stays exactly as it was.
-  newVehicleInternalCode?: string;
-  // Round 20: the freshly-typed owner phone from the same VehicleCreateForm
-  // submission — lets the compact QR block's "فتح واتساب" target the owner
-  // directly instead of asking again for a number it was just given.
-  newVehicleOwnerPhone?: string;
 }
 
 // Round 8 built the guided step sequence from design/feedback-2026-08-31/
@@ -464,8 +451,6 @@ export function RecordFillUpPage() {
   const { data: fuelPrices } = useFuelPrices();
 
   const [rejection, setRejection] = useState<Rejection | null>(null);
-  const [showNewVehicleFormMobile, setShowNewVehicleFormMobile] = useState(false);
-  const canCreateVehicle = hasPermission('vehicles:manage');
   // Round 12: recording an exception is now its own permission, grantable
   // per-user independent of role (see UserPermission on the backend) — the
   // client wants this offered only to specific employees, not everyone who
@@ -488,13 +473,6 @@ export function RecordFillUpPage() {
   const [amountLyd, setAmountLyd] = useState('');
   const [success, setSuccess] = useState<ConfirmationSummary | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // Round 15: stashed only from VehicleCreateForm's onCreated callback
-  // (never onDuplicateFound) — see ConfirmationSummary.newVehicleInternalCode.
-  const [newlyCreatedVehicle, setNewlyCreatedVehicle] = useState<{
-    id: string;
-    internalCode: string;
-    ownerPhone: string;
-  } | null>(null);
   const idempotencyKeyRef = useRef(newIdempotencyKey());
 
   // ── Mobile wizard state ──────────────────────────────────────────────
@@ -844,8 +822,6 @@ export function RecordFillUpPage() {
     setMobileStep('plate');
     setPlateValue('');
     setShowManualSearchMobile(false);
-    setShowNewVehicleFormMobile(false);
-    setNewlyCreatedVehicle(null);
     setQrScanOpen(false);
     setCameraUnavailableHint(false);
     idempotencyKeyRef.current = newIdempotencyKey();
@@ -912,8 +888,6 @@ export function RecordFillUpPage() {
       occurredAt: new Date().toISOString(),
       isApproved,
       isException,
-      newVehicleInternalCode: newlyCreatedVehicle?.id === values.vehicleId ? newlyCreatedVehicle.internalCode : undefined,
-      newVehicleOwnerPhone: newlyCreatedVehicle?.id === values.vehicleId ? newlyCreatedVehicle.ownerPhone : undefined,
     };
   }
 
@@ -1092,20 +1066,6 @@ export function RecordFillUpPage() {
             </div>
           </Card>
 
-          {/* Round 15: only when THIS transaction created the vehicle
-              inline — an already-registered vehicle's success screen is
-              unchanged, per design/design_handoff_fuel_control_system's
-              13d ("both success-screen variants side by side"). */}
-          {success.newVehicleInternalCode && (
-            <VehicleQrPanel
-              internalCode={success.newVehicleInternalCode}
-              vehicleLabel={success.vehicleLabel}
-              variant="compact"
-              className="mt-4 w-full text-start"
-              ownerPhone={success.newVehicleOwnerPhone}
-            />
-          )}
-
           <div className="mt-6 flex w-full flex-col gap-2.5">
             <PillButton onClick={resetAll} className="h-[52px] w-full text-[15px]">
               تعبئة جديدة
@@ -1113,15 +1073,6 @@ export function RecordFillUpPage() {
             {canViewReports && (
               <PillButton variant="ghost" onClick={() => navigate('/reports/daily')} className="h-11 w-full text-[13px]">
                 عرض تعبئات اليوم
-              </PillButton>
-            )}
-            {success.newVehicleInternalCode && (
-              <PillButton
-                variant="ghost"
-                onClick={() => navigate(`/vehicles/${newlyCreatedVehicle?.id}`)}
-                className="h-11 w-full text-[13px]"
-              >
-                صفحة المركبة الجديدة
               </PillButton>
             )}
           </div>
@@ -1214,29 +1165,7 @@ export function RecordFillUpPage() {
                 )}
               </div>
             )}
-            {showNewVehicleFormMobile ? (
-              <VehicleCreateForm
-                initialPlate={plateValue}
-                onCreated={(vehicle) => {
-                  fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
-                  setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
-                  setShowNewVehicleFormMobile(false);
-                  setMobileStep('match');
-                  // Round 15: only onCreated (a genuinely new vehicle),
-                  // never onDuplicateFound below (resolves to an EXISTING
-                  // vehicle) — drives the compact QR block on the success
-                  // screen, see ConfirmationSummary.newVehicleInternalCode.
-                  setNewlyCreatedVehicle({ id: vehicle.id, internalCode: vehicle.internalCode, ownerPhone: vehicle.ownerPhone });
-                }}
-                onDuplicateFound={(vehicle) => {
-                  fillUpForm.setValue('vehicleId', vehicle.id, { shouldValidate: true });
-                  setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
-                  setShowNewVehicleFormMobile(false);
-                  setMobileStep('match');
-                }}
-                onCancel={() => setShowNewVehicleFormMobile(false)}
-              />
-            ) : !showManualSearchMobile ? (
+            {!showManualSearchMobile ? (
               <>
                 <p className="mb-3 text-center text-[12px] text-ink-soft">اقرأ رقم اللوحة واكتبه</p>
                 <DigitBoxInput
@@ -1314,21 +1243,12 @@ export function RecordFillUpPage() {
                     start matching from more of the same prefix), unlike
                     the live list above which no longer depends on the
                     idle timer at all. */}
-                {plateHasNoCandidates && plateComplete && (
-                  <div className="mt-3 rounded-sm bg-surface-alt p-3 text-center" data-testid="fillup-mobile-no-match">
-                    <p className="text-[12.5px] text-ink-soft">لا توجد مركبة بهذا الرقم في المنظومة</p>
-                    {canCreateVehicle && (
-                      <PillButton
-                        size="sm"
-                        className="mt-2"
-                        data-testid="fillup-mobile-add-vehicle"
-                        onClick={() => setShowNewVehicleFormMobile(true)}
-                      >
-                        إضافة كمركبة جديدة
-                      </PillButton>
-                    )}
-                  </div>
-                )}
+                {/* Registration pivot, phase 2: petrol stations never
+                    register vehicles — registration happens only at a
+                    registration station. An unknown plate is simply
+                    "not registered", with no way to create it here (the
+                    grace-period handling arrives in Phase 4). */}
+                {plateHasNoCandidates && plateComplete && <NotRegisteredNotice />}
                 {/* Round 15: scanning is a second, equal route to
                     identify the vehicle — offered next to the digit-box
                     entry, only when a camera could plausibly open at all
@@ -1384,7 +1304,6 @@ export function RecordFillUpPage() {
                     setSelectedVehicleLabel(formatLicensePlate(label));
                     setMobileStep('match');
                   }}
-                  onCreateNew={canCreateVehicle ? () => setShowNewVehicleFormMobile(true) : undefined}
                 />
                 <button
                   type="button"
@@ -1586,6 +1505,19 @@ export function RecordFillUpPage() {
 // unexpected error, and per the code-leak audit it must not surface the raw
 // English message in this Arabic UI even then — EXCEPT the one
 // machine-checkable marker below, which is deliberately not prose.
+// Registration pivot, phase 2: what the pump screen shows for a plate the
+// registry doesn't have. Shared by the plate step and the manual search.
+export function NotRegisteredNotice() {
+  return (
+    <div className="mt-3 rounded-sm bg-accent-100 p-3 text-center" data-testid="fillup-not-registered">
+      <p className="text-[13px] font-bold text-accent-dark">هذه المركبة غير مسجّلة في المنظومة</p>
+      <p className="mt-1 text-[12px] text-ink-soft">
+        يجب تسجيل المركبة في أحد مكاتب التسجيل أولًا، ولا يمكن تسجيلها من محطة الوقود.
+      </p>
+    </div>
+  );
+}
+
 // Registration pivot, phase 1: FillUpsService refuses a fill-up (and its
 // rule preview) at a station that isn't in a live municipality — a 409
 // with one of these markers, which the employee can't fix themselves, so

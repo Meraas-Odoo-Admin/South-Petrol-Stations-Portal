@@ -16,4 +16,13 @@ export class UpdateMunicipalityDto {
   @IsOptional()
   @IsEnum(MunicipalityStatus)
   status?: MunicipalityStatus;
+
+  // Required, and must equal the municipality's current name exactly, when
+  // switching LIVE -> PREPARING: that instantly stops every fill-up there,
+  // so the admin screen makes the admin type the name — and the API
+  // insists on the same, not just the UI.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  confirmName?: string;
 }

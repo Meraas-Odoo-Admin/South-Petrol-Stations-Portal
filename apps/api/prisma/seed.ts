@@ -5,6 +5,7 @@ import * as argon2 from 'argon2';
 // file itself, which would also run this file's own `main()` (below,
 // unconditional at module load) and seed demo data as a side effect.
 import { PERMISSIONS, ROLE_PERMISSIONS, UNRESTRICTED_STATION_ACCESS_ROLES, SYSTEM_SETTINGS } from './rbac-catalog';
+import { syncRbacCatalog } from './rbac-sync';
 
 export { PERMISSIONS, ROLE_PERMISSIONS, UNRESTRICTED_STATION_ACCESS_ROLES, SYSTEM_SETTINGS };
 
@@ -816,12 +817,36 @@ const REAL_STATIONS: RealStationSpec[] = [
 // yet another shape of partial data) never blocks the rest of the seed.
 async function cleanupPlaywrightFixtures(): Promise<void> {
   try {
+    // Registration pivot, phase 2: global-setup also creates a PW
+    // registration desk, vehicles registered there (some auto-coded V-…),
+    // more owners, and run-specific accounts (pw_sup_/pw_admin_/pw_reg_).
+    const pwRegistrationStations = await prisma.registrationStation.findMany({
+      where: { name: { startsWith: 'PW Registration Desk ' } },
+    });
+    const registrationStationIds = pwRegistrationStations.map((s) => s.id);
     const [pwVehicles, pwOwners, pwStations, pwCompanies, pwUsers] = await Promise.all([
-      prisma.vehicle.findMany({ where: { internalCode: { startsWith: 'PW-VEH-' } } }),
-      prisma.vehicleOwner.findMany({ where: { fullName: { startsWith: 'PW Test Owner ' } } }),
+      prisma.vehicle.findMany({
+        where: {
+          OR: [
+            { internalCode: { startsWith: 'PW-VEH-' } },
+            { registeredAtRegistrationStationId: { in: registrationStationIds } },
+          ],
+        },
+      }),
+      prisma.vehicleOwner.findMany({
+        where: {
+          OR: ['PW Test Owner ', 'PW Clean Owner ', 'PW Registered Owner ', 'PW Wizard Owner '].map((prefix) => ({
+            fullName: { startsWith: prefix },
+          })),
+        },
+      }),
       prisma.station.findMany({ where: { internalCode: { startsWith: 'PW-STN-' } } }),
       prisma.company.findMany({ where: { name: { startsWith: 'PW Test Co ' } } }),
-      prisma.user.findMany({ where: { username: { startsWith: 'pw_needschange_' } } }),
+      prisma.user.findMany({
+        where: {
+          OR: ['pw_needschange_', 'pw_sup_', 'pw_admin_', 'pw_reg_'].map((prefix) => ({ username: { startsWith: prefix } })),
+        },
+      }),
     ]);
     const vehicleIds = pwVehicles.map((v) => v.id);
     const ownerIds = pwOwners.map((o) => o.id);
@@ -829,7 +854,14 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
     const companyIds = pwCompanies.map((c) => c.id);
     const userIds = pwUsers.map((u) => u.id);
 
-    if (!vehicleIds.length && !ownerIds.length && !stationIds.length && !companyIds.length && !userIds.length) {
+    if (
+      !vehicleIds.length &&
+      !ownerIds.length &&
+      !stationIds.length &&
+      !companyIds.length &&
+      !userIds.length &&
+      !registrationStationIds.length
+    ) {
       return;
     }
 
@@ -837,6 +869,7 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
       OR: [
         { vehicleId: { in: vehicleIds } },
         { stationId: { in: stationIds } },
+        { recordedById: { in: userIds } },
       ],
     };
     await prisma.exception.deleteMany({ where: { fillUpTransaction: fillUpFilter } });
@@ -850,15 +883,20 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
     await prisma.userStationScope.deleteMany({
       where: { OR: [{ stationId: { in: stationIds } }, { userId: { in: userIds } }] },
     });
+    await prisma.userRegistrationStationScope.deleteMany({
+      where: { OR: [{ registrationStationId: { in: registrationStationIds } }, { userId: { in: userIds } }] },
+    });
     await prisma.station.deleteMany({ where: { id: { in: stationIds } } });
+    await prisma.registrationStation.deleteMany({ where: { id: { in: registrationStationIds } } });
     await prisma.company.deleteMany({ where: { id: { in: companyIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 
     console.log(
-      `  🧹 Cleaned up Playwright e2e fixtures: ${vehicleIds.length} vehicles, ${ownerIds.length} owners, ${stationIds.length} stations, ${companyIds.length} companies, ${userIds.length} throwaway users.`,
+      `  🧹 Cleaned up Playwright e2e fixtures: ${vehicleIds.length} vehicles, ${ownerIds.length} owners, ${stationIds.length} stations, ${registrationStationIds.length} registration stations, ${companyIds.length} companies, ${userIds.length} throwaway users.`,
     );
   } catch (error) {
     console.warn('  ⚠ Playwright fixture cleanup failed (non-fatal, continuing seed):', error);
@@ -915,33 +953,10 @@ async function main() {
   }
 
   // ── Permissions & Roles ────────────────────────────────────────────
-  for (const permission of PERMISSIONS) {
-    await prisma.permission.upsert({
-      where: { key: permission.key },
-      create: permission,
-      update: { description: permission.description },
-    });
-  }
-
-  const rolesByName = new Map<string, { id: string }>();
-  for (const [roleName, permissionKeys] of Object.entries(ROLE_PERMISSIONS)) {
-    const unrestrictedStationAccess = UNRESTRICTED_STATION_ACCESS_ROLES.has(roleName);
-    const role = await prisma.role.upsert({
-      where: { name: roleName },
-      create: { name: roleName, unrestrictedStationAccess },
-      update: { unrestrictedStationAccess },
-    });
-    rolesByName.set(roleName, role);
-
-    for (const key of permissionKeys) {
-      const permission = await prisma.permission.findUniqueOrThrow({ where: { key } });
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-        create: { roleId: role.id, permissionId: permission.id },
-        update: {},
-      });
-    }
-  }
+  // Adds what's missing AND removes role grants rbac-catalog.ts no longer
+  // lists (see rbac-sync.ts) — so a permission taken off a role in the
+  // catalog is actually taken off in this database too.
+  const { rolesByName } = await syncRbacCatalog(prisma);
 
   // ── System settings ───────────────────────────────────────────────
   for (const setting of SYSTEM_SETTINGS) {
@@ -1121,10 +1136,27 @@ async function main() {
     realStationsByInternalCode.set(internalCode, station);
   }
 
+  // ── Registration station (registration pivot, phase 2) ─────────────
+  // A synthetic fixture in live سبها, like STN-TEST-0001 — the real list of
+  // police-station registration desks is for admins to enter.
+  const registrationStation = await prisma.registrationStation.upsert({
+    where: { internalCode: 'REG-TEST-0001' },
+    create: {
+      internalCode: 'REG-TEST-0001',
+      name: 'مكتب تسجيل تجريبي — synthetic fixture',
+      municipalityId: sabhaMunicipalityId,
+      address: 'سبها — عنوان تجريبي',
+      workingHours: 'السبت–الخميس 8:00–14:00',
+    },
+    update: {},
+  });
+
   // ── Test users, one per role ───────────────────────────────────────
   const testUsers = [
     { username: 'employee1', fullName: 'Test Station Employee', role: 'station_employee' },
     { username: 'supervisor1', fullName: 'Test Station Supervisor', role: 'station_supervisor' },
+    { username: 'registration1', fullName: 'Test Registration Employee', role: 'registration_employee' },
+    { username: 'regsupervisor1', fullName: 'Test Registration Supervisor', role: 'registration_supervisor' },
     { username: 'admin1', fullName: 'Test Directorate Admin', role: 'directorate_admin' },
     { username: 'sysadmin1', fullName: 'Test System Admin', role: 'system_admin' },
   ];
@@ -1156,6 +1188,17 @@ async function main() {
       await prisma.userStationScope.upsert({
         where: { userId_stationId: { userId: user.id, stationId: stationA.id } },
         create: { userId: user.id, stationId: stationA.id },
+        update: {},
+      });
+    }
+
+    if (spec.username === 'registration1' || spec.username === 'regsupervisor1') {
+      // Scoped to the one seeded registration station.
+      await prisma.userRegistrationStationScope.upsert({
+        where: {
+          userId_registrationStationId: { userId: user.id, registrationStationId: registrationStation.id },
+        },
+        create: { userId: user.id, registrationStationId: registrationStation.id },
         update: {},
       });
     }

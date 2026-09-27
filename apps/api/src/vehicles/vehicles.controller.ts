@@ -8,6 +8,7 @@ import { PlateChangeDto } from './dto/plate-change.dto';
 import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
 import { RejectVehicleChangeRequestDto } from './dto/reject-change-request.dto';
 import { FindChangeRequestsQueryDto } from './dto/find-change-requests-query.dto';
+import { DuplicateCheckQueryDto } from './dto/duplicate-check-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
@@ -27,6 +28,14 @@ export class VehiclesController {
   @Get()
   findAll(@Query() query: FindVehiclesQueryDto) {
     return this.vehicles.findAll(query);
+  }
+
+  // Registration screen's pre-save duplicate check — gated like
+  // registering itself. Registered before @Get(':id'), same as below.
+  @RequirePermission('vehicles:manage')
+  @Get('duplicate-check')
+  duplicateCheck(@Query() query: DuplicateCheckQueryDto) {
+    return this.vehicles.findDuplicates(query);
   }
 
   // Registered BEFORE @Get(':id') — a static path segment must win over the

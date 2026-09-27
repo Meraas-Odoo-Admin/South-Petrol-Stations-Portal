@@ -208,6 +208,7 @@ export class AuthService {
       include: {
         roles: { include: { role: true } },
         stationScope: { include: { station: true } },
+        registrationStationScope: { include: { registrationStation: true } },
       },
     });
     if (!user) {
@@ -227,6 +228,11 @@ export class AuthService {
         stationId: scope.stationId,
         internalCode: scope.station.internalCode,
         name: scope.station.name,
+      })),
+      registrationStationScope: user.registrationStationScope.map((scope) => ({
+        registrationStationId: scope.registrationStationId,
+        internalCode: scope.registrationStation.internalCode,
+        name: scope.registrationStation.name,
       })),
     };
   }

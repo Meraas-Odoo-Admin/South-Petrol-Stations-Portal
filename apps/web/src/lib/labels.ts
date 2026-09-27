@@ -11,6 +11,8 @@
 export const ROLE_LABELS: Record<string, string> = {
   station_employee: 'موظف محطة',
   station_supervisor: 'مشرف محطة',
+  registration_employee: 'موظف تسجيل',
+  registration_supervisor: 'مشرف تسجيل',
   directorate_admin: 'إدارة المديرية',
   system_admin: 'مدير المنظومة',
 };
@@ -36,6 +38,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'routes:manage': 'إدارة خطوط السير',
   'security_authorities:read': 'عرض الجهات الأمنية',
   'security_authorities:manage': 'إدارة الجهات الأمنية',
+  'registration_stations:read': 'عرض مكاتب التسجيل',
+  'registration_stations:manage': 'إدارة مكاتب التسجيل',
   'stations:read': 'عرض المحطات',
   'stations:manage': 'إدارة المحطات',
   'stations:view_preparing': 'عرض محطات البلديات قيد الإعداد',
@@ -43,6 +47,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'roles:manage': 'إسناد الأدوار والصلاحيات الفردية',
   'reports:view_all_stations': 'عرض تقارير كل المحطات',
   'reports:view': 'عرض تقارير المحطة',
+  'owners:read': 'عرض سجل ملاك المركبات',
   'owners:manage': 'إدارة بيانات ملاك المركبات',
   'owners:reveal_identity': 'إظهار رقم هوية المالك الكامل',
   'owners:request_change': 'طلب تصحيح هوية مالك (يتطلب اعتمادًا)',

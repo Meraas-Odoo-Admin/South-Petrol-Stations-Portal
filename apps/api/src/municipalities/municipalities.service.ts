@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateMunicipalityDto } from './dto/create-municipality.dto';
@@ -26,7 +26,7 @@ export class MunicipalitiesService {
   async create(dto: CreateMunicipalityDto, actorId: string) {
     const existing = await this.prisma.municipality.findUnique({ where: { name: dto.name } });
     if (existing) {
-      throw new ConflictException('A municipality with this name already exists.');
+      throw new ConflictException('MUNICIPALITY_NAME_TAKEN');
     }
 
     const municipality = await this.prisma.municipality.create({
@@ -63,21 +63,24 @@ export class MunicipalitiesService {
     // A municipality can't go live without the one security authority
     // that oversees its stations (registration pivot plan §5/§11).
     if (dto.status === 'LIVE' && before.status !== 'LIVE' && !before.securityAuthority) {
-      throw new ConflictException(
-        "Add this municipality's security authority before switching it to LIVE.",
-      );
+      throw new ConflictException('MUNICIPALITY_NEEDS_AUTHORITY');
+    }
+
+    if (dto.status === 'PREPARING' && before.status === 'LIVE' && dto.confirmName?.trim() !== before.name) {
+      throw new BadRequestException('CONFIRMATION_NAME_MISMATCH');
     }
 
     if (dto.name && dto.name !== before.name) {
       const existing = await this.prisma.municipality.findUnique({ where: { name: dto.name } });
       if (existing) {
-        throw new ConflictException('A municipality with this name already exists.');
+        throw new ConflictException('MUNICIPALITY_NAME_TAKEN');
       }
     }
 
+    const { confirmName: _confirmName, ...data } = dto;
     const municipality = await this.prisma.municipality.update({
       where: { id },
-      data: dto,
+      data,
       include: this.include,
     });
 

@@ -11,6 +11,17 @@ import { RejectVehicleChangeRequestDto } from './dto/reject-change-request.dto';
 import { FindChangeRequestsQueryDto } from './dto/find-change-requests-query.dto';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { resolveWeekWindowStrategy } from '../fillups/rule-engine/week-window.strategy';
+import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
+import { DuplicateCheckQueryDto } from './dto/duplicate-check-query.dto';
+
+// One clash between a value being registered and an already-registered
+// vehicle — which field, and whose vehicle it is. The registration screen
+// shows these before saving (GET /vehicles/duplicate-check), and create()
+// returns the same shape under a VEHICLE_DUPLICATE 409's `details`.
+export interface VehicleDuplicate {
+  field: 'currentPlate' | 'chassisNumber' | 'registrationBooklet';
+  vehicle: { id: string; internalCode: string; currentPlate: string };
+}
 
 // The single field on Vehicle that a given changeType targets, and (for the
 // @unique history-tracked fields) the parallel history table it's tracked
@@ -92,7 +103,33 @@ export class VehiclesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly settings: SystemSettingsService,
+    private readonly registrationStations: RegistrationStationsService,
   ) {}
+
+  async findDuplicates(values: DuplicateCheckQueryDto): Promise<{ conflicts: VehicleDuplicate[] }> {
+    const select = { id: true, internalCode: true, currentPlate: true } as const;
+    const checks: Array<[VehicleDuplicate['field'], Promise<VehicleDuplicate['vehicle'] | null>]> = [];
+    if (values.currentPlate) {
+      checks.push(['currentPlate', this.prisma.vehicle.findUnique({ where: { currentPlate: values.currentPlate }, select })]);
+    }
+    if (values.chassisNumber) {
+      checks.push(['chassisNumber', this.prisma.vehicle.findUnique({ where: { chassisNumber: values.chassisNumber }, select })]);
+    }
+    if (values.registrationBooklet) {
+      checks.push([
+        'registrationBooklet',
+        this.prisma.vehicle.findUnique({ where: { registrationBooklet: values.registrationBooklet }, select }),
+      ]);
+    }
+    const conflicts: VehicleDuplicate[] = [];
+    for (const [field, lookup] of checks) {
+      const vehicle = await lookup;
+      if (vehicle) {
+        conflicts.push({ field, vehicle });
+      }
+    }
+    return { conflicts };
+  }
 
   // Round 4 feedback item 5: the vehicle detail page shows "X من Y تعبئات
   // مسموح بها هذا الأسبوع" — reuses the exact same week-window logic the
@@ -132,7 +169,13 @@ export class VehiclesService {
     throw new Error('Could not generate a unique vehicle internal code after 20 attempts.');
   }
 
+  // Registration pivot, phase 2: registering a vehicle is a registration-
+  // station action — scoped, refused at a closed station or in a
+  // preparing municipality, and recorded (where + who) on the vehicle.
   async create(dto: CreateVehicleDto, actorId: string) {
+    const { registrationStationId, ...vehicleFields } = dto;
+    await this.registrationStations.assertCanRegisterAt(registrationStationId, actorId);
+
     const internalCode = dto.internalCode?.trim() || (await this.generateInternalCode());
 
     // Only re-check uniqueness for an explicitly-supplied code —
@@ -147,29 +190,11 @@ export class VehiclesService {
       }
     }
 
-    const existingByPlate = await this.prisma.vehicle.findUnique({
-      where: { currentPlate: dto.currentPlate },
-    });
-    if (existingByPlate) {
-      throw new ConflictException('currentPlate is already in use.');
-    }
-
-    if (dto.chassisNumber) {
-      const existingByChassis = await this.prisma.vehicle.findUnique({
-        where: { chassisNumber: dto.chassisNumber },
-      });
-      if (existingByChassis) {
-        throw new ConflictException('chassisNumber is already in use.');
-      }
-    }
-
-    if (dto.registrationBooklet) {
-      const existingByBooklet = await this.prisma.vehicle.findUnique({
-        where: { registrationBooklet: dto.registrationBooklet },
-      });
-      if (existingByBooklet) {
-        throw new ConflictException('registrationBooklet is already in use.');
-      }
+    // Every clashing field at once (not first-failure-wins), each naming
+    // the vehicle it already belongs to — the screen shows them all.
+    const { conflicts } = await this.findDuplicates(dto);
+    if (conflicts.length > 0) {
+      throw new ConflictException({ message: 'VEHICLE_DUPLICATE', details: { conflicts } });
     }
 
     if (dto.ownerId) {
@@ -180,7 +205,14 @@ export class VehiclesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const vehicle = await tx.vehicle.create({ data: { ...dto, internalCode } });
+      const vehicle = await tx.vehicle.create({
+        data: {
+          ...vehicleFields,
+          internalCode,
+          registeredAtRegistrationStationId: registrationStationId,
+          registeredById: actorId,
+        },
+      });
 
       // Seed the plate history with the vehicle's initial plate so
       // plate-change always has a current (validTo: null) row to close.
@@ -194,7 +226,11 @@ export class VehiclesService {
           action: 'CREATE',
           entityType: 'Vehicle',
           entityId: vehicle.id,
-          newValue: { internalCode: vehicle.internalCode, currentPlate: vehicle.currentPlate },
+          newValue: {
+            internalCode: vehicle.internalCode,
+            currentPlate: vehicle.currentPlate,
+            registeredAtRegistrationStationId: registrationStationId,
+          },
         },
         tx,
       );

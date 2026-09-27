@@ -23,7 +23,7 @@ interface VehicleSearchSelectProps {
   value: string;
   onChange: (vehicleId: string, label: string) => void;
   // Set when `value` arrives already resolved from outside this component
-  // (e.g. a vehicle just created inline via VehicleCreateForm) — without
+  // (e.g. a vehicle already picked on another wizard step) — without
   // this the input shows the empty placeholder even though `value` is a
   // real vehicleId, since `query` is otherwise only ever set by this
   // component's own onClick handler below. Same gap DriverSearchSelect
@@ -33,10 +33,6 @@ interface VehicleSearchSelectProps {
   // know whether the user has typed anything yet before it's enabled
   // (round 4 feedback: it shouldn't be clickable against an empty field).
   onQueryChange?: (query: string) => void;
-  // Round 5 feedback item 3: an inline "لا توجد نتائج — إضافة مركبة
-  // جديدة" row inside the dropdown itself, not just static text below the
-  // field.
-  onCreateNew?: () => void;
 }
 
 // GET /vehicles?search= ORs internalCode and currentPlate server-side — a
@@ -46,7 +42,7 @@ interface VehicleSearchSelectProps {
 // in the app (formatLicensePlate adds spaces around the dash) so pasting
 // back exactly what's shown on, say, the vehicle detail page still matches
 // the unspaced stored value.
-export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChange, onCreateNew }: VehicleSearchSelectProps) {
+export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChange }: VehicleSearchSelectProps) {
   const [query, setQuery] = useState(initialLabel ? formatLicensePlate(initialLabel) : '');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
@@ -125,23 +121,11 @@ export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChan
       >
         <ul>
           {isFetching && <li className="px-3 py-2 text-[12.5px] text-ink-soft">...جارٍ البحث</li>}
-          {!isFetching && results?.length === 0 && !onCreateNew && (
-            <li className="px-3 py-2 text-[12.5px] text-ink-soft">لا توجد نتائج</li>
-          )}
-          {!isFetching && results?.length === 0 && onCreateNew && (
-            <li>
-              <button
-                type="button"
-                data-testid="vehicle-create-new-inline"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onCreateNew();
-                  setOpen(false);
-                }}
-                className="block w-full px-3 py-2 text-start text-[12.5px] font-bold text-accent-dark hover:bg-accent-100"
-              >
-                لا توجد نتائج — إضافة مركبة جديدة
-              </button>
+          {/* Registration pivot, phase 2: no "add new vehicle" here any
+              more — petrol stations never register vehicles. */}
+          {!isFetching && results?.length === 0 && (
+            <li className="px-3 py-2 text-[12.5px] text-ink-soft" data-testid="vehicle-search-not-registered">
+              لا توجد مركبة مسجّلة بهذه البيانات — التسجيل في مكاتب التسجيل فقط
             </li>
           )}
           {results?.map((vehicle) => (

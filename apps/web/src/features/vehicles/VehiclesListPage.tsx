@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient';
 import { formatLicensePlate, normalizePlateSearchTerm } from '../../lib/libyanFormats';
@@ -13,7 +13,6 @@ import { KpiCard } from '../../components/design/KpiCard';
 import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
 import { Icon, ICONS } from '../../components/icons';
 import { useAuth } from '../auth/AuthProvider';
-import { VehicleCreateForm } from './VehicleCreateForm';
 import {
   identityTypeLabel,
   isProvisionalOwnerIdentity,
@@ -65,19 +64,11 @@ const SORT_LABELS: Record<VehicleSortField, string> = {
 // filter that quietly does the wrong thing.
 export function VehiclesListPage() {
   const { hasPermission } = useAuth();
-  const queryClient = useQueryClient();
   const canSeeChangeRequests = hasPermission('vehicles:approve_change');
-  // Client feedback: "All users should be able to add a new vehicle
-  // profile with all of its information from the المركبات screen, so that
-  // if it is a busy station one employee starts creating profiles and the
-  // other employee does the fill ups." Gated on vehicles:manage — same
-  // permission the inline fill-up-flow's "add new vehicle" already uses —
-  // not "all users" literally, since creating a vehicle is still a
-  // permissioned action; every role that can record a fill-up now also
-  // holds vehicles:manage (see seed.ts), so in practice every station
-  // employee can reach this.
-  const canCreateVehicle = hasPermission('vehicles:manage');
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  // Registration pivot, phase 2: creating vehicles moved to its own page
+  // (/registration), used at registration stations only — this list just
+  // links there for those who can register.
+  const canRegisterVehicles = hasPermission('vehicles:manage') && hasPermission('registration_stations:read');
   const [skip, setSkip] = useState(0);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -155,10 +146,10 @@ export function VehiclesListPage() {
         title="المركبات"
         subtitle={data ? `${data.length} مركبة في هذه الصفحة` : undefined}
         actions={
-          canCreateVehicle ? (
-            <PillButton size="sm" onClick={() => setShowCreateForm((s) => !s)}>
-              {showCreateForm ? 'إلغاء' : 'مركبة جديدة +'}
-            </PillButton>
+          canRegisterVehicles ? (
+            <Link to="/registration">
+              <PillButton size="sm">تسجيل مركبة +</PillButton>
+            </Link>
           ) : undefined
         }
       />
@@ -187,18 +178,6 @@ export function VehiclesListPage() {
               variant={(pendingChangesQuery.data?.length ?? 0) > 0 ? 'accent' : 'neutral'}
             />
           )}
-        </div>
-      )}
-
-      {showCreateForm && (
-        <div className="mb-4 animate-scale-in">
-          <VehicleCreateForm
-            onCreated={() => {
-              setShowCreateForm(false);
-              queryClient.invalidateQueries({ queryKey: ['vehicles', 'list'] });
-            }}
-            onCancel={() => setShowCreateForm(false)}
-          />
         </div>
       )}
 

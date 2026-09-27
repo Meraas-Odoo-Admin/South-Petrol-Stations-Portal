@@ -85,6 +85,15 @@ export function Layout() {
       icon: <Icon d={ICONS.fillup} />,
       show: hasPermission('fillups:create'),
     },
+    // Registration pivot, phase 2: the registration employee's workspace.
+    // Registering needs both — vehicles:manage to create, and a
+    // registration station to do it at.
+    {
+      to: '/registration',
+      label: 'تسجيل المركبات',
+      icon: <Icon d={ICONS.register} />,
+      show: hasPermission('vehicles:manage') && hasPermission('registration_stations:read'),
+    },
     {
       to: '/vehicles',
       label: 'المركبات',

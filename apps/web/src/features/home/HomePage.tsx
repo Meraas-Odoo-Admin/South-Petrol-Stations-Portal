@@ -16,6 +16,7 @@ interface QuickLink {
 
 const QUICK_LINKS: QuickLink[] = [
   { to: '/fillups/new', label: 'تسجيل تعبئة', hint: 'تسجيل عملية تعبئة جديدة لمركبة', permission: 'fillups:create', icon: 'fillup' },
+  { to: '/registration', label: 'تسجيل المركبات', hint: 'تسجيل مالك ومركبة في مكتب التسجيل', permission: 'vehicles:manage', icon: 'register' },
   { to: '/vehicles', label: 'المركبات', hint: 'البحث عن مركبة وعرض سجلها', permission: 'vehicles:read', icon: 'vehicles' },
   { to: '/reports/violations', label: 'المخالفات', hint: 'الحالات التي تحتاج قرارك', permission: 'reports:view', icon: 'violations' },
   { to: '/reports/daily', label: 'التقرير اليومي', hint: 'ملخص تعبئات اليوم', permission: 'reports:view', icon: 'reports' },
@@ -38,6 +39,18 @@ function timeGreeting(): string {
 export function HomePage() {
   const { user, hasPermission } = useAuth();
   const links = QUICK_LINKS.filter((link) => hasPermission(link.permission));
+  // Petrol stations and/or registration stations the user is scoped to;
+  // "كل المحطات" only for the directorate-wide roles that genuinely see all.
+  const scopeNames = [
+    ...(user?.stationScope ?? []).map((s) => s.name),
+    ...(user?.registrationStationScope ?? []).map((s) => s.name),
+  ];
+  const scopeLabel =
+    scopeNames.length > 0
+      ? scopeNames.join('، ')
+      : hasPermission('reports:view_all_stations')
+        ? 'كل المحطات'
+        : 'لم يُحدَّد نطاق بعد';
 
   return (
     <div>
@@ -45,9 +58,7 @@ export function HomePage() {
         title={`${timeGreeting()}، ${user?.fullName ?? ''}`}
         subtitle={
           user
-            ? `${user.roles.map(roleLabel).join('، ')} — ${
-                user.stationScope.length > 0 ? user.stationScope.map((s) => s.name).join('، ') : 'كل المحطات'
-              }`
+            ? `${user.roles.map(roleLabel).join('، ')} — ${scopeLabel}`
             : undefined
         }
       />

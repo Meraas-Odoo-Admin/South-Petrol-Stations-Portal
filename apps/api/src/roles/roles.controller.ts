@@ -16,7 +16,7 @@ export class RolesController {
   @Get()
   findAll() {
     return this.prisma.role.findMany({
-      select: { id: true, name: true, description: true, unrestrictedStationAccess: true },
+      select: { id: true, name: true, description: true, unrestrictedStationAccess: true, kind: true },
       orderBy: { name: 'asc' },
     });
   }

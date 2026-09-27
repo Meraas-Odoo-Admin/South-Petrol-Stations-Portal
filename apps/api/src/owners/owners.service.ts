@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
@@ -7,15 +7,20 @@ import { FindOwnersQueryDto } from './dto/find-owners-query.dto';
 import { CreateOwnerChangeRequestDto } from './dto/create-owner-change-request.dto';
 import { RejectOwnerChangeRequestDto } from './dto/reject-owner-change-request.dto';
 import { FindOwnerChangeRequestsQueryDto } from './dto/find-owner-change-requests-query.dto';
+import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
 
 @Injectable()
 export class OwnersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly registrationStations: RegistrationStationsService,
   ) {}
 
   async create(dto: CreateOwnerDto, actorId: string) {
+    const { registrationStationId, ...ownerFields } = dto;
+    await this.registrationStations.assertCanRegisterAt(registrationStationId, actorId);
+
     const existing = await this.prisma.vehicleOwner.findUnique({
       where: {
         identityType_identityNumber: {
@@ -29,7 +34,7 @@ export class OwnersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const owner = await tx.vehicleOwner.create({ data: dto });
+      const owner = await tx.vehicleOwner.create({ data: ownerFields });
 
       await this.audit.log(
         {
@@ -37,7 +42,7 @@ export class OwnersService {
           action: 'CREATE',
           entityType: 'VehicleOwner',
           entityId: owner.id,
-          newValue: { identityType: owner.identityType, fullName: owner.fullName },
+          newValue: { identityType: owner.identityType, fullName: owner.fullName, registrationStationId },
         },
         tx,
       );
@@ -47,6 +52,14 @@ export class OwnersService {
   }
 
   findAll(query: FindOwnersQueryDto) {
+    if (Boolean(query.identityType) !== Boolean(query.identityNumber)) {
+      throw new BadRequestException('identityType and identityNumber must be given together.');
+    }
+    if (query.identityType && query.identityNumber) {
+      return this.prisma.vehicleOwner.findMany({
+        where: { identityType: query.identityType, identityNumber: query.identityNumber.trim() },
+      });
+    }
     const search = query.search?.trim();
     return this.prisma.vehicleOwner.findMany({
       where: search

@@ -13,12 +13,16 @@ import { VehiclesListPage } from './features/vehicles/VehiclesListPage';
 import { ChangeRequestsQueuePage } from './features/vehicles/ChangeRequestsQueuePage';
 import { StationsListPage } from './features/stations/StationsListPage';
 import { RecordFillUpPage } from './features/fillups/RecordFillUpPage';
+import { RegistrationPage } from './features/registration/RegistrationPage';
 import { AdminLayout } from './features/admin/AdminLayout';
 import { UsersAdminPage } from './features/admin/UsersAdminPage';
 import { SettingsAdminPage } from './features/admin/SettingsAdminPage';
 import { ExceptionTypesAdminPage } from './features/admin/ExceptionTypesAdminPage';
 import { VehicleTypesAdminPage } from './features/admin/VehicleTypesAdminPage';
 import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
+import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPage';
+import { SecurityAuthoritiesAdminPage } from './features/admin/SecurityAuthoritiesAdminPage';
+import { RegistrationStationsAdminPage } from './features/admin/RegistrationStationsAdminPage';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
 // §9. /fillups/new is the recording screen (create only — the exceptions
@@ -59,6 +63,7 @@ function App() {
               <Route path="/reports/daily" element={<DailyReportPage />} />
               <Route path="/reports/violations" element={<ViolationsPage />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
+              <Route path="/registration" element={<RegistrationPage />} />
               <Route path="/stations" element={<StationsListPage />} />
               <Route path="/vehicles" element={<VehiclesListPage />} />
               <Route path="/vehicles/:vehicleId" element={<VehicleDetailPage />} />
@@ -69,6 +74,9 @@ function App() {
                 <Route path="settings" element={<SettingsAdminPage />} />
                 <Route path="exception-types" element={<ExceptionTypesAdminPage />} />
                 <Route path="vehicle-types" element={<VehicleTypesAdminPage />} />
+                <Route path="registration-stations" element={<RegistrationStationsAdminPage />} />
+                <Route path="municipalities" element={<MunicipalitiesAdminPage />} />
+                <Route path="security-authorities" element={<SecurityAuthoritiesAdminPage />} />
                 {/* Round 19: station create/edit moved onto /stations
                     itself (StationsListPage, gated on stations:manage) —
                     "much more logical" than a separate admin surface, per

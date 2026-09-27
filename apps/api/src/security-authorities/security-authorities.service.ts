@@ -4,6 +4,10 @@ import { AuditService } from '../audit/audit.service';
 import { CreateSecurityAuthorityDto } from './dto/create-security-authority.dto';
 import { UpdateSecurityAuthorityDto } from './dto/update-security-authority.dto';
 
+// 409s carry machine-checkable markers (MUNICIPALITY_HAS_AUTHORITY,
+// AUTHORITY_OF_LIVE_MUNICIPALITY, SECURITY_AUTHORITY_NAME_TAKEN) that the
+// admin screen maps to Arabic.
+//
 // Settings-managed lookup list for the security authority (الجهة الأمنية)
 // overseeing a municipality's petrol stations. Client-confirmed
 // (docs/OPEN_ITEMS.md #4, answered): exactly one per municipality — so an
@@ -31,14 +35,14 @@ export class SecurityAuthoritiesService {
       throw new NotFoundException('Municipality not found.');
     }
     if (municipality.securityAuthority && municipality.securityAuthority.id !== exceptAuthorityId) {
-      throw new ConflictException('This municipality already has a security authority.');
+      throw new ConflictException('MUNICIPALITY_HAS_AUTHORITY');
     }
   }
 
   async create(dto: CreateSecurityAuthorityDto, actorId: string) {
     const existing = await this.prisma.securityAuthority.findUnique({ where: { name: dto.name } });
     if (existing) {
-      throw new ConflictException('A security authority with this name already exists.');
+      throw new ConflictException('SECURITY_AUTHORITY_NAME_TAKEN');
     }
     await this.assertMunicipalityFree(dto.municipalityId);
 
@@ -76,7 +80,7 @@ export class SecurityAuthoritiesService {
     if (dto.name && dto.name !== before.name) {
       const existing = await this.prisma.securityAuthority.findUnique({ where: { name: dto.name } });
       if (existing) {
-        throw new ConflictException('A security authority with this name already exists.');
+        throw new ConflictException('SECURITY_AUTHORITY_NAME_TAKEN');
       }
     }
 
@@ -84,9 +88,7 @@ export class SecurityAuthoritiesService {
       // Moving the authority off a live municipality would leave that
       // municipality's stations with no overseeing authority.
       if (before.municipality?.status === 'LIVE') {
-        throw new ConflictException(
-          'This authority oversees a LIVE municipality and cannot be moved to another one.',
-        );
+        throw new ConflictException('AUTHORITY_OF_LIVE_MUNICIPALITY');
       }
       await this.assertMunicipalityFree(dto.municipalityId, id);
     }

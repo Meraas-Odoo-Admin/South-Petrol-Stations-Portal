@@ -41,4 +41,13 @@ export interface MeResponse {
   roles: string[];
   permissions: string[];
   stationScope: MeStationScope[];
+  // Registration pivot, phase 2: the registration stations this user is
+  // scoped to (registration employees/supervisors). Same shape.
+  registrationStationScope: MeRegistrationStationScope[];
+}
+
+export interface MeRegistrationStationScope {
+  registrationStationId: string;
+  internalCode: string;
+  name: string;
 }

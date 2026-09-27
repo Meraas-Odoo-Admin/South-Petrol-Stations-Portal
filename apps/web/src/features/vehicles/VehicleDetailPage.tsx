@@ -231,12 +231,8 @@ export function VehicleDetailPage() {
 
           <VehicleQrPanel
             internalCode={vehicle.internalCode}
-            vehicleLabel={formatLicensePlate(vehicle.currentPlate)}
-            variant="full"
             className={`animate-fade-in-up ${mobileTab === 'qr' ? '' : 'hidden sm:!block'}`}
             style={{ animationDelay: '60ms' }}
-            ownerPhone={vehicle.owner?.phone}
-            ownerId={vehicle.owner?.id}
           />
         </div>
 

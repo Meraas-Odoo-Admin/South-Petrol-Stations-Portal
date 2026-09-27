@@ -22,7 +22,10 @@ export class OwnersController {
     return this.owners.create(dto, actor.id);
   }
 
-  @RequirePermission('owners:manage')
+  // Registration pivot, phase 2: read-only lookup split out of
+  // owners:manage, which petrol-station roles no longer hold — the daily
+  // report's owner filter (station supervisors) still needs to search.
+  @RequirePermission('owners:read')
   @Get()
   findAll(@Query() query: FindOwnersQueryDto) {
     return this.owners.findAll(query);
@@ -37,7 +40,7 @@ export class OwnersController {
     return this.owners.listChangeRequests(query);
   }
 
-  @RequirePermission('owners:manage')
+  @RequirePermission('owners:read')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.owners.findOne(id);

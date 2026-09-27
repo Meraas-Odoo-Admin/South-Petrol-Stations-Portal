@@ -15,6 +15,9 @@ export const PERMISSIONS = [
   { key: 'routes:manage', description: 'Create/update station routes' },
   { key: 'security_authorities:read', description: 'View the security authority list' },
   { key: 'security_authorities:manage', description: 'Create/update security authorities (one per municipality)' },
+  // Registration pivot, phase 2: police-station registration desks.
+  { key: 'registration_stations:read', description: 'View registration stations (subject to registration-station scope)' },
+  { key: 'registration_stations:manage', description: 'Create/update registration stations' },
   { key: 'stations:read', description: 'View stations (subject to station scope)' },
   { key: 'stations:manage', description: 'Create/update stations' },
   // Registration pivot, phase 1: stations in a PREPARING municipality are
@@ -32,6 +35,7 @@ export const PERMISSIONS = [
     description:
       'View per-station reports (daily report, violations list, owner/vehicle history)',
   },
+  { key: 'owners:read', description: 'Look up the vehicle owner registry (read-only)' },
   { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
   { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes' },
   { key: 'vehicles:read', description: 'Look up the vehicle registry (read-only)' },
@@ -107,17 +111,23 @@ export const PERMISSIONS = [
 // :manage is granted the matching :read explicitly — PermissionsGuard
 // checks the exact permission string, not a tier hierarchy, so holding
 // :manage does not imply :read.
+// Registration pivot, phase 2 — two buildings that never share a key: the
+// petrol-station roles only read the vehicle registry and record fuel; the
+// registration roles only create/correct identities and never touch
+// fill-ups. Admins sit above both. ROLE_KINDS below makes the split data,
+// and UsersService refuses to give one user a role from each side.
+//
+// The seed/bootstrap sync (rbac-sync.ts) makes each catalog role's grants
+// EXACTLY this list — a permission removed here is removed from existing
+// databases too, not just left behind.
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   station_employee: [
     'stations:read',
+    // The fill-up screen's plate lookup — read-only, no registration.
     'vehicles:read',
-    'vehicles:manage',
-    'owners:manage',
     'vehicle_types:read',
     'fillups:create',
     'fillups:record_exception',
-    'vehicles:request_change',
-    'owners:request_change',
   ],
   station_supervisor: [
     'companies:read',
@@ -127,20 +137,43 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicle_types:read',
     'stations:read',
     'stations:manage',
-    'owners:manage',
-    'vehicles:manage',
     'vehicles:read',
-    'vehicles:request_change',
-    'vehicles:approve_change',
-    'owners:request_change',
-    'owners:approve_change',
     'fillups:create',
     'fillups:update',
     'fillups:approve_exception',
     'fillups:record_exception',
     'standing_exceptions:manage',
+    'owners:read',
     'owners:reveal_identity',
     'reports:view',
+  ],
+  // Search the registry (to avoid duplicates), register owners and
+  // vehicles at their registration station(s), request corrections to
+  // already-registered data. No fillups:* of any kind.
+  registration_employee: [
+    'registration_stations:read',
+    'vehicle_types:read',
+    'vehicles:read',
+    'vehicles:manage',
+    'owners:read',
+    'owners:manage',
+    'vehicles:request_change',
+    'owners:request_change',
+  ],
+  // Everything a registration employee can do, plus approving those
+  // corrections and revealing full owner identity numbers. No fillups:*.
+  registration_supervisor: [
+    'registration_stations:read',
+    'vehicle_types:read',
+    'vehicles:read',
+    'vehicles:manage',
+    'owners:read',
+    'owners:manage',
+    'vehicles:request_change',
+    'owners:request_change',
+    'vehicles:approve_change',
+    'owners:approve_change',
+    'owners:reveal_identity',
   ],
   directorate_admin: [
     'companies:read',
@@ -152,8 +185,11 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:read',
     'stations:manage',
     'stations:view_preparing',
+    'registration_stations:read',
+    'registration_stations:manage',
     'reports:view_all_stations',
     'reports:view',
+    'owners:read',
     'owners:manage',
     'vehicles:manage',
     'vehicles:read',
@@ -179,7 +215,19 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
 // The only roles that see every station regardless of UserStationScope.
 // station_employee/station_supervisor stay at the schema default (false) —
 // both are exercised as scoped-to-one-station in the e2e boundary test.
+// Also covers registration stations: these roles see every registration
+// station regardless of UserRegistrationStationScope.
 export const UNRESTRICTED_STATION_ACCESS_ROLES = new Set(['directorate_admin', 'system_admin']);
+
+// Which side of the split each role is on (Role.kind). Roles not listed
+// (the admin roles) are on neither side and may be combined with anything.
+export type RoleKindKey = 'PETROL_STATION' | 'REGISTRATION';
+export const ROLE_KINDS: Record<string, RoleKindKey> = {
+  station_employee: 'PETROL_STATION',
+  station_supervisor: 'PETROL_STATION',
+  registration_employee: 'REGISTRATION',
+  registration_supervisor: 'REGISTRATION',
+};
 
 export const SYSTEM_SETTINGS = [
   { key: 'fillup.max_per_week', value: '3', description: 'Max fill-ups per vehicle per week' },

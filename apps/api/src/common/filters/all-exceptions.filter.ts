@@ -12,6 +12,11 @@ interface ErrorResponseBody {
   statusCode: number;
   error: string;
   message: string | string[];
+  // Optional structured data a thrown HttpException chose to expose, e.g.
+  // the registration screen's duplicate-vehicle conflicts. Only ever what
+  // the throw site put under `details` — never the exception's internals.
+  // Not written to the log line below (which logs `message` only).
+  details?: unknown;
   correlationId: string;
 }
 
@@ -26,9 +31,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const correlationId = request.correlationId ?? 'unknown';
 
-    const { statusCode, error, message } = this.resolve(exception);
+    const { statusCode, error, message, details } = this.resolve(exception);
 
-    const body: ErrorResponseBody = { statusCode, error, message, correlationId };
+    const body: ErrorResponseBody = {
+      statusCode,
+      error,
+      message,
+      ...(details !== undefined ? { details } : {}),
+      correlationId,
+    };
 
     this.logger.error(
       `[${correlationId}] ${request.method} ${request.url} -> ${statusCode}: ${JSON.stringify(message)}`,
@@ -42,6 +53,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     statusCode: number;
     error: string;
     message: string | string[];
+    details?: unknown;
   } {
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();
@@ -54,6 +66,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode,
         error: (payloadObj.error as string) ?? exception.name,
         message: (payloadObj.message as string | string[]) ?? exception.message,
+        details: payloadObj.details,
       };
     }
 

@@ -25,16 +25,16 @@ export class CreateOwnerDto {
   @IsValidIdentityNumber()
   identityNumber!: string;
 
-  // Round 20: required going forward — the client's own reasoning is that
-  // the vehicle-detail QR/share button now opens a WhatsApp chat directly
-  // with this number, so a vehicle onboarded without one has no working
-  // share target at all. Existing VehicleOwner rows created before this
+  // Round 20: required going forward. The client's original reason was
+  // the WhatsApp share (removed in registration pivot phase 2); kept
+  // required until the client says otherwise — whether a phone is still
+  // needed is part of the open "what must an owner bring" question. Existing VehicleOwner rows created before this
   // change keep phone nullable in the schema/UpdateOwnerDto (no backfill
   // decision has been made for them, same "mandatory going forward, not
   // retroactive" pattern already used for CreateVehicleDto.ownerId in
   // round 11) — this DTO is what actually enforces it for every owner
   // created from here on.
-  @ApiProperty({ description: 'Required — must look like a real Libyan mobile number (the WhatsApp-share target).' })
+  @ApiProperty({ description: 'Required — must look like a real Libyan mobile number.' })
   @IsString()
   @Matches(LIBYAN_MOBILE_REGEX, { message: 'phone must be a valid Libyan mobile number.' })
   phone!: string;
@@ -43,4 +43,14 @@ export class CreateOwnerDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  // Registration pivot, phase 2: registering an owner is a registration-
+  // station action, like registering a vehicle — the actor must be scoped
+  // to this station and it must be open in a live municipality. Recorded
+  // in the owner's CREATE audit entry (the vehicle carries its own origin
+  // columns; plan phase 2 asks for those only).
+  @ApiProperty({ description: 'The registration station this owner is being registered at.' })
+  @IsString()
+  @MinLength(1)
+  registrationStationId!: string;
 }

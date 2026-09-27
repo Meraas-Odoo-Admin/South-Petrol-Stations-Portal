@@ -9,6 +9,12 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { useStations } from '../stations/useStations';
 import type { AdminPermission, AdminRole, AdminUser } from './types';
+import { adminErrorMessage } from './adminErrors';
+
+// Registration pivot, phase 2: each role belongs to one side of the
+// petrol-station / registration split (Role.kind). Shown next to the role
+// so an admin sees why the API refuses combining them.
+const ROLE_SIDE_LABELS = { PETROL_STATION: 'محطات الوقود', REGISTRATION: 'مكاتب التسجيل' } as const;
 
 // Item 7: no user-management UI existed anywhere before this — accounts
 // could only be created via the seed script or direct API calls. Every
@@ -42,6 +48,11 @@ export function UsersAdminPage() {
     queryFn: async () => (await apiClient.get<AdminPermission[]>('/permissions')).data,
   });
   const { data: stations } = useStations();
+  const registrationStationsQuery = useQuery({
+    queryKey: ['registration-stations'],
+    queryFn: async () =>
+      (await apiClient.get<Array<{ id: string; internalCode: string; name: string }>>('/registration-stations')).data,
+  });
 
   const invalidateUsers = () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
 
@@ -64,8 +75,11 @@ export function UsersAdminPage() {
   const assignRole = useMutation({
     mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
       apiClient.post(`/users/${userId}/roles`, { roleId }),
-    onSuccess: invalidateUsers,
-    onError: () => setError('تعذر إسناد الدور.'),
+    onSuccess: () => {
+      setError(null);
+      invalidateUsers();
+    },
+    onError: (err) => setError(adminErrorMessage(err, 'تعذر إسناد الدور.')),
   });
   const removeRole = useMutation({
     mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
@@ -76,14 +90,32 @@ export function UsersAdminPage() {
   const addScope = useMutation({
     mutationFn: ({ userId, stationId }: { userId: string; stationId: string }) =>
       apiClient.post(`/users/${userId}/station-scope`, { stationId }),
-    onSuccess: invalidateUsers,
-    onError: () => setError('تعذر إضافة نطاق المحطة.'),
+    onSuccess: () => {
+      setError(null);
+      invalidateUsers();
+    },
+    onError: (err) => setError(adminErrorMessage(err, 'تعذر إضافة نطاق المحطة.')),
   });
   const removeScope = useMutation({
     mutationFn: ({ userId, stationId }: { userId: string; stationId: string }) =>
       apiClient.delete(`/users/${userId}/station-scope/${stationId}`),
     onSuccess: invalidateUsers,
     onError: () => setError('تعذر إزالة نطاق المحطة.'),
+  });
+  const addRegistrationScope = useMutation({
+    mutationFn: ({ userId, registrationStationId }: { userId: string; registrationStationId: string }) =>
+      apiClient.post(`/users/${userId}/registration-station-scope`, { registrationStationId }),
+    onSuccess: () => {
+      setError(null);
+      invalidateUsers();
+    },
+    onError: (err) => setError(adminErrorMessage(err, 'تعذر إضافة نطاق مكتب التسجيل.')),
+  });
+  const removeRegistrationScope = useMutation({
+    mutationFn: ({ userId, registrationStationId }: { userId: string; registrationStationId: string }) =>
+      apiClient.delete(`/users/${userId}/registration-station-scope/${registrationStationId}`),
+    onSuccess: invalidateUsers,
+    onError: () => setError('تعذر إزالة نطاق مكتب التسجيل.'),
   });
   // Round 12: grant/revoke ONE permission directly to this user, independent
   // of their roles — "given to certain users they pick, it could be given
@@ -181,7 +213,7 @@ export function UsersAdminPage() {
               <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                 <th className="px-[18px] py-2.5 text-start">الاسم</th>
                 <th className="px-[18px] py-2.5 text-start">الدور</th>
-                <th className="px-[18px] py-2.5 text-start">نطاق المحطات</th>
+                <th className="px-[18px] py-2.5 text-start">النطاق</th>
                 <th className="px-[18px] py-2.5 text-start">الحالة</th>
                 <th className="px-[18px] py-2.5 text-start"></th>
               </tr>
@@ -199,7 +231,10 @@ export function UsersAdminPage() {
                       <CodeText>
                         {u.roles.some((r) => r.role.unrestrictedStationAccess)
                           ? 'كل المحطات'
-                          : u.stationScope.map((s) => s.station.internalCode).join('، ') || '—'}
+                          : [
+                              ...u.stationScope.map((s) => s.station.internalCode),
+                              ...u.registrationStationScope.map((s) => s.registrationStation.internalCode),
+                            ].join('، ') || '—'}
                       </CodeText>
                     </td>
                     <td className="px-[18px] py-3">
@@ -220,7 +255,7 @@ export function UsersAdminPage() {
                   {expandedUserId === u.id && (
                     <tr className="border-b border-surface-alt bg-paper last:border-0">
                       <td colSpan={5} className="px-[18px] py-4">
-                        <div className="grid grid-cols-3 gap-6">
+                        <div className="grid grid-cols-4 gap-6">
                           <div>
                             <p className="mb-2 text-[12px] font-bold text-ink">الأدوار</p>
                             <div className="space-y-1.5">
@@ -241,6 +276,9 @@ export function UsersAdminPage() {
                                     {role.unrestrictedStationAccess && (
                                       <span className="text-[11px] text-ink-faint">(كل المحطات)</span>
                                     )}
+                                    {role.kind && (
+                                      <span className="text-[11px] text-ink-faint">({ROLE_SIDE_LABELS[role.kind]})</span>
+                                    )}
                                   </label>
                                 );
                               })}
@@ -260,6 +298,36 @@ export function UsersAdminPage() {
                                         e.target.checked
                                           ? addScope.mutate({ userId: u.id, stationId: station.id })
                                           : removeScope.mutate({ userId: u.id, stationId: station.id })
+                                      }
+                                    />
+                                    <LtrText>{station.internalCode}</LtrText> — {station.name}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="mb-2 text-[12px] font-bold text-ink">نطاق مكاتب التسجيل</p>
+                            <div className="space-y-1.5">
+                              {registrationStationsQuery.data?.length === 0 && (
+                                <p className="text-[11px] text-ink-faint">لا توجد مكاتب تسجيل بعد.</p>
+                              )}
+                              {registrationStationsQuery.data?.map((station) => {
+                                const held = u.registrationStationScope.some(
+                                  (s) => s.registrationStationId === station.id,
+                                );
+                                return (
+                                  <label key={station.id} className="flex items-center gap-2 text-[12px] text-ink">
+                                    <input
+                                      type="checkbox"
+                                      checked={held}
+                                      onChange={(e) =>
+                                        e.target.checked
+                                          ? addRegistrationScope.mutate({ userId: u.id, registrationStationId: station.id })
+                                          : removeRegistrationScope.mutate({
+                                              userId: u.id,
+                                              registrationStationId: station.id,
+                                            })
                                       }
                                     />
                                     <LtrText>{station.internalCode}</LtrText> — {station.name}

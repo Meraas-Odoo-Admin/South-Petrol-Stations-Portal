@@ -1,9 +1,17 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { RoleKind } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { CreateUserDto } from './dto/create-user.dto';
+
+const USER_INCLUDE = {
+  roles: { include: { role: true } },
+  stationScope: { include: { station: true } },
+  registrationStationScope: { include: { registrationStation: true } },
+  directPermissions: { include: { permission: true } },
+} as const;
 
 function toSafeUser<T extends { passwordHash: string }>(user: T) {
   const { passwordHash: _passwordHash, ...safe } = user;
@@ -56,11 +64,7 @@ export class UsersService {
 
   async findAll() {
     const users = await this.prisma.user.findMany({
-      include: {
-        roles: { include: { role: true } },
-        stationScope: { include: { station: true } },
-        directPermissions: { include: { permission: true } },
-      },
+      include: USER_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
     return users.map(toSafeUser);
@@ -69,11 +73,7 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: {
-        roles: { include: { role: true } },
-        stationScope: { include: { station: true } },
-        directPermissions: { include: { permission: true } },
-      },
+      include: USER_INCLUDE,
     });
     if (!user) {
       throw new NotFoundException('User not found.');
@@ -86,6 +86,9 @@ export class UsersService {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (!role) {
       throw new NotFoundException('Role not found.');
+    }
+    if (role.kind) {
+      await this.assertSeparation(userId, role.kind);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -139,6 +142,7 @@ export class UsersService {
     if (!station) {
       throw new NotFoundException('Station not found.');
     }
+    await this.assertSeparation(userId, 'PETROL_STATION');
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userStationScope.upsert({
@@ -237,6 +241,84 @@ export class UsersService {
     });
 
     return this.findOne(userId);
+  }
+
+  async addRegistrationStationScope(userId: string, registrationStationId: string, actorId: string) {
+    await this.ensureUserExists(userId);
+    const station = await this.prisma.registrationStation.findUnique({ where: { id: registrationStationId } });
+    if (!station) {
+      throw new NotFoundException('Registration station not found.');
+    }
+    await this.assertSeparation(userId, 'REGISTRATION');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userRegistrationStationScope.upsert({
+        where: { userId_registrationStationId: { userId, registrationStationId } },
+        create: { userId, registrationStationId },
+        update: {},
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'ADD_REGISTRATION_STATION_SCOPE',
+          entityType: 'User',
+          entityId: userId,
+          newValue: { registrationStationId, internalCode: station.internalCode },
+        },
+        tx,
+      );
+    });
+
+    return this.findOne(userId);
+  }
+
+  async removeRegistrationStationScope(userId: string, registrationStationId: string, actorId: string) {
+    await this.ensureUserExists(userId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userRegistrationStationScope.deleteMany({ where: { userId, registrationStationId } });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'REMOVE_REGISTRATION_STATION_SCOPE',
+          entityType: 'User',
+          entityId: userId,
+          oldValue: { registrationStationId },
+        },
+        tx,
+      );
+    });
+
+    return this.findOne(userId);
+  }
+
+  // Registration pivot, phase 2 — separation of duties: the person who
+  // creates a vehicle's identity must never be the one recording its fuel.
+  // A user is on the PETROL_STATION side if they hold a role of that kind
+  // or any petrol-station scope, and on the REGISTRATION side likewise;
+  // anything that would put them on both is refused. Decided from
+  // Role.kind (data), never from role names (CLAUDE.md rule 2). Admin
+  // roles have no kind and sit above both sides.
+  private async assertSeparation(userId: string, adding: RoleKind) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        roles: { select: { role: { select: { name: true, kind: true } } } },
+        _count: { select: { stationScope: true, registrationStationScope: true } },
+      },
+    });
+    const other: RoleKind = adding === 'PETROL_STATION' ? 'REGISTRATION' : 'PETROL_STATION';
+    const conflictingRole = user.roles.find((r) => r.role.kind === other)?.role.name ?? null;
+    const hasOtherScope =
+      other === 'REGISTRATION' ? user._count.registrationStationScope > 0 : user._count.stationScope > 0;
+    if (conflictingRole || hasOtherScope) {
+      // Machine-checkable marker (the admin screen maps it to Arabic) plus
+      // which side the user is already on and why.
+      throw new ConflictException({
+        message: 'ROLE_SEPARATION_CONFLICT',
+        details: { existingSide: other, requestedSide: adding, conflictingRole },
+      });
+    }
   }
 
   private async ensureUserExists(userId: string) {
