@@ -50,8 +50,14 @@ WORKDIR /app
 # not just when `prisma generate` picked which binary to ship (see the
 # deps stage's own comment) — omitting it here made the container crash-
 # loop on every startup in testing.
-RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+# chromium (registration pivot, phase 3): the API renders the printed
+# vehicle card to PDF with headless Chromium, driven by playwright-core.
+# Debian's package, not Playwright's own browser download — the image
+# never fetches a browser at runtime. Fonts need nothing extra: the card
+# template embeds the bundled Cairo files (apps/api/assets/fonts).
+RUN apt-get update && apt-get install -y --no-install-recommends openssl chromium \
   && rm -rf /var/lib/apt/lists/*
+ENV CARD_CHROMIUM_PATH=/usr/bin/chromium
 # Runs as a dedicated non-root user — the API needs no privileged port
 # (listens on 3000) and no reason to hold root inside the container.
 # -m gives it a real home directory; some npx/prisma runs want a
@@ -60,6 +66,10 @@ RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs --create-home nestjs
 COPY --from=build --chown=nestjs:nodejs /deploy .
 USER nestjs
+# Render a real test card at BUILD time: Debian's chromium and
+# playwright-core are versioned separately, and a pair that can't work
+# together must break the image build, not a registration desk.
+RUN node dist/cards/render/render-check.js
 EXPOSE 3000
 # node's own built-in fetch (Node 22) — avoids installing curl/wget just
 # for this. 127.0.0.1, not localhost — this base image resolves

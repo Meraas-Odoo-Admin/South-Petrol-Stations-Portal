@@ -55,6 +55,18 @@ export function MunicipalitiesAdminPage() {
     onError: (err) => setError(adminErrorMessage(err, 'تعذر تغيير حالة البلدية.')),
   });
 
+  const codeMutation = useMutation({
+    mutationFn: (payload: { id: string; code: string }) => apiClient.patch(`/municipalities/${payload.id}`, { code: payload.code }),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => {
+      setError(adminErrorMessage(err, 'رمز البلدية يجب أن يكون من 2 إلى 5 أحرف إنجليزية كبيرة.'));
+      invalidate();
+    },
+  });
+
   return (
     <div className="space-y-4">
       {showCreate && (
@@ -129,6 +141,7 @@ export function MunicipalitiesAdminPage() {
               <thead>
                 <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">البلدية</th>
+                  <th className="px-[18px] py-2.5 text-start">رمز البطاقات</th>
                   <th className="px-[18px] py-2.5 text-start">الحالة</th>
                   <th className="px-[18px] py-2.5 text-start">الجهة الأمنية</th>
                   <th className="px-[18px] py-2.5 text-start"></th>
@@ -138,6 +151,21 @@ export function MunicipalitiesAdminPage() {
                 {data.map((m) => (
                   <tr key={m.id} className="border-b border-surface-alt last:border-0">
                     <td className="px-[18px] py-3 font-bold text-ink">{m.name}</td>
+                    <td className="px-[18px] py-3">
+                      {/* Card-number prefix: SBH → cards read SBH-7K2M9Q4X. */}
+                      <input
+                        defaultValue={m.code ?? ''}
+                        placeholder="—"
+                        dir="ltr"
+                        maxLength={5}
+                        onBlur={(e) => {
+                          const code = e.target.value.trim().toUpperCase();
+                          if (code && code !== (m.code ?? '')) codeMutation.mutate({ id: m.id, code });
+                        }}
+                        className={`${inputClass} w-20 font-mono uppercase`}
+                        aria-label="رمز البطاقات"
+                      />
+                    </td>
                     <td className="px-[18px] py-3">
                       <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'}>
                         {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}

@@ -102,6 +102,10 @@ enum StationOwnershipType {
 model Municipality {
   id                   String                @id @default(cuid())
   name                 String                @unique
+  // Registration pivot, phase 3: short uppercase prefix for card numbers
+  // issued in this municipality (سبها → SBH, so cards read SBH-7K2M9Q4X).
+  // Optional until set; a card can't be issued in a municipality without one.
+  code                 String?               @unique
   isActive             Boolean               @default(true) // No longer used — superseded by `status` in Phase 1; kept so migrations stay additive.
   // PREPARING: being set up — its stations are visible only on admin
   // screens (holders of stations:manage) and no fill-up can be recorded
@@ -148,8 +152,87 @@ model RegistrationStation {
   statusNote         String?
   userScopes         UserRegistrationStationScope[]
   vehiclesRegistered Vehicle[]
+  desks              RegistrationDesk[]
+  cardsIssued        VehicleCard[]
   createdAt          DateTime                       @default(now())
   updatedAt          DateTime                       @updatedAt
+}
+
+// Registration pivot, phase 3: a desk at a registration station, with the
+// card printer attached to its computer. Staff pick their desk once per
+// device; every card records the desk it was issued at.
+model RegistrationDesk {
+  id                    String              @id @default(cuid())
+  registrationStationId String
+  registrationStation   RegistrationStation @relation(fields: [registrationStationId], references: [id])
+  name                  String
+  printerModel          String?
+  printerSerial         String?
+  isActive              Boolean             @default(true)
+  cardsIssued           VehicleCard[]
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([registrationStationId, name])
+}
+
+// Registration pivot, phase 3: the printed vehicle card (plan §6). The QR
+// on the card carries cardNumber ONLY — never the vehicle's internalCode,
+// plate, a URL or a name. A lost/replaced/cancelled card stops working
+// without touching the vehicle's identity.
+model VehicleCard {
+  id                    String                 @id @default(cuid())
+  // Random, not sequential: <municipality code>-<8 chars from an alphabet
+  // with no look-alikes (no 0/O, no 1/I/L)>, e.g. SBH-7K2M9Q4X.
+  cardNumber            String                 @unique
+  vehicleId             String
+  vehicle               Vehicle                @relation(fields: [vehicleId], references: [id])
+  registrationStationId String
+  registrationStation   RegistrationStation    @relation(fields: [registrationStationId], references: [id])
+  deskId                String
+  desk                  RegistrationDesk       @relation(fields: [deskId], references: [id])
+  issuedById            String
+  issuedBy              User                   @relation("VehicleCardIssuedBy", fields: [issuedById], references: [id])
+  issuedAt              DateTime               @default(now())
+  reason                VehicleCardIssueReason
+  reasonNote            String?
+  status                VehicleCardStatus      @default(ACTIVE)
+  // Equals vehicleId while ACTIVE, NULL otherwise. The unique index on it
+  // is what enforces "only one active card per vehicle" in the database
+  // (Postgres allows any number of NULLs in a unique column) — a partial
+  // unique index can't be expressed in the Prisma schema.
+  activeForVehicleId    String?                @unique
+  replacedAt            DateTime?
+  cancelledAt           DateTime?
+  cancelledById         String?
+  cancelledBy           User?                  @relation("VehicleCardCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason          String?
+  // Snapshot of exactly what was printed. A reprint regenerates the PDF from
+  // these (so it's always identical and no PDF is stored), and "needs
+  // reissue" is simply: printedPlate/printedVehicleLine no longer match
+  // the vehicle's current plate/make/model/colour.
+  printedPlate          String
+  printedVehicleLine    String
+  printedOfficeName     String
+  printedIssueDate      String // YYYY-MM-DD, Africa/Tripoli
+  printedStationCode    String
+  createdAt             DateTime               @default(now())
+
+  @@index([vehicleId, issuedAt])
+}
+
+enum VehicleCardIssueReason {
+  FIRST_ISSUE // أول بطاقة
+  LOST // بدل فاقد
+  DAMAGED // بدل تالف
+  FAILED_PRINT // إعادة طباعة بعد فشل الطباعة
+  DETAILS_CHANGED // تغيّرت البيانات المطبوعة
+}
+
+enum VehicleCardStatus {
+  ACTIVE
+  REPLACED
+  CANCELLED
 }
 
 // Fixed, not Settings-managed — registration is refused unless ACTIVE.
@@ -300,6 +383,8 @@ model User {
   permissionsGranted           UserPermission[]               @relation("UserPermissionGrantedBy")
   registrationStationScope     UserRegistrationStationScope[] // same semantics as stationScope, for registration stations
   registeredVehicles           Vehicle[]                      @relation("VehicleRegisteredBy")
+  cardsIssued                  VehicleCard[]                  @relation("VehicleCardIssuedBy")
+  cardsCancelled               VehicleCard[]                  @relation("VehicleCardCancelledBy")
   stationScope                 UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
   refreshTokens                RefreshToken[]
   recordedFillUps              FillUpTransaction[]            @relation("RecordedBy")
@@ -524,6 +609,7 @@ model Vehicle {
   drivers                           DriverVehicle[]
   fillUps                           FillUpTransaction[]
   standingExceptions                StandingException[]
+  cards                             VehicleCard[]
   createdAt                         DateTime                @default(now())
   updatedAt                         DateTime                @updatedAt
 }

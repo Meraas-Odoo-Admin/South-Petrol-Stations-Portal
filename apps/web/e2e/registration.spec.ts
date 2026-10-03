@@ -42,6 +42,27 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
   await expect(page.getByTestId('registration-success')).toContainText('تم تسجيل المركبة');
   await expect(page.getByTestId('registration-success')).toContainText(ownerName);
 
+  // ── Phase 3: issue and print the card at the desk ─────────────────
+  // First visit on this device: pick the desk (then it's remembered).
+  await page.getByTestId('card-desk-select').selectOption({ label: `${fixtures.deskName} — PW test printer` });
+  await expect(page.getByTestId('card-desk-current')).toHaveText(fixtures.deskName);
+  await page.getByTestId('card-issue').click();
+  const firstNumber = (await page.getByTestId('card-issued-number').innerText()).trim();
+  expect(firstNumber).toMatch(/^SBH-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+  await expect(page.getByTestId('card-preview-image')).toBeVisible();
+  await page.getByTestId('card-print').click();
+
+  // "Was it printed correctly?" — No: that card is cancelled and a new
+  // number is issued and printed straight away.
+  await expect(page.getByTestId('card-print-confirm')).toContainText('هل طُبعت البطاقة بشكل سليم؟');
+  await page.getByTestId('card-print-failed').click();
+  await expect(page.getByTestId('card-issued-number')).not.toHaveText(firstNumber);
+  const secondNumber = (await page.getByTestId('card-issued-number').innerText()).trim();
+  expect(secondNumber).toMatch(/^SBH-/);
+  await expect(page.getByTestId('card-print-confirm')).toBeVisible();
+  await page.getByTestId('card-print-ok').click();
+  await expect(page.getByTestId('card-done')).toBeVisible();
+
   // ── Same plate again, for the owner just registered: caught ──────────
   await page.getByRole('button', { name: 'تسجيل مركبة أخرى' }).click();
   await page.getByTestId('registration-identity-input-box-0').click();

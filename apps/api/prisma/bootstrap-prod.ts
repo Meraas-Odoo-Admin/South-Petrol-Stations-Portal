@@ -71,8 +71,8 @@ async function main() {
   // this deployment's intended state for سبها.
   const sabha = await prisma.municipality.upsert({
     where: { name: 'سبها' },
-    create: { name: 'سبها', status: 'LIVE' },
-    update: { status: 'LIVE' },
+    create: { name: 'سبها', status: 'LIVE', code: 'SBH' },
+    update: { status: 'LIVE', code: 'SBH' },
   });
   await prisma.securityAuthority.upsert({
     where: { name: 'مديرية أمن سبها' },

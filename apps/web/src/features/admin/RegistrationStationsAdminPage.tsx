@@ -8,6 +8,7 @@ import { CodeText } from '../../components/design/CodeText';
 import { LtrText } from '../../components/LtrText';
 import type { MunicipalityRef } from '../stations/types';
 import { adminErrorMessage } from './adminErrors';
+import { RegistrationDesksEditor } from './RegistrationDesksEditor';
 
 type RegistrationStationStatus = 'ACTIVE' | 'TEMPORARILY_CLOSED' | 'CLOSED';
 
@@ -212,6 +213,7 @@ export function RegistrationStationsAdminPage() {
   const [createValues, setCreateValues] = useState<FormValues>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<FormValues>(EMPTY_FORM);
+  const [desksOpenId, setDesksOpenId] = useState<string | null>(null);
 
   const stationsQuery = useQuery({
     queryKey: ['registration-stations'],
@@ -330,18 +332,31 @@ export function RegistrationStationsAdminPage() {
                       {station.statusNote && station.status !== 'ACTIVE' && <span>السبب: {station.statusNote}</span>}
                     </div>
                   </div>
-                  <PillButton
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setError(null);
-                      setEditValues(toForm(station));
-                      setEditingId(station.id);
-                    }}
-                  >
-                    تعديل
-                  </PillButton>
+                  <span className="flex gap-1.5">
+                    <PillButton
+                      variant="ghost"
+                      size="sm"
+                      data-testid="registration-station-desks-toggle"
+                      onClick={() => setDesksOpenId((cur) => (cur === station.id ? null : station.id))}
+                    >
+                      {desksOpenId === station.id ? 'إخفاء المكاتب' : 'المكاتب والطابعات'}
+                    </PillButton>
+                    <PillButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setError(null);
+                        setEditValues(toForm(station));
+                        setEditingId(station.id);
+                      }}
+                    >
+                      تعديل
+                    </PillButton>
+                  </span>
                 </div>
+              )}
+              {desksOpenId === station.id && editingId !== station.id && (
+                <RegistrationDesksEditor registrationStationId={station.id} />
               )}
             </li>
           ))}

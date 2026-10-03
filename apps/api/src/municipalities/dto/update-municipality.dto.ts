@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { MunicipalityStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 export class UpdateMunicipalityDto {
   @ApiProperty({ required: false })
@@ -25,4 +25,11 @@ export class UpdateMunicipalityDto {
   @IsOptional()
   @IsString()
   confirmName?: string;
+
+  // Registration pivot, phase 3: card-number prefix (SBH-7K2M9Q4X). 2–5
+  // uppercase letters, unique. Changing it only affects cards issued after.
+  @ApiProperty({ required: false, example: 'SBH' })
+  @IsOptional()
+  @Matches(/^[A-Z]{2,5}$/, { message: 'code must be 2-5 uppercase letters.' })
+  code?: string;
 }

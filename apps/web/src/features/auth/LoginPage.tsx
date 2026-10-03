@@ -115,7 +115,7 @@ export function LoginPage() {
       <div className="flex w-full max-w-[1140px] flex-col overflow-hidden bg-surface shadow-lg lg:h-[640px] lg:flex-row lg:rounded-lg">
         {/* Mobile: brand header */}
         <div className="flex flex-col items-center gap-3.5 bg-primary py-9 text-white lg:hidden">
-          <BrandMark />
+          <BrandMark variant="white" size={44} />
           <div className="text-center">
             <p className="text-[21px] font-black">{APP_NAME}</p>
             <p className="mt-1 text-[12px] font-medium opacity-90">{APP_TAGLINE}</p>

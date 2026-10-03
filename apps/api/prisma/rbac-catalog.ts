@@ -18,6 +18,11 @@ export const PERMISSIONS = [
   // Registration pivot, phase 2: police-station registration desks.
   { key: 'registration_stations:read', description: 'View registration stations (subject to registration-station scope)' },
   { key: 'registration_stations:manage', description: 'Create/update registration stations' },
+  // Registration pivot, phase 3: the printed vehicle card.
+  { key: 'cards:read', description: "View a vehicle's cards and card history" },
+  { key: 'cards:issue', description: 'Issue, print and reprint vehicle cards at a registration station' },
+  { key: 'cards:cancel', description: 'Cancel a vehicle card without replacing it' },
+  { key: 'cards:scan', description: 'Look up a vehicle by scanning its card at the pump' },
   { key: 'stations:read', description: 'View stations (subject to station scope)' },
   { key: 'stations:manage', description: 'Create/update stations' },
   // Registration pivot, phase 1: stations in a PREPARING municipality are
@@ -126,6 +131,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     // The fill-up screen's plate lookup — read-only, no registration.
     'vehicles:read',
     'vehicle_types:read',
+    'cards:scan',
     'fillups:create',
     'fillups:record_exception',
   ],
@@ -138,6 +144,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:read',
     'stations:manage',
     'vehicles:read',
+    'cards:scan',
     'fillups:create',
     'fillups:update',
     'fillups:approve_exception',
@@ -159,6 +166,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'owners:manage',
     'vehicles:request_change',
     'owners:request_change',
+    'cards:read',
+    'cards:issue',
   ],
   // Everything a registration employee can do, plus approving those
   // corrections and revealing full owner identity numbers. No fillups:*.
@@ -174,6 +183,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicles:approve_change',
     'owners:approve_change',
     'owners:reveal_identity',
+    'cards:read',
+    'cards:issue',
+    'cards:cancel',
   ],
   directorate_admin: [
     'companies:read',
@@ -187,6 +199,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:view_preparing',
     'registration_stations:read',
     'registration_stations:manage',
+    'cards:read',
+    'cards:cancel',
+    'cards:scan',
     'reports:view_all_stations',
     'reports:view',
     'owners:read',

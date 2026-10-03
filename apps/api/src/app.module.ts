@@ -15,6 +15,7 @@ import { RoutesModule } from './routes/routes.module';
 import { SecurityAuthoritiesModule } from './security-authorities/security-authorities.module';
 import { StationsModule } from './stations/stations.module';
 import { RegistrationStationsModule } from './registration-stations/registration-stations.module';
+import { CardsModule } from './cards/cards.module';
 import { OwnersModule } from './owners/owners.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
@@ -49,6 +50,7 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     SecurityAuthoritiesModule,
     StationsModule,
     RegistrationStationsModule,
+    CardsModule,
     OwnersModule,
     VehiclesModule,
     VehicleTypesModule,

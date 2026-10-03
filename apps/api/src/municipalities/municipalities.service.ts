@@ -77,6 +77,13 @@ export class MunicipalitiesService {
       }
     }
 
+    if (dto.code && dto.code !== before.code) {
+      const taken = await this.prisma.municipality.findUnique({ where: { code: dto.code } });
+      if (taken) {
+        throw new ConflictException('MUNICIPALITY_CODE_TAKEN');
+      }
+    }
+
     const { confirmName: _confirmName, ...data } = dto;
     const municipality = await this.prisma.municipality.update({
       where: { id },
@@ -89,8 +96,8 @@ export class MunicipalitiesService {
       action: 'UPDATE',
       entityType: 'Municipality',
       entityId: municipality.id,
-      oldValue: { name: before.name, status: before.status },
-      newValue: { name: municipality.name, status: municipality.status },
+      oldValue: { name: before.name, status: before.status, code: before.code },
+      newValue: { name: municipality.name, status: municipality.status, code: municipality.code },
     });
 
     return municipality;

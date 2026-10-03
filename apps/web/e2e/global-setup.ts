@@ -1,4 +1,5 @@
 import { existsSync, rmSync, writeFileSync } from 'fs';
+import { chromium } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
@@ -39,6 +40,11 @@ export interface Fixtures {
   // A second registered vehicle with no fill-up history — the clean path.
   cleanVehicleCurrentPlate: string;
   cleanVehicleOwnerFullName: string;
+  // Phase 3: a vehicle with an ACTIVE printed card, streamed to the scan
+  // test through a fake camera (FAKE_CAMERA_PATH).
+  scanVehicleCurrentPlate: string;
+  scanCardNumber: string;
+  deskName: string;
   supervisorUsername: string;
   supervisorPassword: string;
   adminUsername: string;
@@ -74,6 +80,42 @@ async function login(username: string, password: string, attempt = 1): Promise<{
     }
     throw error;
   }
+}
+
+// Chromium's fake camera (--use-file-for-fake-video-capture) plays a raw
+// Y4M video. Build one from the card's own rendered preview: the part of
+// the card holding the QR and plate, on white, as grey-scale I420 frames.
+export const FAKE_CAMERA_PATH = path.join(__dirname, '.fake-camera.y4m');
+
+async function writeFakeCamera(cardPng: Buffer): Promise<void> {
+  const width = 640;
+  const height = 480;
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const luma = (await page.evaluate(
+    `(async () => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,${cardPng.toString('base64')}';
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = ${width}; c.height = ${height};
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, ${width}, ${height});
+      // Source crop: card y 230..870 (QR + plate), scaled to the frame height.
+      const sy = 230, sh = 640, scale = ${height} / sh, sw = 638;
+      x.drawImage(img, 0, sy, sw, sh, (${width} - sw * scale) / 2, 0, sw * scale, ${height});
+      const d = x.getImageData(0, 0, ${width}, ${height}).data;
+      const y = new Array(${width * height});
+      for (let i = 0; i < y.length; i++) y[i] = Math.round(0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]);
+      return y;
+    })()`,
+  )) as number[];
+  await browser.close();
+  const yPlane = Buffer.from(luma);
+  const chroma = Buffer.alloc((width / 2) * (height / 2), 128);
+  const frame = Buffer.concat([Buffer.from('FRAME\n'), yPlane, chroma, chroma]);
+  const header = Buffer.from(`YUV4MPEG2 W${width} H${height} F10:1 Ip A1:1 C420jpeg\n`);
+  writeFileSync(FAKE_CAMERA_PATH, Buffer.concat([header, ...Array(10).fill(frame)]));
 }
 
 async function main() {
@@ -166,6 +208,36 @@ async function main() {
     { headers },
   );
 
+  // ── Phase 3: a desk, and a vehicle with a real printed card ────────
+  const deskName = `PW Desk ${runId}`;
+  const desk = await api.post<{ id: string }>(
+    `${API_BASE}/registration-stations/${registrationStation.data.id}/desks`,
+    { name: deskName, printerModel: 'PW test printer' },
+    { headers },
+  );
+  const scanOwner = await registerOwner(`PW Scan Owner ${runId}`, `1${randomDigits(11)}`);
+  const scanVehicle = await api.post(
+    `${API_BASE}/vehicles`,
+    {
+      registrationStationId: registrationStation.data.id,
+      currentPlate: `6-${randomDigits(7)}`,
+      ownerId: scanOwner.data.id,
+      model: 'تويوتا هايلكس',
+      color: 'أبيض',
+    },
+    { headers },
+  );
+  const scanCard = await api.post<{ id: string; cardNumber: string }>(
+    `${API_BASE}/vehicles/${scanVehicle.data.id}/cards`,
+    { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+    { headers },
+  );
+  const preview = await api.get<ArrayBuffer>(`${API_BASE}/cards/${scanCard.data.id}/preview`, {
+    headers,
+    responseType: 'arraybuffer',
+  });
+  await writeFakeCamera(Buffer.from(preview.data));
+
   // Fill-up history for the first vehicle — trips the gap rule in the
   // fill-up test and feeds the reports tests.
   await api.post(
@@ -244,6 +316,9 @@ async function main() {
     vehicleCurrentPlate: vehicle.data.currentPlate,
     cleanVehicleCurrentPlate: cleanVehicle.data.currentPlate,
     cleanVehicleOwnerFullName: cleanOwner.data.fullName,
+    scanVehicleCurrentPlate: scanVehicle.data.currentPlate,
+    scanCardNumber: scanCard.data.cardNumber,
+    deskName,
     supervisorUsername,
     supervisorPassword: RUN_PASSWORD,
     adminUsername,

@@ -835,7 +835,7 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
       }),
       prisma.vehicleOwner.findMany({
         where: {
-          OR: ['PW Test Owner ', 'PW Clean Owner ', 'PW Registered Owner ', 'PW Wizard Owner '].map((prefix) => ({
+          OR: ['PW Test Owner ', 'PW Clean Owner ', 'PW Registered Owner ', 'PW Wizard Owner ', 'PW Scan Owner '].map((prefix) => ({
             fullName: { startsWith: prefix },
           })),
         },
@@ -878,6 +878,10 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
     await prisma.vehicleChassisHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicleBookletHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicleChangeRequest.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
+    // Phase 3: cards reference vehicles and desks; desks reference stations.
+    await prisma.vehicleCard.deleteMany({
+      where: { OR: [{ vehicleId: { in: vehicleIds } }, { registrationStationId: { in: registrationStationIds } }] },
+    });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.vehicleOwner.deleteMany({ where: { id: { in: ownerIds } } });
     await prisma.userStationScope.deleteMany({
@@ -887,6 +891,7 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
       where: { OR: [{ registrationStationId: { in: registrationStationIds } }, { userId: { in: userIds } }] },
     });
     await prisma.station.deleteMany({ where: { id: { in: stationIds } } });
+    await prisma.registrationDesk.deleteMany({ where: { registrationStationId: { in: registrationStationIds } } });
     await prisma.registrationStation.deleteMany({ where: { id: { in: registrationStationIds } } });
     await prisma.company.deleteMany({ where: { id: { in: companyIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
@@ -921,10 +926,12 @@ async function main() {
   const municipalitiesByName = new Map<string, { id: string }>();
   for (const name of MUNICIPALITIES) {
     const status = LIVE_MUNICIPALITIES.has(name) ? ('LIVE' as const) : undefined;
+    // Phase 3: card-number prefix, for the live municipality only.
+    const code = name === 'سبها' ? 'SBH' : undefined;
     const municipality = await prisma.municipality.upsert({
       where: { name },
-      create: { name, status },
-      update: status ? { status } : {},
+      create: { name, status, code },
+      update: { ...(status ? { status } : {}), ...(code ? { code } : {}) },
     });
     municipalitiesByName.set(name, municipality);
   }
@@ -1148,6 +1155,13 @@ async function main() {
       address: 'سبها — عنوان تجريبي',
       workingHours: 'السبت–الخميس 8:00–14:00',
     },
+    update: {},
+  });
+
+  // Phase 3: one desk (with its card printer) at the seeded station.
+  await prisma.registrationDesk.upsert({
+    where: { registrationStationId_name: { registrationStationId: registrationStation.id, name: 'مكتب 1' } },
+    create: { registrationStationId: registrationStation.id, name: 'مكتب 1', printerModel: 'Test printer' },
     update: {},
   });
 

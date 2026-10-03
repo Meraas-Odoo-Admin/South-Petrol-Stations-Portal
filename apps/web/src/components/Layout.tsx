@@ -5,6 +5,7 @@ import { useAuth } from '../features/auth/AuthProvider';
 import { apiClient } from '../lib/apiClient';
 import { roleLabel } from '../lib/labels';
 import { APP_NAME } from '../lib/appInfo';
+import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
 import { OnboardingTour } from './OnboardingTour';
 
@@ -161,9 +162,12 @@ export function Layout() {
           a Playwright bounding-box measurement in the round-2 verification
           pass, not something a glance at the source would catch. */}
       <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-surface-alt bg-surface lg:flex">
-        <div className="px-5 py-6">
-          <p className="text-[17px] font-extrabold text-primary">{APP_NAME}</p>
-          <p className="text-[10.5px] font-medium text-ink-faint">مديرية أمن سبها</p>
+        <div className="flex items-center gap-2.5 px-5 py-6">
+          <BrandMark size={34} />
+          <div>
+            <p className="text-[17px] font-extrabold text-primary">{APP_NAME}</p>
+            <p className="text-[10.5px] font-medium text-ink-faint">مديرية أمن سبها</p>
+          </div>
         </div>
         <nav className="flex-1 space-y-0.5 px-3">
           {navItems.map((item) => (

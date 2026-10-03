@@ -19,6 +19,7 @@ apps/web/public/dev-ca.pem
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/e2e/.fixtures.json
+apps/web/e2e/.fake-camera.y4m
 
 # Not app code — see .gitignore for why these stay untracked too.
 Claude outputs/

@@ -104,6 +104,19 @@ describe('RBAC catalog sync (e2e)', () => {
       // Owner LOOKUP only where it's needed: the supervisor's daily-report
       // owner filter. The pump employee has no owner search at all.
       expect(ROLE_PERMISSIONS.station_supervisor).toContain('owners:read');
+      // Phase 3: the pump side scans cards, never issues, prints or cancels them.
+      for (const role of ['station_employee', 'station_supervisor']) {
+        expect(ROLE_PERMISSIONS[role]).toContain('cards:scan');
+        expect(ROLE_PERMISSIONS[role]!.filter((p) => ['cards:issue', 'cards:cancel'].includes(p))).toEqual([]);
+      }
+      // ...and the registration side issues cards but never scans at a pump.
+      for (const role of ['registration_employee', 'registration_supervisor']) {
+        expect(ROLE_PERMISSIONS[role]).toContain('cards:issue');
+        expect(ROLE_PERMISSIONS[role]).not.toContain('cards:scan');
+      }
+      // Cancelling without a replacement needs the registration supervisor.
+      expect(ROLE_PERMISSIONS.registration_employee).not.toContain('cards:cancel');
+      expect(ROLE_PERMISSIONS.registration_supervisor).toContain('cards:cancel');
       expect(ROLE_PERMISSIONS.station_employee).not.toContain('owners:read');
     });
   });

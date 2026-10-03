@@ -28,6 +28,7 @@ infra/.env.prod
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/e2e/.fixtures.json
+apps/web/e2e/.fake-camera.y4m
 
 # Dev-only verification screenshots, working notes, and the client design
 # handoff reference — not app code, no ongoing value once a round is

@@ -141,7 +141,7 @@ export function OnboardingTour() {
     <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-ink/40 p-4" data-testid="onboarding-tour">
       <div className="w-full max-w-sm animate-scale-in overflow-hidden rounded-lg bg-surface shadow-lg">
         <div className="flex flex-col items-center gap-2 bg-gradient-to-br from-primary to-primary-dark px-6 py-6 text-center text-white">
-          <BrandMark />
+          <BrandMark variant="white" />
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
             <Icon d={ICONS[current.icon]} size={20} />
           </span>

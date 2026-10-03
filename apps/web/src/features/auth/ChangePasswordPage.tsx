@@ -118,7 +118,7 @@ export function ChangePasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
       <div className="w-full max-w-[480px] overflow-hidden bg-surface shadow-lg lg:rounded-lg">
         <div className="flex flex-col items-center gap-3 bg-primary py-8 text-white lg:hidden">
-          <BrandMark />
+          <BrandMark variant="white" size={44} />
           <div className="text-center">
             <p className="text-[18px] font-black">{APP_NAME}</p>
             <p className="mt-1 text-[11px] font-medium opacity-90">{APP_TAGLINE}</p>

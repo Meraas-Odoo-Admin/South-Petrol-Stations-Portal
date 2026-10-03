@@ -32,7 +32,7 @@ import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { VehicleSearchSelect } from './VehicleSearchSelect';
 import { VehiclePreviewCard } from './VehiclePreviewCard';
 import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
-import { QrScanPanel } from '../../components/QrScanPanel';
+import { QrScanPanel, type ScannedCard } from '../../components/QrScanPanel';
 import { RULE_VIOLATION_MESSAGES, RULE_CHECK_LABELS, describeRuleCheck } from './ruleViolationMessages';
 import { useFuelPrices } from './useFuelPrice';
 import type { VehicleBasicInfo } from '../vehicles/types';
@@ -522,11 +522,17 @@ export function RecordFillUpPage() {
   // rendered when a camera could plausibly open at all (secure context +
   // getUserMedia present); a runtime failure AFTER tapping it is the
   // separate 'denied' state QrScanPanel itself handles.
-  const [qrScanOpen, setQrScanOpen] = useState(false);
-  const [cameraUnavailableHint, setCameraUnavailableHint] = useState(false);
+  //
+  // Registration pivot, phase 3: the plate step is SCAN-FIRST — it opens
+  // straight into the camera to read the vehicle's printed card; typing the
+  // plate is the small secondary route, for a damaged or missing card.
   const qrScanSupported =
     typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
-  const [scanVariant, setScanVariant] = useState<'phone' | 'desktop'>('phone');
+  const [plateEntryMode, setPlateEntryMode] = useState<'scan' | 'type'>(qrScanSupported ? 'scan' : 'type');
+  const [cameraUnavailableHint, setCameraUnavailableHint] = useState(false);
+  // Set only by a card scan: the match step then shows the big "is this the
+  // vehicle?" confirmation instead of the typed-plate preview.
+  const [scannedCard, setScannedCard] = useState<ScannedCard | null>(null);
 
   const fillUpForm = useForm<FillUpFormValues>({
     resolver: zodResolver(fillUpSchema),
@@ -822,7 +828,8 @@ export function RecordFillUpPage() {
     setMobileStep('plate');
     setPlateValue('');
     setShowManualSearchMobile(false);
-    setQrScanOpen(false);
+    setScannedCard(null);
+    setPlateEntryMode(qrScanSupported ? 'scan' : 'type');
     setCameraUnavailableHint(false);
     idempotencyKeyRef.current = newIdempotencyKey();
   }
@@ -1134,24 +1141,6 @@ export function RecordFillUpPage() {
 
         {mobileStep === 'plate' && (
           <Card className="relative p-4">
-            {qrScanOpen && (
-              <QrScanPanel
-                variant={scanVariant}
-                onResolved={(vehicle) => {
-                  // Reuse the existing plate pipeline rather than a
-                  // parallel resolve-and-jump: setting plateValue lets the
-                  // SAME plateLookupQuery -> matchedVehicle -> auto-advance
-                  // effect above (station-gating included) take it from
-                  // here, so this can never drift out of sync with the
-                  // next fix that effect gets.
-                  setCameraUnavailableHint(false);
-                  setQrScanOpen(false);
-                  setPlateValue(vehicle.currentPlate);
-                }}
-                onCancel={() => setQrScanOpen(false)}
-                onCameraUnavailable={() => setCameraUnavailableHint(true)}
-              />
-            )}
             {canViewAllStations && (
               <div className="mb-4">
                 <label className={fieldLabelClass}>المحطة</label>
@@ -1165,7 +1154,25 @@ export function RecordFillUpPage() {
                 )}
               </div>
             )}
-            {!showManualSearchMobile ? (
+            {plateEntryMode === 'scan' ? (
+              canViewAllStations && !fillUpForm.watch('stationId') ? (
+                <p className="text-center text-[12.5px] text-ink-soft">اختر المحطة أولًا، ثم امسح بطاقة المركبة.</p>
+              ) : (
+                <QrScanPanel
+                  variant="inline"
+                  autoStart
+                  onResolved={(card) => {
+                    setCameraUnavailableHint(false);
+                    setScannedCard(card);
+                    fillUpForm.setValue('vehicleId', card.vehicle.id, { shouldValidate: true });
+                    setSelectedVehicleLabel(formatLicensePlate(card.vehicle.currentPlate));
+                    setMobileStep('match');
+                  }}
+                  onCancel={() => setPlateEntryMode('type')}
+                  onCameraUnavailable={() => setCameraUnavailableHint(true)}
+                />
+              )
+            ) : !showManualSearchMobile ? (
               <>
                 <p className="mb-3 text-center text-[12px] text-ink-soft">اقرأ رقم اللوحة واكتبه</p>
                 <DigitBoxInput
@@ -1249,42 +1256,20 @@ export function RecordFillUpPage() {
                     "not registered", with no way to create it here (the
                     grace-period handling arrives in Phase 4). */}
                 {plateHasNoCandidates && plateComplete && <NotRegisteredNotice />}
-                {/* Round 15: scanning is a second, equal route to
-                    identify the vehicle — offered next to the digit-box
-                    entry, only when a camera could plausibly open at all
-                    (a runtime failure after tapping is QrScanPanel's own
-                    'denied' state, not this gate). */}
                 {qrScanSupported && (
-                  <div className="mt-4 flex items-center gap-3">
-                    <div className="h-px flex-1 bg-line" />
-                    <span className="text-[11px] font-bold text-ink-faint">أو</span>
-                    <div className="h-px flex-1 bg-line" />
-                  </div>
-                )}
-                {qrScanSupported && (
-                  <div
-                    className={`mt-4 rounded-md border-2 p-3.5 text-center ${
-                      cameraUnavailableHint ? 'border-accent bg-accent-100' : 'border-primary'
-                    }`}
+                  <PillButton
+                    variant="secondary"
+                    className="mt-4 w-full justify-center"
+                    data-testid="fillup-back-to-scan"
+                    onClick={() => setPlateEntryMode('scan')}
                   >
-                    <PillButton
-                      variant="secondary"
-                      className="w-full justify-center"
-                      data-testid="fillup-mobile-qr-scan-offer"
-                      onClick={() => {
-                        setScanVariant(window.innerWidth >= 640 ? 'desktop' : 'phone');
-                        setQrScanOpen(true);
-                      }}
-                    >
-                      امسح رمز المركبة
-                    </PillButton>
-                    <p className="mt-1.5 text-[11px] text-ink-soft">أسرع من الكتابة إن كان الرمز مع المالك</p>
-                    {cameraUnavailableHint && (
-                      <p className="mt-1.5 text-[11px] font-bold text-accent-dark">
-                        يمكنك تجربة المسح مرة أخرى بعد السماح بإذن الكاميرا من إعدادات الجهاز.
-                      </p>
-                    )}
-                  </div>
+                    العودة إلى مسح البطاقة
+                  </PillButton>
+                )}
+                {cameraUnavailableHint && (
+                  <p className="mt-1.5 text-center text-[11px] font-bold text-accent-dark">
+                    يمكنك تجربة المسح مرة أخرى بعد السماح بإذن الكاميرا من إعدادات الجهاز.
+                  </p>
                 )}
                 <button
                   type="button"
@@ -1317,7 +1302,20 @@ export function RecordFillUpPage() {
           </Card>
         )}
 
-        {mobileStep === 'match' && vehicleSelected && (
+        {mobileStep === 'match' && vehicleSelected && scannedCard?.vehicle.id === vehicleSelected && (
+          <ScanConfirmView
+            card={scannedCard}
+            onConfirm={() => setMobileStep('fuel')}
+            onReject={() => {
+              fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
+              setScannedCard(null);
+              setPlateEntryMode('scan');
+              setMobileStep('plate');
+            }}
+          />
+        )}
+
+        {mobileStep === 'match' && vehicleSelected && scannedCard?.vehicle.id !== vehicleSelected && (
           <Card className="p-4">
             <VehiclePreviewCard vehicleId={vehicleSelected} idSuffix="-mobile" />
             <PillButton
@@ -1505,6 +1503,38 @@ export function RecordFillUpPage() {
 // unexpected error, and per the code-leak audit it must not surface the raw
 // English message in this Arabic UI even then — EXCEPT the one
 // machine-checkable marker below, which is deliberately not prose.
+// Registration pivot, phase 3: after a card scan, the employee compares the
+// card's vehicle with the car in front of them before anything is recorded
+// — plate very large, then make/model and colour — and must tap the big
+// confirm button. No fill-up is recorded without that tap.
+function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onConfirm: () => void; onReject: () => void }) {
+  const makeLine = [card.vehicle.model, card.vehicle.color].filter(Boolean).join(' — ');
+  return (
+    <Card className="p-5 text-center" data-testid="fillup-scan-confirm">
+      <p className="text-[12px] font-bold text-ink-soft">هل هذه هي المركبة التي أمامك؟</p>
+      <p className="mt-3 text-[44px] font-black leading-none text-ink" data-testid="fillup-scan-confirm-plate">
+        <LtrText>{formatLicensePlate(card.vehicle.currentPlate)}</LtrText>
+      </p>
+      {makeLine && <p className="mt-3 text-[18px] font-bold text-ink">{makeLine}</p>}
+      {card.vehicle.vehicleType && <p className="mt-1 text-[12.5px] text-ink-soft">{card.vehicle.vehicleType.name}</p>}
+      {card.needsReissue && (
+        <div className="mt-4 rounded-sm bg-accent-100 p-3" data-testid="fillup-scan-needs-reissue">
+          <p className="text-[13px] font-bold text-accent-dark">يجب تجديد هذه البطاقة</p>
+          <p className="mt-1 text-[12px] text-ink-soft">
+            تغيّرت بيانات المركبة منذ طباعتها. التعبئة مسموحة، واطلب من المالك مراجعة مكتب التسجيل لاستلام بطاقة محدَّثة.
+          </p>
+        </div>
+      )}
+      <PillButton data-testid="fillup-scan-confirm-yes" className="mt-5 h-14 w-full text-[16px]" onClick={onConfirm}>
+        نعم، هذه هي المركبة
+      </PillButton>
+      <button type="button" onClick={onReject} className="mt-3 block w-full text-center text-[12px] font-bold text-ink-soft">
+        ليست هذه المركبة — مسح مرة أخرى
+      </button>
+    </Card>
+  );
+}
+
 // Registration pivot, phase 2: what the pump screen shows for a plate the
 // registry doesn't have. Shared by the plate step and the manual search.
 export function NotRegisteredNotice() {

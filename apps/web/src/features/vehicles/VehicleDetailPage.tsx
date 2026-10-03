@@ -15,7 +15,7 @@ import {
   PROVISIONAL_OWNER_VARIANT,
 } from '../../lib/labels';
 import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
-import { VehicleQrPanel } from '../../components/VehicleQrPanel';
+import { VehicleCardPanel } from '../cards/VehicleCardPanel';
 import { Pagination } from '../../components/Pagination';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
@@ -36,14 +36,14 @@ type ChangeFormType = 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | 'OWNER_CHANGE' | 'PL
 
 const TAKE = 20;
 
-type MobileTab = 'identity' | 'plates' | 'qr' | 'history';
+type MobileTab = 'identity' | 'plates' | 'card' | 'history';
 
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
   { id: 'identity', label: 'الهوية' },
   { id: 'plates', label: 'سجل اللوحات' },
   // Round 15: "third tab beside «الهوية» و«اللوحات»" per
   // design/design_handoff_fuel_control_system/README.md §"Round 3".
-  { id: 'qr', label: 'الرمز' },
+  { id: 'card', label: 'البطاقة' },
   { id: 'history', label: 'سجل التعبئات' },
 ];
 
@@ -53,6 +53,7 @@ export function VehicleDetailPage() {
   const permissions = user?.permissions ?? [];
   const canRequestChange = hasPermission('vehicles:request_change');
   const canEditVehicle = hasPermission('vehicles:manage');
+  const canReadCards = hasPermission('cards:read');
   const canEditOwner = hasPermission('owners:manage');
   const canRequestOwnerChange = hasPermission('owners:request_change');
   const [skip, setSkip] = useState(0);
@@ -105,7 +106,7 @@ export function VehicleDetailPage() {
       <PageHeader title={vehicle.internalCode} subtitle={formatLicensePlate(vehicle.currentPlate)} />
 
       <div className="mb-4 flex gap-1.5 overflow-x-auto sm:hidden">
-        {MOBILE_TABS.map((tab) => (
+        {MOBILE_TABS.filter((tab) => tab.id !== 'card' || canReadCards).map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -131,7 +132,7 @@ export function VehicleDetailPage() {
             narrow column. Also folds the old separate, near-empty "بيانات
             المركبة" edit-toggle card into this same card's header (an
             action, not its own section) — one fewer nearly-blank card. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
+        <div className={`grid grid-cols-1 gap-4 ${canReadCards ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
           <Card className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}>
             <div className="flex items-center justify-between gap-3 border-b border-surface-alt p-4">
               <div className="flex min-w-0 items-center gap-3">
@@ -229,9 +230,11 @@ export function VehicleDetailPage() {
             )}
           </Card>
 
-          <VehicleQrPanel
-            internalCode={vehicle.internalCode}
-            className={`animate-fade-in-up ${mobileTab === 'qr' ? '' : 'hidden sm:!block'}`}
+          {/* Registration pivot, phase 3: the printed card replaces the old
+              on-screen QR (which encoded internalCode — no longer used). */}
+          <VehicleCardPanel
+            vehicleId={vehicle.id}
+            className={`animate-fade-in-up ${mobileTab === 'card' ? '' : 'hidden sm:!block'}`}
             style={{ animationDelay: '60ms' }}
           />
         </div>

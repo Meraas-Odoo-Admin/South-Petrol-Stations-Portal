@@ -42,6 +42,12 @@ test('supervisor: an unknown plate is "not registered" with no way to create it,
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId('fillup-mobile-wizard')).toBeVisible();
 
+  // Phase 3: the plate step opens straight into the card scanner. This
+  // browser has no camera, so it lands on the scanner's "can't open the
+  // camera" state; typing the plate is the secondary route.
+  await expect(page.getByTestId('qr-scan-panel')).toBeVisible();
+  await page.getByTestId('fillup-type-plate-instead').first().click();
+
   // Step 1 — plate: boxed digit entry. Only the RIGHT digit of the 2-box
   // city-code group is mandatory: a single digit stays put in box-0 while
   // the group is active, and migrates to box-1 (dash-adjacent) once focus
@@ -124,6 +130,7 @@ test('supervisor: an unknown plate is "not registered" with no way to create it,
   // starting a fresh mobile-only test.
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByTestId('fillup-mobile-wizard')).toBeVisible();
+  await page.getByTestId('fillup-type-plate-instead').first().click();
 
   // Plate step: fall back to the manual search-by-plate/chassis path
   // (same one the mobile wizard offers) rather than the digit-box plate

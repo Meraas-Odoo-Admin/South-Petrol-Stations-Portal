@@ -10,7 +10,7 @@ This document is the background every phase prompt refers to. Sections 1–14 ar
 |---|---|---|
 | 1 | Municipality foundation: one security authority per municipality, preparing/live status, municipality stamped on every fill-up, per-municipality rule engine | Built on `feat/p1-municipality-foundation`; decisions logged in `OPEN_ITEMS.md` #53 |
 | 2 | New roles and permission clean-up, registration stations, registration screen, removing vehicle creation and WhatsApp sharing from the pump side, admin screens for municipalities and authorities | Built on `feat/p2-roles-registration-stations`; decisions logged in `OPEN_ITEMS.md` #54 |
-| 3 | The card: card record, QR holds the card number, card PDF, printing flow, desks and printers, card panel on the vehicle page, scan-first fill-up screen | Waits for the final card design and logo |
+| 3 | The card: card record, QR holds the card number, card PDF, printing flow, desks and printers, card panel on the vehicle page, scan-first fill-up screen | Built on `feat/p3-vehicle-card`; decisions logged in `OPEN_ITEMS.md` #55. Kiosk printing on real hardware and scanning a printed plastic card in noon and night light are still to be tested by the client |
 | 4 | Grace period, awareness month and enforcement dates; fill-ups by typed plate for vehicles without a card; emergency override; registration-station monitoring reports; supervisors managing their own employees' accounts | — |
 | 5 | Go-live clean-up: remove non-Sabha data, clear test data, make the municipality columns required in the database | Waits on the client's list of which place names belong to Sabha |
 

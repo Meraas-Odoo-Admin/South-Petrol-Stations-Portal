@@ -11,6 +11,8 @@ const MESSAGES: Record<string, string> = {
   MUNICIPALITY_HAS_AUTHORITY: 'لهذه البلدية جهة أمنية مسبقًا — لكل بلدية جهة أمنية واحدة فقط.',
   AUTHORITY_OF_LIVE_MUNICIPALITY: 'هذه الجهة تشرف على بلدية مفعّلة، ولا يمكن نقلها إلى بلدية أخرى.',
   SECURITY_AUTHORITY_NAME_TAKEN: 'توجد جهة أمنية بهذا الاسم مسبقًا.',
+  MUNICIPALITY_CODE_TAKEN: 'هذا الرمز مستخدم لبلدية أخرى.',
+  DESK_NAME_TAKEN: 'يوجد مكتب بهذا الاسم في مكتب التسجيل هذا.',
 };
 
 interface SeparationDetails {

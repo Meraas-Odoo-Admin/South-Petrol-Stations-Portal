@@ -20,6 +20,8 @@ export type MunicipalityStatus = 'PREPARING' | 'LIVE';
 
 export interface MunicipalityRef extends LookupRef {
   status: MunicipalityStatus;
+  // Phase 3: card-number prefix (e.g. SBH); null until an admin sets it.
+  code?: string | null;
   securityAuthority: LookupRef | null;
 }
 

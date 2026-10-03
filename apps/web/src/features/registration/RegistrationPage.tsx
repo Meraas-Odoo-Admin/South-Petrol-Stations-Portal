@@ -23,6 +23,7 @@ import { DigitBoxInput } from '../../components/DigitBoxInput';
 import { VehicleBrandPicker } from '../../components/VehicleBrandPicker';
 import { LtrText } from '../../components/LtrText';
 import { registrationErrorMessage } from './registrationErrors';
+import { CardIssueFlow } from '../cards/CardIssueFlow';
 
 type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE';
 type DuplicateField = 'currentPlate' | 'chassisNumber' | 'registrationBooklet';
@@ -189,7 +190,11 @@ export function RegistrationPage() {
   const [registrationBooklet, setRegistrationBooklet] = useState('');
   const [vehicleError, setVehicleError] = useState<string | null>(null);
   const [serverConflicts, setServerConflicts] = useState<VehicleDuplicate[] | null>(null);
-  const [registered, setRegistered] = useState<{ vehicle: RegisteredVehicle; ownerName: string } | null>(null);
+  const [registered, setRegistered] = useState<{
+    vehicle: RegisteredVehicle;
+    ownerName: string;
+    registrationStationId: string;
+  } | null>(null);
 
   const { data: vehicleTypes } = useQuery({
     queryKey: ['vehicle-types'],
@@ -238,7 +243,7 @@ export function RegistrationPage() {
         })
       ).data,
     onSuccess: (vehicle) => {
-      setRegistered({ vehicle, ownerName: owner!.fullName });
+      setRegistered({ vehicle, ownerName: owner!.fullName, registrationStationId: stationId });
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
     },
     onError: (err) => {
@@ -279,7 +284,7 @@ export function RegistrationPage() {
   // ── Render ─────────────────────────────────────────────────────────
   if (registered) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-3xl">
         <PageHeader title="تسجيل المركبات" />
         <Card className="animate-scale-in p-6 text-center" data-testid="registration-success">
           <p className="text-[17px] font-extrabold text-ok">تم تسجيل المركبة</p>
@@ -289,6 +294,16 @@ export function RegistrationPage() {
           <p className="mt-1 text-[12.5px] text-ink-soft">
             الرقم الداخلي <LtrText>{registered.vehicle.internalCode}</LtrText> — المالك {registered.ownerName}
           </p>
+          {/* Registration pivot, phase 3: the card is issued and printed
+              right here at the desk, straight after registering. */}
+          <div className="mt-6 border-t border-line pt-5 text-start">
+            <p className="mb-3 text-[13px] font-bold text-primary-dark">بطاقة المركبة</p>
+            <CardIssueFlow
+              vehicleId={registered.vehicle.id}
+              registrationStationId={registered.registrationStationId}
+              reason="FIRST_ISSUE"
+            />
+          </div>
           <div className="mt-6 flex flex-wrap justify-center gap-2.5">
             <PillButton
               onClick={() => {
