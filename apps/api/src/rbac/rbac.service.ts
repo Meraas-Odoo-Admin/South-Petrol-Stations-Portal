@@ -5,6 +5,7 @@ interface CacheEntry {
   permissions: Set<string>;
   unrestrictedStationAccess: boolean;
   isActive: boolean;
+  mustChangePassword: boolean;
   expiresAt: number;
 }
 
@@ -37,9 +38,16 @@ export class RbacService {
       where: { id: userId },
       select: {
         isActive: true,
+        mustChangePassword: true,
         roles: {
           include: { role: { include: { permissions: { include: { permission: true } } } } },
         },
+        // Round 12: a permission can also be granted directly to this
+        // specific user, independent of their roles (see UserPermission's
+        // schema comment) — "given to certain users they pick, not per
+        // role". Always ADDITIVE on top of role-derived permissions below,
+        // never a narrower override.
+        directPermissions: { include: { permission: true } },
       },
     });
 
@@ -54,6 +62,9 @@ export class RbacService {
           permissions.add(rolePermission.permission.key);
         }
       }
+      for (const userPermission of user.directPermissions) {
+        permissions.add(userPermission.permission.key);
+      }
     }
 
     // A user that no longer exists is treated as inactive with no grants —
@@ -62,6 +73,7 @@ export class RbacService {
       permissions,
       unrestrictedStationAccess,
       isActive: user?.isActive ?? false,
+      mustChangePassword: user?.mustChangePassword ?? true,
       expiresAt: Date.now() + CACHE_TTL_MS,
     };
     this.cache.set(userId, entry);
@@ -76,6 +88,11 @@ export class RbacService {
   async isUserActive(userId: string): Promise<boolean> {
     const info = await this.loadUserRbacInfo(userId);
     return info.isActive;
+  }
+
+  async mustChangePassword(userId: string): Promise<boolean> {
+    const info = await this.loadUserRbacInfo(userId);
+    return info.mustChangePassword;
   }
 
   // Roles/permissions/active-status changed for this user — drop the cached
@@ -105,5 +122,23 @@ export class RbacService {
       select: { stationId: true },
     });
     return scopes.map((s) => s.stationId);
+  }
+
+  // Registration pivot, phase 2: the same contract as getStationScope, for
+  // registration stations (UserRegistrationStationScope). The same
+  // unrestrictedStationAccess flag covers both — the admin roles that see
+  // every petrol station also see every registration station. [] means
+  // none, never all.
+  async getRegistrationStationScope(userId: string): Promise<string[] | null> {
+    const info = await this.loadUserRbacInfo(userId);
+    if (info.unrestrictedStationAccess) {
+      return null;
+    }
+
+    const scopes = await this.prisma.userRegistrationStationScope.findMany({
+      where: { userId },
+      select: { registrationStationId: true },
+    });
+    return scopes.map((s) => s.registrationStationId);
   }
 }

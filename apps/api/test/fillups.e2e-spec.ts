@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // M3 (docs/IMPLEMENTATION_PLAN.md §11): fill-up transactions + rule engine.
 // The rule engine itself is unit-tested independently (rule-engine/*.spec.ts)
@@ -30,30 +31,30 @@ describe('Fill-ups (e2e)', () => {
 
   const usernameRecorder = `e2e_fu_recorder_${runId}`;
   const usernameRecorderOtherStation = `e2e_fu_recorder_other_${runId}`;
+  const usernameRecorderNoException = `e2e_fu_recorder_noexception_${runId}`;
   const usernameApprover = `e2e_fu_approver_${runId}`;
   const usernameNoPerm = `e2e_fu_noperm_${runId}`;
 
   let recorderUserId: string;
   let recorderOtherStationUserId: string;
+  let recorderNoExceptionUserId: string;
   let approverUserId: string;
   let noPermUserId: string;
   let recorderRoleId: string;
+  let recorderNoExceptionRoleId: string;
   let approverRoleId: string;
 
   let company: { id: string };
   let stationA: { id: string };
   let stationB: { id: string };
+  let municipality: { id: string };
   let exceptionTypeId: string;
   let exceptionTypeRequiresProofId: string;
 
   let vehicle1Id: string;
-  let driver1Id: string;
   let vehicle2Id: string;
-  let driver2Id: string;
   let vehicle3Id: string;
-  let driver3Id: string;
   let vehicle4Id: string;
-  let driver4Id: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -75,8 +76,9 @@ describe('Fill-ups (e2e)', () => {
     const settings: Array<[string, string]> = [
       ['fillup.max_per_week', '3'],
       ['fillup.min_gap_days', '2'],
-      ['fillup.max_per_week_per_driver', '3'],
-      ['fillup.min_gap_days_per_driver', '2'],
+      ['fillup.max_per_week_per_owner', '3'],
+      ['fillup.min_gap_days_per_owner', '2'],
+      ['fillup.max_liters_per_week_per_owner', '100000'], // high enough to stay out of the way — this file doesn't test owner-scoped rules
       ['fillup.week_window_mode', 'rolling'],
       ['fillup.week_start_day', '6'],
     ];
@@ -103,44 +105,44 @@ describe('Fill-ups (e2e)', () => {
     exceptionTypeRequiresProofId = exceptionTypeRequiresProof.id;
 
     company = await prisma.company.create({ data: { name: `E2E FU Company ${runId}` } });
+    // Both stations in the same live municipality — this file tests the
+    // single-municipality behavior; per-municipality counting has its own
+    // spec (municipality-foundation.e2e-spec.ts).
+    municipality = await createMunicipality(prisma, `E2E FU Municipality ${runId}`);
     stationA = await prisma.station.create({
-      data: { internalCode: `E2E-FU-A-${runId}`, stationNumber: '1', name: 'E2E FU Station A', companyId: company.id },
+      data: {
+        internalCode: `E2E-FU-A-${runId}`,
+        stationNumber: '1',
+        name: 'E2E FU Station A',
+        companyId: company.id,
+        municipalityId: municipality.id,
+      },
     });
     stationB = await prisma.station.create({
-      data: { internalCode: `E2E-FU-B-${runId}`, stationNumber: '2', name: 'E2E FU Station B', companyId: company.id },
+      data: {
+        internalCode: `E2E-FU-B-${runId}`,
+        stationNumber: '2',
+        name: 'E2E FU Station B',
+        companyId: company.id,
+        municipalityId: municipality.id,
+      },
     });
 
-    const driver1 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-1-${runId}`, fullName: 'E2E FU Driver One' },
-    });
-    driver1Id = driver1.id;
     const vehicle1 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-1-${runId}`, currentPlate: `E2E-FU-PLATE-1-${runId}` },
     });
     vehicle1Id = vehicle1.id;
 
-    const driver2 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-2-${runId}`, fullName: 'E2E FU Driver Two' },
-    });
-    driver2Id = driver2.id;
     const vehicle2 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-2-${runId}`, currentPlate: `E2E-FU-PLATE-2-${runId}` },
     });
     vehicle2Id = vehicle2.id;
 
-    const driver3 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-3-${runId}`, fullName: 'E2E FU Driver Three' },
-    });
-    driver3Id = driver3.id;
     const vehicle3 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-3-${runId}`, currentPlate: `E2E-FU-PLATE-3-${runId}` },
     });
     vehicle3Id = vehicle3.id;
 
-    const driver4 = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-fu-4-${runId}`, fullName: 'E2E FU Driver Four' },
-    });
-    driver4Id = driver4.id;
     const vehicle4 = await prisma.vehicle.create({
       data: { internalCode: `E2E-FU-VEH-4-${runId}`, currentPlate: `E2E-FU-PLATE-4-${runId}` },
     });
@@ -157,12 +159,36 @@ describe('Fill-ups (e2e)', () => {
       create: { key: 'fillups:approve_exception' },
       update: {},
     });
+    // Round 12: exception recording is now gated by its own permission,
+    // separate from fillups:create, and a holder of it is auto-approved at
+    // creation (no pending queue) — see FillUpsService.create.
+    const recordExceptionPermission = await prisma.permission.upsert({
+      where: { key: 'fillups:record_exception' },
+      create: { key: 'fillups:record_exception' },
+      update: {},
+    });
 
     // Deliberately scoped (unrestrictedStationAccess: false) — the
     // station-scope check in FillUpsService.create is exercised below.
     const recorderRole = await prisma.role.create({ data: { name: `e2e_fu_recorder_role_${runId}` } });
     recorderRoleId = recorderRole.id;
-    await prisma.rolePermission.create({ data: { roleId: recorderRole.id, permissionId: createPermission.id } });
+    await prisma.rolePermission.createMany({
+      data: [
+        { roleId: recorderRole.id, permissionId: createPermission.id },
+        { roleId: recorderRole.id, permissionId: recordExceptionPermission.id },
+      ],
+    });
+
+    // Holds fillups:create but deliberately NOT fillups:record_exception —
+    // proves the exception-recording gate is enforced independently of
+    // being able to record a normal fill-up at all.
+    const recorderNoExceptionRole = await prisma.role.create({
+      data: { name: `e2e_fu_recorder_noexception_role_${runId}` },
+    });
+    recorderNoExceptionRoleId = recorderNoExceptionRole.id;
+    await prisma.rolePermission.create({
+      data: { roleId: recorderNoExceptionRole.id, permissionId: createPermission.id },
+    });
 
     const approverRole = await prisma.role.create({ data: { name: `e2e_fu_approver_role_${runId}` } });
     approverRoleId = approverRole.id;
@@ -199,12 +225,29 @@ describe('Fill-ups (e2e)', () => {
     // other tests' exceptions are actually recorded (stationA).
     await prisma.userStationScope.create({ data: { userId: approverUser.id, stationId: stationA.id } });
 
+    // Round 12: fillups:create but NOT fillups:record_exception — proves
+    // exception recording is gated independently.
+    const recorderNoExceptionUser = await createUser(usernameRecorderNoException);
+    recorderNoExceptionUserId = recorderNoExceptionUser.id;
+    await prisma.userRole.create({
+      data: { userId: recorderNoExceptionUser.id, roleId: recorderNoExceptionRoleId },
+    });
+    await prisma.userStationScope.create({
+      data: { userId: recorderNoExceptionUser.id, stationId: stationA.id },
+    });
+
     const noPermUser = await createUser(usernameNoPerm);
     noPermUserId = noPermUser.id;
   }, 30_000);
 
   afterAll(async () => {
-    const allUserIds = [recorderUserId, recorderOtherStationUserId, approverUserId, noPermUserId];
+    const allUserIds = [
+      recorderUserId,
+      recorderOtherStationUserId,
+      recorderNoExceptionUserId,
+      approverUserId,
+      noPermUserId,
+    ];
     // FillUpTransaction.recordedById references User — must go before the
     // user rows are deleted, not after.
     await prisma.exception.deleteMany({ where: { fillUpTransaction: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } } });
@@ -214,14 +257,15 @@ describe('Fill-ups (e2e)', () => {
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
-    await prisma.rolePermission.deleteMany({ where: { roleId: { in: [recorderRoleId, approverRoleId] } } });
-    await prisma.role.deleteMany({ where: { id: { in: [recorderRoleId, approverRoleId] } } });
-    await prisma.driverVehicle.deleteMany({ where: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: { in: [recorderRoleId, recorderNoExceptionRoleId, approverRoleId] } },
+    });
+    await prisma.role.deleteMany({ where: { id: { in: [recorderRoleId, recorderNoExceptionRoleId, approverRoleId] } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
-    await prisma.driver.deleteMany({ where: { id: { in: [driver1Id, driver2Id, driver3Id, driver4Id] } } });
     await prisma.station.deleteMany({ where: { id: { in: [stationA.id, stationB.id] } } });
     await prisma.company.delete({ where: { id: company.id } });
+    await deleteMunicipalities(prisma, [municipality.id]);
     await app.close();
   });
 
@@ -241,13 +285,13 @@ describe('Fill-ups (e2e)', () => {
 
   const loginAsRecorder = () => login(usernameRecorder);
   const loginAsRecorderOtherStation = () => login(usernameRecorderOtherStation);
+  const loginAsRecorderNoException = () => login(usernameRecorderNoException);
   const loginAsApprover = () => login(usernameApprover);
   const loginAsNoPerm = () => login(usernameNoPerm);
 
   function baseFillUpBody(overrides: Record<string, unknown> = {}) {
     return {
       vehicleId: vehicle1Id,
-      driverId: driver1Id,
       stationId: stationA.id,
       fuelType: 'PETROL_95',
       quantityLiters: 20,
@@ -345,7 +389,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle3Id, driverId: driver3Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle3Id }))
       .expect(201);
 
     // Same key, different vehicleId — a client bug (or copy-paste mistake),
@@ -355,7 +399,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle2Id, driverId: driver2Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle2Id }))
       .expect(409);
 
     const rows = await prisma.fillUpTransaction.findMany({ where: { idempotencyKey } });
@@ -383,7 +427,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${recorderToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle4Id, driverId: driver4Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle4Id }))
       .expect(201);
     expect(createRes.body.stationId).toBe(stationA.id);
 
@@ -395,7 +439,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${otherStationToken}`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle4Id, driverId: driver4Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle4Id }))
       .expect(403);
 
     // Not A's transaction data leaking through — a 403 body, nothing else.
@@ -431,15 +475,15 @@ describe('Fill-ups (e2e)', () => {
     const accessToken = await loginAsRecorder();
     const server = app.getHttpServer();
 
-    // Pre-load 3 prior fill-ups for vehicle2/driver2, spaced >= 2 days apart
+    // Pre-load 3 prior fill-ups for vehicle2, spaced >= 2 days apart
     // (satisfies the gap rule) and all within the 7-day rolling window —
     // this is what actually reaches the weekly cap (3) without tripping the
     // gap check first.
     await prisma.fillUpTransaction.createMany({
       data: [6, 4, 2].map((daysAgo, index) => ({
         vehicleId: vehicle2Id,
-        driverId: driver2Id,
         stationId: stationA.id,
+        municipalityId: municipality.id,
         fuelType: 'PETROL_95' as const,
         quantityLiters: 10,
         occurredAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
@@ -453,11 +497,15 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', rejectedIdempotencyKey)
-      .send(baseFillUpBody({ vehicleId: vehicle2Id, driverId: driver2Id }))
+      .send(baseFillUpBody({ vehicleId: vehicle2Id }))
       .expect(422);
     expect(rejectRes.body).toEqual({
       allowed: false,
       reason: 'VEHICLE_WEEKLY_CAP_REACHED',
+      // A weekly-cap violation has no single triggering fill-up (it's an
+      // aggregate count, unlike the gap checks) — trigger is null, not
+      // omitted, since the API always includes the key now (item 8).
+      trigger: null,
       requiresException: true,
     });
 
@@ -472,7 +520,7 @@ describe('Fill-ups (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', `e2e-fu-noreason-${runId}`)
-      .send(baseFillUpBody({ vehicleId: vehicle2Id, driverId: driver2Id, exceptionTypeId }))
+      .send(baseFillUpBody({ vehicleId: vehicle2Id, exceptionTypeId }))
       .expect(400);
 
     // The exact same scenario, but WITH exception fields, bypasses the
@@ -485,7 +533,6 @@ describe('Fill-ups (e2e)', () => {
       .send(
         baseFillUpBody({
           vehicleId: vehicle2Id,
-          driverId: driver2Id,
           exceptionTypeId,
           reason: 'E2E test: over weekly cap, directorate-approved exception',
         }),
@@ -493,32 +540,79 @@ describe('Fill-ups (e2e)', () => {
       .expect(201);
     expect(exceptionRes.body.isException).toBe(true);
     expect(exceptionRes.body.exception).toBeDefined();
-    expect(exceptionRes.body.exception.approvedById).toBeNull();
+    // Round 12: recorderUser holds fillups:record_exception, so this
+    // exception is auto-approved by the recorder themselves at creation —
+    // "I don't want them to be approved by the supervisor or admin, I just
+    // want them go as exception" (client's own framing). No pending state
+    // for this row at all, ever.
+    expect(exceptionRes.body.exception.approvedById).toBe(recorderUserId);
     expect(exceptionRes.body.exception.reason).toBe(
       'E2E test: over weekly cap, directorate-approved exception',
     );
     const fillUpId = exceptionRes.body.id;
 
-    // Approving requires fillups:approve_exception — the recorder (who only
-    // has fillups:create) cannot approve their own exception.
+    // The approve endpoint's own guard (fillups:approve_exception) is
+    // still enforced independent of the exception's current state — the
+    // recorder (fillups:create + fillups:record_exception, but not
+    // fillups:approve_exception) still can't call it.
     await request(server)
       .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(403);
 
+    // An approver CAN reach the endpoint (permission-wise) but this
+    // exception is already approved — conflict, not a silent no-op or a
+    // second approval.
     const approverToken = await loginAsApprover();
-    const approveRes = await request(server)
-      .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
-      .set('Authorization', `Bearer ${approverToken}`)
-      .expect(201);
-    expect(approveRes.body.exception.approvedById).toBe(approverUserId);
-
-    // Approving an already-approved exception is a conflict, not a silent
-    // no-op or a second approval.
     await request(server)
       .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
       .set('Authorization', `Bearer ${approverToken}`)
       .expect(409);
+  });
+
+  // ── fillups:record_exception permission gate (round 12) ──────────────
+
+  it('blocks an actor with fillups:create but not fillups:record_exception from submitting an exception, while normal fill-ups still work', async () => {
+    const server = app.getHttpServer();
+    const accessToken = await loginAsRecorderNoException();
+
+    // Dedicated fresh vehicle — isolated from every other vehicle's
+    // fill-up history built up by earlier tests, so the "normal fill-up"
+    // assertion below isn't accidentally rejected by the gap/cap rules
+    // instead of genuinely succeeding.
+    const vehicle5 = await prisma.vehicle.create({
+      data: { internalCode: `E2E-FU-VEH-5-${runId}`, currentPlate: `E2E-FU-PLATE-5-${runId}` },
+    });
+
+    // A normal (non-exception) fill-up still succeeds — the gate is
+    // specific to exception mode, not a general fillups:create narrowing.
+    await request(server)
+      .post('/api/v1/fillups')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Idempotency-Key', `e2e-fu-noexception-normal-${runId}`)
+      .send(baseFillUpBody({ vehicleId: vehicle5.id }))
+      .expect(201);
+
+    const idempotencyKey = `e2e-fu-noexception-blocked-${runId}`;
+    await request(server)
+      .post('/api/v1/fillups')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(
+        baseFillUpBody({
+          vehicleId: vehicle5.id,
+          exceptionTypeId,
+          reason: 'E2E test: should be blocked — no fillups:record_exception',
+        }),
+      )
+      .expect(403);
+
+    const rows = await prisma.fillUpTransaction.findMany({ where: { idempotencyKey } });
+    expect(rows).toHaveLength(0);
+
+    await prisma.fillUpTransaction.deleteMany({ where: { vehicleId: vehicle5.id } });
+    await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: vehicle5.id } });
+    await prisma.vehicle.delete({ where: { id: vehicle5.id } });
   });
 
   // ── Station scoping on approve (CLAUDE.md rule 3) ────────────────────
@@ -529,28 +623,39 @@ describe('Fill-ups (e2e)', () => {
   // (SecurityAuthority-scoped approval) flagged in the method's comment —
   // this is the ordinary UserStationScope check.
 
-  it('blocks an approver scoped only to stationA from approving an exception recorded at stationB', async () => {
+  it('blocks an approver scoped only to stationA from approving a still-pending exception recorded at stationB', async () => {
     const server = app.getHttpServer();
 
-    // recorderOtherStationUser is scoped to stationB and holds
-    // fillups:create — use it to record an exception AT stationB.
-    // Exception mode bypasses the rule engine entirely, so reusing
-    // vehicle1/driver1 (which already has fill-up history from earlier
-    // tests) is safe here — no gap/cap check applies.
-    const otherStationToken = await loginAsRecorderOtherStation();
-    const stationBExceptionRes = await request(server)
-      .post('/api/v1/fillups')
-      .set('Authorization', `Bearer ${otherStationToken}`)
-      .set('Idempotency-Key', `e2e-fu-stationb-exception-${runId}`)
-      .send(
-        baseFillUpBody({
-          stationId: stationB.id,
-          exceptionTypeId,
-          reason: 'E2E test: exception recorded at stationB',
-        }),
-      )
-      .expect(201);
-    const stationBFillUpId = stationBExceptionRes.body.id;
+    // Round 12: every exception recorded through the API by a
+    // fillups:record_exception holder is now auto-approved at creation —
+    // there's no longer an API path that produces a genuinely PENDING
+    // exception (see the dedicated permission-gate test below for that
+    // behavior). A pending row is still a real, reachable state though —
+    // any Exception created before this permission existed, or by a future
+    // caller who somehow lacks the auto-approve path — so this seeds one
+    // directly via Prisma to test approveException's station-scope check,
+    // which runs on ANY pending exception regardless of how it got there.
+    const stationBFillUp = await prisma.fillUpTransaction.create({
+      data: {
+        vehicleId: vehicle1Id,
+        stationId: stationB.id,
+        municipalityId: municipality.id,
+        fuelType: 'PETROL_95',
+        quantityLiters: 10,
+        recordedById: recorderOtherStationUserId,
+        isException: true,
+        idempotencyKey: `e2e-fu-stationb-pending-${runId}`,
+      },
+    });
+    await prisma.exception.create({
+      data: {
+        fillUpTransactionId: stationBFillUp.id,
+        exceptionTypeId,
+        reason: 'E2E test: pending exception recorded at stationB',
+        approvedById: null,
+      },
+    });
+    const stationBFillUpId = stationBFillUp.id;
 
     // approverUser is scoped to stationA ONLY — no access to stationB.
     const approverToken = await loginAsApprover();
@@ -565,5 +670,62 @@ describe('Fill-ups (e2e)', () => {
       where: { fillUpTransactionId: stationBFillUpId },
     });
     expect(exception?.approvedById).toBeNull();
+  });
+
+  // ── GET /fillups/rule-preview (round 7 item 1) ───────────────────────
+
+  describe('GET /fillups/rule-preview', () => {
+    it('rejects unauthenticated requests and requires fillups:create', async () => {
+      const server = app.getHttpServer();
+      await request(server).get('/api/v1/fillups/rule-preview').query({ vehicleId: vehicle3Id, stationId: stationA.id }).expect(401);
+
+      const noPermToken = await loginAsRecorder(); // reuse a real token but hit with no vehicleId first
+      await request(server)
+        .get('/api/v1/fillups/rule-preview')
+        .set('Authorization', `Bearer ${noPermToken}`)
+        .expect(400);
+    });
+
+    it('404s for a vehicleId that does not exist', async () => {
+      const token = await loginAsRecorder();
+      await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: 'does-not-exist', stationId: stationA.id })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('returns every check with real numbers, matching what an actual submission would decide', async () => {
+      const token = await loginAsRecorder();
+
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: vehicle4Id, stationId: stationA.id })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(res.body.checks)).toBe(true);
+      expect(res.body.checks.length).toBeGreaterThanOrEqual(2);
+      const vehicleGapCheck = res.body.checks.find((c: { reason: string }) => c.reason === 'VEHICLE_GAP_TOO_SHORT');
+      expect(vehicleGapCheck).toBeDefined();
+      expect(typeof vehicleGapCheck.passed).toBe('boolean');
+      expect(typeof vehicleGapCheck.limit).toBe('number');
+
+      // Cross-check: the SAME vehicle immediately rejected by POST /fillups
+      // (vehicle2 preloaded over its weekly cap earlier in this file) shows
+      // that specific rule as passed:false in the preview too — the
+      // breakdown never disagrees with the real enforcement path.
+      const preview2 = await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: vehicle2Id, stationId: stationA.id })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const vehicleWeekly = preview2.body.checks.find(
+        (c: { reason: string }) => c.reason === 'VEHICLE_WEEKLY_CAP_REACHED',
+      );
+      expect(vehicleWeekly.passed).toBe(false);
+      expect(vehicleWeekly.actual).toBeGreaterThanOrEqual(3);
+      expect(vehicleWeekly.limit).toBe(3);
+    });
   });
 });

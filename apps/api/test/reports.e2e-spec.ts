@@ -17,8 +17,14 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 // files running in the same suite invocation may also insert real
 // FillUpTransaction rows dated "today". Assertions on those aggregate
 // numbers use >= against this file's own known contribution rather than
-// exact equality; assertions scoped to a specific stationId/driverId/
+// exact equality; assertions scoped to a specific stationId/ownerId/
 // vehicleId (all unique to this file) are exact.
+//
+// Round 6: the driverId daily-report filter and the /reports/drivers/:id/
+// history endpoint were both removed along with the rest of the Driver
+// management surface (see docs/DESIGN_owner_based_fillups.md) — replaced
+// below with an ownerId filter, scoped through the vehicle's owner
+// instead of a per-fill-up driver.
 describe('Reports (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -40,8 +46,10 @@ describe('Reports (e2e)', () => {
   let company: { id: string };
   let stationA: { id: string; internalCode: string; name: string };
   let stationB: { id: string; internalCode: string; name: string };
-  let driverId: string;
+  let ownerId: string;
+  let owner2Id: string;
   let vehicleId: string;
+  let vehicle2Id: string;
   let fillUpIds: string[] = [];
 
   beforeAll(async () => {
@@ -68,14 +76,25 @@ describe('Reports (e2e)', () => {
       data: { internalCode: `E2E-RPT-B-${runId}`, stationNumber: '2', name: 'E2E RPT Station B', companyId: company.id },
     });
 
-    const driver = await prisma.driver.create({
-      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-rpt-${runId}`, fullName: 'E2E RPT Driver' },
+    const owner = await prisma.vehicleOwner.create({
+      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-rpt-${runId}`, fullName: 'E2E RPT Owner' },
     });
-    driverId = driver.id;
+    ownerId = owner.id;
+    const owner2 = await prisma.vehicleOwner.create({
+      data: { identityType: 'NATIONAL_ID', identityNumber: `e2e-rpt-2-${runId}`, fullName: 'E2E RPT Owner Two' },
+    });
+    owner2Id = owner2.id;
     const vehicle = await prisma.vehicle.create({
-      data: { internalCode: `E2E-RPT-VEH-${runId}`, currentPlate: `E2E-RPT-PLATE-${runId}` },
+      data: { internalCode: `E2E-RPT-VEH-${runId}`, currentPlate: `E2E-RPT-PLATE-${runId}`, ownerId },
     });
     vehicleId = vehicle.id;
+    // A second vehicle, owned by owner2 — used to prove the ownerId
+    // daily-report filter narrows by OWNER, not just by vehicle (a6 below
+    // is recorded here, not on the first vehicle).
+    const vehicle2 = await prisma.vehicle.create({
+      data: { internalCode: `E2E-RPT-VEH-2-${runId}`, currentPlate: `E2E-RPT-PLATE-2-${runId}`, ownerId: owner2Id },
+    });
+    vehicle2Id = vehicle2.id;
 
     const viewPermission = await prisma.permission.upsert({
       where: { key: 'reports:view' },
@@ -87,10 +106,24 @@ describe('Reports (e2e)', () => {
       create: { key: 'reports:view_all_stations' },
       update: {},
     });
+    // GET /reports/vehicles/:id/history is gated on vehicles:read, not
+    // reports:view (see the comment on that route) — both test roles need
+    // this too, or the history assertion below 403s instead of exercising
+    // the scoping logic it's meant to test.
+    const vehiclesReadPermission = await prisma.permission.upsert({
+      where: { key: 'vehicles:read' },
+      create: { key: 'vehicles:read' },
+      update: {},
+    });
 
     const scopedRole = await prisma.role.create({ data: { name: `e2e_rpt_scoped_role_${runId}` } });
     scopedRoleId = scopedRole.id;
-    await prisma.rolePermission.create({ data: { roleId: scopedRole.id, permissionId: viewPermission.id } });
+    await prisma.rolePermission.createMany({
+      data: [
+        { roleId: scopedRole.id, permissionId: viewPermission.id },
+        { roleId: scopedRole.id, permissionId: vehiclesReadPermission.id },
+      ],
+    });
 
     // Holds reports:view_all_stations but is NOT flagged
     // unrestrictedStationAccess on the role itself — the M4 scope-resolution
@@ -102,6 +135,7 @@ describe('Reports (e2e)', () => {
       data: [
         { roleId: allStationsRole.id, permissionId: viewPermission.id },
         { roleId: allStationsRole.id, permissionId: viewAllPermission.id },
+        { roleId: allStationsRole.id, permissionId: vehiclesReadPermission.id },
       ],
     });
 
@@ -133,7 +167,6 @@ describe('Reports (e2e)', () => {
       return prisma.fillUpTransaction.create({
         data: {
           vehicleId,
-          driverId,
           stationId,
           fuelType: 'PETROL_95',
           quantityLiters,
@@ -150,7 +183,6 @@ describe('Reports (e2e)', () => {
     const a4Pending = await prisma.fillUpTransaction.create({
       data: {
         vehicleId,
-        driverId,
         stationId: stationA.id,
         fuelType: 'PETROL_95',
         quantityLiters: 10,
@@ -172,7 +204,6 @@ describe('Reports (e2e)', () => {
     const a5Approved = await prisma.fillUpTransaction.create({
       data: {
         vehicleId,
-        driverId,
         stationId: stationA.id,
         fuelType: 'PETROL_95',
         quantityLiters: 10,
@@ -191,11 +222,25 @@ describe('Reports (e2e)', () => {
       },
     });
 
+    // Distinct owner (via vehicle2) + fuel type at stationA — used to prove
+    // the new ownerId/fuelType daily-report filter dimensions actually
+    // narrow results, not just apply the pre-existing stationId/date pair.
+    const a6OtherOwner = await prisma.fillUpTransaction.create({
+      data: {
+        vehicleId: vehicle2Id,
+        stationId: stationA.id,
+        fuelType: 'DIESEL',
+        quantityLiters: 7,
+        occurredAt,
+        recordedById: scopedUserId,
+        idempotencyKey: `e2e-rpt-${runId}-a6`,
+      },
+    });
+
     const b1 = await createFillUp(stationB.id, 20, 'b1');
     const b2Pending = await prisma.fillUpTransaction.create({
       data: {
         vehicleId,
-        driverId,
         stationId: stationB.id,
         fuelType: 'PETROL_95',
         quantityLiters: 5,
@@ -209,7 +254,7 @@ describe('Reports (e2e)', () => {
       data: { fillUpTransactionId: b2Pending.id, exceptionTypeId: exceptionType.id, reason: 'pending b', approvedById: null },
     });
 
-    fillUpIds = [a1.id, a2.id, a3.id, a4Pending.id, a5Approved.id, b1.id, b2Pending.id];
+    fillUpIds = [a1.id, a2.id, a3.id, a4Pending.id, a5Approved.id, a6OtherOwner.id, b1.id, b2Pending.id];
   }, 30_000);
 
   afterAll(async () => {
@@ -224,10 +269,10 @@ describe('Reports (e2e)', () => {
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: [scopedRoleId, allStationsRoleId] } } });
     await prisma.role.deleteMany({ where: { id: { in: [scopedRoleId, allStationsRoleId] } } });
-    await prisma.driverVehicle.deleteMany({ where: { vehicleId } });
-    await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId } });
-    await prisma.vehicle.delete({ where: { id: vehicleId } });
-    await prisma.driver.delete({ where: { id: driverId } });
+    await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: [vehicleId, vehicle2Id] } } });
+    await prisma.vehicle.deleteMany({ where: { id: { in: [vehicleId, vehicle2Id] } } });
+    await prisma.vehicleOwner.delete({ where: { id: ownerId } });
+    await prisma.vehicleOwner.delete({ where: { id: owner2Id } });
     await prisma.station.deleteMany({ where: { id: { in: [stationA.id, stationB.id] } } });
     await prisma.company.delete({ where: { id: company.id } });
     await app.close();
@@ -257,7 +302,6 @@ describe('Reports (e2e)', () => {
     const server = app.getHttpServer();
     await request(server).get('/api/v1/reports/daily').expect(401);
     await request(server).get('/api/v1/reports/violations').expect(401);
-    await request(server).get(`/api/v1/reports/drivers/${driverId}/history`).expect(401);
     await request(server).get(`/api/v1/reports/vehicles/${vehicleId}/history`).expect(401);
     await request(server).get('/api/v1/reports/dashboard').expect(401);
   });
@@ -269,7 +313,6 @@ describe('Reports (e2e)', () => {
 
     await auth(request(server).get('/api/v1/reports/daily')).expect(403);
     await auth(request(server).get('/api/v1/reports/violations')).expect(403);
-    await auth(request(server).get(`/api/v1/reports/drivers/${driverId}/history`)).expect(403);
     await auth(request(server).get('/api/v1/reports/dashboard')).expect(403);
   });
 
@@ -282,14 +325,67 @@ describe('Reports (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    expect(res.body).toEqual({
+    // toMatchObject, not toEqual — round 4 feedback added `rows` (the raw
+    // fill-up list backing the results table) and `totalBeforeFilters` to
+    // this response; asserting the full row array here would duplicate the
+    // fixture data for no real coverage gain, so only the aggregate numbers
+    // this test is actually about are checked exactly.
+    expect(res.body).toMatchObject({
       stationId: stationA.id,
       date: testDate,
-      totalFillUps: 5,
-      totalLiters: 50,
+      ownerId: null,
+      fuelType: null,
+      // 6 fill-ups now: the original 5 (a1-a5, vehicle1/owner1) plus
+      // a6OtherOwner (vehicle2/owner2, DIESEL, 7L) — added to prove the
+      // ownerId/fuelType filters below actually narrow, not just apply the
+      // pre-existing pair live.
+      totalFillUps: 6,
+      totalLiters: 57,
       exceptionsPending: 1,
       exceptionsApproved: 1,
+      totalBeforeFilters: 6,
     });
+    expect(res.body.rows).toHaveLength(6);
+  });
+
+  it('narrows the daily report to one vehicle owner via the ownerId filter', async () => {
+    const accessToken = await loginAsScoped();
+
+    const owner1Res = await request(app.getHttpServer())
+      .get(`/api/v1/reports/daily?stationId=${stationA.id}&date=${testDate}&ownerId=${ownerId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(owner1Res.body).toMatchObject({ ownerId, totalFillUps: 5, totalLiters: 50 });
+
+    const owner2Res = await request(app.getHttpServer())
+      .get(`/api/v1/reports/daily?stationId=${stationA.id}&date=${testDate}&ownerId=${owner2Id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(owner2Res.body).toMatchObject({ ownerId: owner2Id, totalFillUps: 1, totalLiters: 7 });
+  });
+
+  it('narrows the daily report to one fuel type via the new fuelType filter (item 13)', async () => {
+    const accessToken = await loginAsScoped();
+
+    const dieselRes = await request(app.getHttpServer())
+      .get(`/api/v1/reports/daily?stationId=${stationA.id}&date=${testDate}&fuelType=DIESEL`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(dieselRes.body).toMatchObject({ fuelType: 'DIESEL', totalFillUps: 1, totalLiters: 7 });
+
+    const petrolRes = await request(app.getHttpServer())
+      .get(`/api/v1/reports/daily?stationId=${stationA.id}&date=${testDate}&fuelType=PETROL_95`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(petrolRes.body).toMatchObject({ fuelType: 'PETROL_95', totalFillUps: 5, totalLiters: 50 });
+  });
+
+  it('rejects an invalid fuelType value on the daily report', async () => {
+    const accessToken = await loginAsScoped();
+    await request(app.getHttpServer())
+      .get(`/api/v1/reports/daily?stationId=${stationA.id}&date=${testDate}&fuelType=NOT_A_FUEL`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(400);
   });
 
   it('blocks a scoped reports:view holder from querying another station\'s daily report', async () => {
@@ -317,14 +413,18 @@ describe('Reports (e2e)', () => {
       .get(`/api/v1/reports/daily?stationId=${stationB.id}&date=${testDate}`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
-    expect(stationBRes.body).toEqual({
+    expect(stationBRes.body).toMatchObject({
       stationId: stationB.id,
       date: testDate,
+      ownerId: null,
+      fuelType: null,
       totalFillUps: 2,
       totalLiters: 25,
       exceptionsPending: 1,
       exceptionsApproved: 0,
+      totalBeforeFilters: 2,
     });
+    expect(stationBRes.body.rows).toHaveLength(2);
 
     // Omitted stationId: aggregates EVERY station, not just this file's —
     // see the file header comment. >= this file's own known total (5 + 2).
@@ -371,31 +471,21 @@ describe('Reports (e2e)', () => {
       .expect(403);
   });
 
-  // ── GET /reports/drivers/:id/history, /reports/vehicles/:id/history ──
+  // ── GET /reports/vehicles/:id/history ────────────────────────────────
 
-  it('gives a scoped caller only their own station\'s entries in driver/vehicle history, and an all-stations holder everything', async () => {
+  it('gives a scoped caller only their own station\'s entries in vehicle history, and an all-stations holder everything', async () => {
     const scopedToken = await loginAsScoped();
     const allStationsToken = await loginAsAllStations();
     const server = app.getHttpServer();
-
-    const scopedDriverRes = await request(server)
-      .get(`/api/v1/reports/drivers/${driverId}/history`)
-      .set('Authorization', `Bearer ${scopedToken}`)
-      .expect(200);
-    expect(scopedDriverRes.body.total).toBe(5);
-    expect(scopedDriverRes.body.rows.every((r: { stationId: string }) => r.stationId === stationA.id)).toBe(true);
-
-    const allDriverRes = await request(server)
-      .get(`/api/v1/reports/drivers/${driverId}/history`)
-      .set('Authorization', `Bearer ${allStationsToken}`)
-      .expect(200);
-    expect(allDriverRes.body.total).toBe(7);
 
     const scopedVehicleRes = await request(server)
       .get(`/api/v1/reports/vehicles/${vehicleId}/history`)
       .set('Authorization', `Bearer ${scopedToken}`)
       .expect(200);
+    // 5: a1-a5 (a6OtherOwner is on vehicle2, a different vehicle, so it's
+    // not part of vehicle1's own history).
     expect(scopedVehicleRes.body.total).toBe(5);
+    expect(scopedVehicleRes.body.rows.every((r: { stationId: string }) => r.stationId === stationA.id)).toBe(true);
 
     const allVehicleRes = await request(server)
       .get(`/api/v1/reports/vehicles/${vehicleId}/history`)
@@ -404,17 +494,14 @@ describe('Reports (e2e)', () => {
     expect(allVehicleRes.body.total).toBe(7);
 
     // Identity data is NOT masked server-side (§8 masking is UI-only, per
-    // the M4 instructions) — the driver's real identityNumber comes back.
-    expect(allDriverRes.body.rows[0].driver.identityNumber).toBeDefined();
+    // the M4 instructions) — the vehicle owner's real identityNumber comes
+    // back.
+    expect(allVehicleRes.body.rows[0].vehicle.owner.identityNumber).toBeDefined();
   });
 
-  it('404s driver/vehicle history for an id that does not exist', async () => {
+  it('404s vehicle history for an id that does not exist', async () => {
     const accessToken = await loginAsAllStations();
     const server = app.getHttpServer();
-    await request(server)
-      .get('/api/v1/reports/drivers/does-not-exist/history')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(404);
     await request(server)
       .get('/api/v1/reports/vehicles/does-not-exist/history')
       .set('Authorization', `Bearer ${accessToken}`)
@@ -447,8 +534,10 @@ describe('Reports (e2e)', () => {
       stationId: stationA.id,
       internalCode: stationA.internalCode,
       name: stationA.name,
-      totalFillUps: 5,
-      totalLiters: 50,
+      // 6, not 5: includes a6OtherOwner (no exception), same fixture
+      // addition as the daily-report tests above.
+      totalFillUps: 6,
+      totalLiters: 57,
       exceptionCount: 2,
     });
     expect(stationBEntry).toMatchObject({ totalFillUps: 2, totalLiters: 25, exceptionCount: 1 });

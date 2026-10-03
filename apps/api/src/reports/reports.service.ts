@@ -9,7 +9,17 @@ import { DashboardQueryDto, DEFAULT_DASHBOARD_RANGE_DAYS } from './dto/dashboard
 const VIEW_ALL_STATIONS_PERMISSION = 'reports:view_all_stations';
 
 const FILL_UP_HISTORY_INCLUDE = {
-  vehicle: { select: { id: true, internalCode: true, currentPlate: true } },
+  vehicle: {
+    select: {
+      id: true,
+      internalCode: true,
+      currentPlate: true,
+      owner: { select: { id: true, identityType: true, identityNumber: true, fullName: true } },
+    },
+  },
+  // Legacy-only (round 6): null on every fill-up recorded after fill-ups
+  // stopped requiring driver identity — kept so historical rows still
+  // render their driver attribution (see docs/DESIGN_owner_based_fillups.md).
   driver: { select: { id: true, identityType: true, identityNumber: true, fullName: true } },
   station: { select: { id: true, internalCode: true, name: true } },
   exception: { include: { exceptionType: true } },
@@ -87,12 +97,17 @@ export class ReportsService {
     const stationId = await this.resolveSingleStationFilter(actorId, query.stationId);
     const { start, end } = this.dayBoundsUtc(query.date);
 
-    const where = {
+    const baseWhere = {
       occurredAt: { gte: start, lt: end },
       ...(stationId ? { stationId } : {}),
     };
+    const where = {
+      ...baseWhere,
+      ...(query.ownerId ? { vehicle: { ownerId: query.ownerId } } : {}),
+      ...(query.fuelType ? { fuelType: query.fuelType } : {}),
+    };
 
-    const [aggregate, exceptionsPending, exceptionsApproved] = await Promise.all([
+    const [aggregate, exceptionsPending, exceptionsApproved, totalBeforeFilters, rows] = await Promise.all([
       this.prisma.fillUpTransaction.aggregate({
         where,
         _count: { _all: true },
@@ -104,15 +119,26 @@ export class ReportsService {
       this.prisma.fillUpTransaction.count({
         where: { ...where, isException: true, exception: { approvedById: { not: null } } },
       }),
+      this.prisma.fillUpTransaction.count({ where: baseWhere }),
+      this.prisma.fillUpTransaction.findMany({
+        where,
+        include: FILL_UP_HISTORY_INCLUDE,
+        orderBy: { occurredAt: 'desc' },
+        take: 200,
+      }),
     ]);
 
     return {
       stationId: stationId ?? null,
       date: start.toISOString().slice(0, 10),
+      ownerId: query.ownerId ?? null,
+      fuelType: query.fuelType ?? null,
       totalFillUps: aggregate._count._all,
       totalLiters: aggregate._sum.quantityLiters?.toNumber() ?? 0,
       exceptionsPending,
       exceptionsApproved,
+      totalBeforeFilters,
+      rows,
     };
   }
 
@@ -191,35 +217,6 @@ export class ReportsService {
       ...(status === 'pending' ? { approvedById: null } : {}),
       ...(status === 'approved' ? { approvedById: { not: null } } : {}),
     };
-  }
-
-  // National ID / administrative ID masking (docs/IMPLEMENTATION_PLAN.md
-  // §8) is UI-only per the plan — nothing in M1-M3 implemented server-side
-  // masking, and this endpoint keeps that precedent: identityNumber comes
-  // back unmasked. This is the first time driver identity data reaches a
-  // UI at all, so the frontend is now responsible for masking it per role
-  // (last 4 digits for station_employee, full value for supervisor+).
-  async getDriverHistory(driverId: string, query: HistoryQueryDto, actorId: string) {
-    const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
-    if (!driver) {
-      throw new NotFoundException('Driver not found.');
-    }
-
-    const stationScope = await this.resolveHistoryStationFilter(actorId);
-    const where = { driverId, ...(stationScope ? { stationId: { in: stationScope } } : {}) };
-
-    const [total, rows] = await Promise.all([
-      this.prisma.fillUpTransaction.count({ where }),
-      this.prisma.fillUpTransaction.findMany({
-        where,
-        include: FILL_UP_HISTORY_INCLUDE,
-        orderBy: { occurredAt: 'desc' },
-        skip: query.skip,
-        take: query.take,
-      }),
-    ]);
-
-    return { total, rows };
   }
 
   async getVehicleHistory(vehicleId: string, query: HistoryQueryDto, actorId: string) {
@@ -306,6 +303,42 @@ export class ReportsService {
       ...stats,
     }));
 
+    // Round 4 feedback item 9: real charts, not just tables — fuel-type
+    // breakdown (groupBy, no raw SQL needed) and a daily trend (needs
+    // date-truncation, which Prisma's groupBy can't express — parameterized
+    // $queryRaw per CLAUDE.md rule 8, template-literal args so Postgres
+    // binds `from`/`to` rather than string-concatenating them).
+    const fuelGrouped = await this.prisma.fillUpTransaction.groupBy({
+      by: ['fuelType'],
+      where: { occurredAt: { gte: from, lte: to } },
+      _count: { _all: true },
+      _sum: { quantityLiters: true },
+    });
+    const byFuelType = fuelGrouped.map((g) => ({
+      fuelType: g.fuelType,
+      totalFillUps: g._count._all,
+      totalLiters: g._sum.quantityLiters?.toNumber() ?? 0,
+    }));
+
+    const dailyRows = await this.prisma.$queryRaw<
+      { day: Date; totalFillUps: bigint; totalLiters: string | null; exceptionCount: bigint }[]
+    >`
+      SELECT date_trunc('day', "occurredAt") AS day,
+             COUNT(*)::bigint AS "totalFillUps",
+             SUM("quantityLiters")::numeric::text AS "totalLiters",
+             COUNT(*) FILTER (WHERE "isException")::bigint AS "exceptionCount"
+      FROM "FillUpTransaction"
+      WHERE "occurredAt" >= ${from} AND "occurredAt" <= ${to}
+      GROUP BY day
+      ORDER BY day ASC
+    `;
+    const daily = dailyRows.map((row) => ({
+      date: row.day.toISOString().slice(0, 10),
+      totalFillUps: Number(row.totalFillUps),
+      totalLiters: Number(row.totalLiters ?? 0),
+      exceptionCount: Number(row.exceptionCount),
+    }));
+
     return {
       from: from.toISOString(),
       to: to.toISOString(),
@@ -313,6 +346,8 @@ export class ReportsService {
       totalLiters,
       exceptionRate: totalFillUps > 0 ? totalExceptions / totalFillUps : 0,
       perStation,
+      byFuelType,
+      daily,
     };
   }
 }

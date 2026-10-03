@@ -1,59 +1,76 @@
-import { writeFileSync } from 'fs';
+import { existsSync, rmSync, writeFileSync } from 'fs';
+import { chromium } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
+import { api, API_BASE } from './env';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const API_BASE = 'http://localhost:3000/api/v1';
 const FIXTURES_PATH = path.join(__dirname, '.fixtures.json');
 
-// Temporary passwords used ONLY for the duration of this test run — global
-// teardown rotates supervisor1/admin1 back to their seeded baseline
-// ('ChangeMe123!', mustChangePassword: true) so this suite leaves no
-// lasting change to the shared dev-seed users. There are no DELETE
-// endpoints anywhere in this codebase (by design — see CLAUDE.md/M1-M4),
-// so the company/station/driver/vehicle/fill-up/throwaway-user fixtures
-// created below are NOT cleaned up; they're harmless leftover test data,
-// same as every backend e2e spec's fixtures that predate a delete path.
+// sysadmin1 is the ONE shared seed account this suite touches: the
+// fixture-provisioning actor. Its seeded password can be overridden with
+// PW_SYSADMIN_PASSWORD if it's been changed on this machine. If it still
+// has mustChangePassword (a genuinely fresh seed), it's moved to
+// TEMP_PASSWORD for the run and restored in global-teardown.ts.
+//
+// Registration pivot, phase 2: every account the tests actually log in as
+// is created fresh for this run (supervisor, admin, registration employee,
+// must-change-password user) — the suite no longer rotates the passwords of
+// the shared seed accounts (supervisor1/admin1), which collided with anyone
+// using those accounts for manual testing on the same database. There are
+// no DELETE endpoints (by design), so these run-specific accounts and
+// fixtures stay behind as harmless test data.
+const SEEDED_PASSWORD = process.env.PW_SYSADMIN_PASSWORD || 'ChangeMe123!';
 const TEMP_PASSWORD = 'PwTemp123!';
-const SEEDED_PASSWORD = 'ChangeMe123!';
+const RUN_PASSWORD = 'PwRunUser123!';
 
-interface Fixtures {
+export interface Fixtures {
   runId: string;
   stationId: string;
   stationInternalCode: string;
   stationName: string;
-  driverId: string;
-  driverFullName: string;
-  driverIdentityNumber: string;
+  registrationStationId: string;
+  registrationStationName: string;
+  ownerId: string;
+  ownerFullName: string;
+  ownerIdentityNumber: string;
+  vehicleId: string;
+  vehicleCurrentPlate: string;
+  // A second registered vehicle with no fill-up history — the clean path.
+  cleanVehicleCurrentPlate: string;
+  cleanVehicleOwnerFullName: string;
+  // Phase 3: a vehicle with an ACTIVE printed card, streamed to the scan
+  // test through a fake camera (FAKE_CAMERA_PATH).
+  scanVehicleCurrentPlate: string;
+  scanCardNumber: string;
+  deskName: string;
   supervisorUsername: string;
   supervisorPassword: string;
-  supervisorUserId: string;
   adminUsername: string;
   adminPassword: string;
+  registrarUsername: string;
+  registrarPassword: string;
   needsChangeUsername: string;
   needsChangePassword: string;
+  sysadminPasswordChanged: boolean;
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// POST /auth/login is throttled to 5/min per app instance. Fixture setup
-// alone makes 3 real login calls; retry-with-backoff on 429 specifically
-// (not other errors) makes this robust to whatever else shares that
-// budget — e.g. a prior run's leftover window, or this script re-running
-// during manual debugging — rather than only ever working when timed just
-// right.
+// POST /auth/login is throttled to 5/min per app instance — retry-with-
+// backoff on 429 specifically (not other errors).
 async function login(username: string, password: string, attempt = 1): Promise<{
   accessToken: string;
   mustChangePassword: boolean;
 }> {
   try {
-    const res = await axios.post<{ accessToken: string; mustChangePassword: boolean }>(
-      `${API_BASE}/auth/login`,
-      { username, password },
-    );
+    const res = await api.post<{ accessToken: string; mustChangePassword: boolean }>(`${API_BASE}/auth/login`, {
+      username,
+      password,
+    });
     return res.data;
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 429 && attempt <= 5) {
@@ -65,150 +82,252 @@ async function login(username: string, password: string, attempt = 1): Promise<{
   }
 }
 
+// Chromium's fake camera (--use-file-for-fake-video-capture) plays a raw
+// Y4M video. Build one from the card's own rendered preview: the part of
+// the card holding the QR and plate, on white, as grey-scale I420 frames.
+export const FAKE_CAMERA_PATH = path.join(__dirname, '.fake-camera.y4m');
+
+async function writeFakeCamera(cardPng: Buffer): Promise<void> {
+  const width = 640;
+  const height = 480;
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const luma = (await page.evaluate(
+    `(async () => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,${cardPng.toString('base64')}';
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = ${width}; c.height = ${height};
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, ${width}, ${height});
+      // Source crop: card y 230..870 (QR + plate), scaled to the frame height.
+      const sy = 230, sh = 640, scale = ${height} / sh, sw = 638;
+      x.drawImage(img, 0, sy, sw, sh, (${width} - sw * scale) / 2, 0, sw * scale, ${height});
+      const d = x.getImageData(0, 0, ${width}, ${height}).data;
+      const y = new Array(${width * height});
+      for (let i = 0; i < y.length; i++) y[i] = Math.round(0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]);
+      return y;
+    })()`,
+  )) as number[];
+  await browser.close();
+  const yPlane = Buffer.from(luma);
+  const chroma = Buffer.alloc((width / 2) * (height / 2), 128);
+  const frame = Buffer.concat([Buffer.from('FRAME\n'), yPlane, chroma, chroma]);
+  const header = Buffer.from(`YUV4MPEG2 W${width} H${height} F10:1 Ip A1:1 C420jpeg\n`);
+  writeFileSync(FAKE_CAMERA_PATH, Buffer.concat([header, ...Array(10).fill(frame)]));
+}
+
 async function main() {
+  // A stale file from an earlier run must never be read by a teardown that
+  // runs after THIS setup failed part-way.
+  if (existsSync(FIXTURES_PATH)) rmSync(FIXTURES_PATH);
+
   const runId = Date.now().toString(36);
+  // Random digits, not a Date.now()-derived value — identityNumber/plate
+  // formats are digits-only, and a time-derived value repeats across runs.
+  const randomDigits = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-  // sysadmin1 has every permission and unrestrictedStationAccess — used
-  // purely as the fixture-provisioning actor, never logged into by the
-  // actual tests.
   const sysadmin = await login('sysadmin1', SEEDED_PASSWORD);
-  const sysadminHeaders = auth(sysadmin.accessToken);
+  let sysadminAccessToken = sysadmin.accessToken;
+  let sysadminPasswordChanged = false;
+  if (sysadmin.mustChangePassword) {
+    const changeRes = await api.post<{ accessToken: string }>(
+      `${API_BASE}/auth/change-password`,
+      { currentPassword: SEEDED_PASSWORD, newPassword: TEMP_PASSWORD },
+      { headers: auth(sysadmin.accessToken) },
+    );
+    sysadminAccessToken = changeRes.data.accessToken;
+    sysadminPasswordChanged = true;
+  }
+  const headers = auth(sysadminAccessToken);
 
-  const company = await axios.post(
-    `${API_BASE}/companies`,
-    { name: `PW Test Co ${runId}` },
-    { headers: sysadminHeaders },
+  // Phase 1: fill-ups and registration only happen in a LIVE municipality.
+  const municipalities = await api.get<Array<{ id: string; name: string; status: string }>>(
+    `${API_BASE}/municipalities`,
+    { headers },
   );
+  const sabha = municipalities.data.find((m) => m.name === 'سبها' && m.status === 'LIVE');
+  if (!sabha) {
+    throw new Error('Expected the seeded LIVE municipality سبها — was prisma db seed run?');
+  }
 
-  const station = await axios.post(
+  const company = await api.post(`${API_BASE}/companies`, { name: `PW Test Co ${runId}` }, { headers });
+  const station = await api.post(
     `${API_BASE}/stations`,
     {
       internalCode: `PW-STN-${runId}`,
       stationNumber: '1',
       name: `PW Test Station ${runId}`,
       companyId: company.data.id,
+      municipalityId: sabha.id,
     },
-    { headers: sysadminHeaders },
+    { headers },
+  );
+  const registrationStation = await api.post(
+    `${API_BASE}/registration-stations`,
+    { name: `PW Registration Desk ${runId}`, municipalityId: sabha.id, address: 'PW test address' },
+    { headers },
   );
 
-  const driverIdentityNumber = `119${runId}2345`;
-  const driver = await axios.post(
-    `${API_BASE}/drivers`,
-    {
-      identityType: 'NATIONAL_ID',
-      identityNumber: driverIdentityNumber,
-      fullName: `PW Test Driver ${runId}`,
-    },
-    { headers: sysadminHeaders },
-  );
-
-  const vehicle = await axios.post(
+  // Owners and vehicles are registered AT a registration station (phase 2).
+  const registerOwner = async (fullName: string, identityNumber: string) =>
+    api.post(
+      `${API_BASE}/owners`,
+      {
+        registrationStationId: registrationStation.data.id,
+        identityType: 'NATIONAL_ID',
+        identityNumber,
+        fullName,
+        phone: '0910000000',
+      },
+      { headers },
+    );
+  const ownerIdentityNumber = `1${randomDigits(11)}`;
+  const owner = await registerOwner(`PW Test Owner ${runId}`, ownerIdentityNumber);
+  const vehicle = await api.post(
     `${API_BASE}/vehicles`,
-    { internalCode: `PW-VEH-${runId}`, currentPlate: `PW-PLATE-${runId}` },
-    { headers: sysadminHeaders },
-  );
-
-  // Fill-up history at this station, for the driver-detail-page test.
-  await axios.post(
-    `${API_BASE}/fillups`,
     {
-      vehicleId: vehicle.data.id,
-      driverId: driver.data.id,
-      stationId: station.data.id,
-      fuelType: 'PETROL_95',
-      quantityLiters: 20,
+      registrationStationId: registrationStation.data.id,
+      internalCode: `PW-VEH-${runId}`,
+      currentPlate: `5-${randomDigits(7)}`,
+      ownerId: owner.data.id,
     },
-    { headers: { ...sysadminHeaders, 'Idempotency-Key': `pw-fixture-${runId}` } },
+    { headers },
+  );
+  const cleanOwner = await registerOwner(`PW Clean Owner ${runId}`, `1${randomDigits(11)}`);
+  // City code 9 — the fill-up test types this plate into the digit boxes.
+  const cleanVehicle = await api.post(
+    `${API_BASE}/vehicles`,
+    {
+      registrationStationId: registrationStation.data.id,
+      currentPlate: `9-${randomDigits(7)}`,
+      ownerId: cleanOwner.data.id,
+    },
+    { headers },
   );
 
-  // Scope the SEEDED supervisor1 to this station (station_supervisor
-  // already holds reports:view from seed.ts — no role assignment needed,
-  // avoiding the need to look up a Role id, which no GET /roles endpoint
-  // exposes anywhere in this API).
-  const users = await axios.get<Array<{ id: string; username: string }>>(`${API_BASE}/users`, {
-    headers: sysadminHeaders,
+  // ── Phase 3: a desk, and a vehicle with a real printed card ────────
+  const deskName = `PW Desk ${runId}`;
+  const desk = await api.post<{ id: string }>(
+    `${API_BASE}/registration-stations/${registrationStation.data.id}/desks`,
+    { name: deskName, printerModel: 'PW test printer' },
+    { headers },
+  );
+  const scanOwner = await registerOwner(`PW Scan Owner ${runId}`, `1${randomDigits(11)}`);
+  const scanVehicle = await api.post(
+    `${API_BASE}/vehicles`,
+    {
+      registrationStationId: registrationStation.data.id,
+      currentPlate: `6-${randomDigits(7)}`,
+      ownerId: scanOwner.data.id,
+      model: 'تويوتا هايلكس',
+      color: 'أبيض',
+    },
+    { headers },
+  );
+  const scanCard = await api.post<{ id: string; cardNumber: string }>(
+    `${API_BASE}/vehicles/${scanVehicle.data.id}/cards`,
+    { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+    { headers },
+  );
+  const preview = await api.get<ArrayBuffer>(`${API_BASE}/cards/${scanCard.data.id}/preview`, {
+    headers,
+    responseType: 'arraybuffer',
   });
-  const supervisorUser = users.data.find((u) => u.username === 'supervisor1');
-  const adminUser = users.data.find((u) => u.username === 'admin1');
-  if (!supervisorUser || !adminUser) {
-    throw new Error('Expected seeded users supervisor1/admin1 not found — was prisma db seed run?');
-  }
+  await writeFakeCamera(Buffer.from(preview.data));
 
-  // Clear any station scopes left over from a PRIOR run of this suite —
-  // e.g. one where global-teardown didn't get a chance to remove them
-  // (crashed, or hit an unretried 429 before retry-with-backoff was
-  // added). DailyReportPage renders user.stationScope[0], so a stale
-  // extra scope from an old run makes the test assert against the WRONG
-  // station and fail confusingly. Always start this run from zero.
-  const supervisorDetail = await axios.get<{
-    stationScope: Array<{ stationId: string }>;
-  }>(`${API_BASE}/users/${supervisorUser.id}`, { headers: sysadminHeaders });
-  for (const scope of supervisorDetail.data.stationScope) {
-    await axios.delete(`${API_BASE}/users/${supervisorUser.id}/station-scope/${scope.stationId}`, {
-      headers: sysadminHeaders,
-    });
-  }
-
-  await axios.post(
-    `${API_BASE}/users/${supervisorUser.id}/station-scope`,
-    { stationId: station.data.id },
-    { headers: sysadminHeaders },
+  // Fill-up history for the first vehicle — trips the gap rule in the
+  // fill-up test and feeds the reports tests.
+  await api.post(
+    `${API_BASE}/fillups`,
+    { vehicleId: vehicle.data.id, stationId: station.data.id, fuelType: 'PETROL_95', quantityLiters: 20 },
+    { headers: { ...headers, 'Idempotency-Key': `pw-fixture-${runId}` } },
   );
 
-  // Clear mustChangePassword on both seeded users so the actual UI tests
-  // (nav-by-role, masking) aren't blocked by the forced-change redirect —
-  // restored to the original seeded password in global-teardown.ts.
-  const supervisorLogin = await login('supervisor1', SEEDED_PASSWORD);
-  await axios.post(
-    `${API_BASE}/auth/change-password`,
-    { currentPassword: SEEDED_PASSWORD, newPassword: TEMP_PASSWORD },
-    { headers: auth(supervisorLogin.accessToken) },
+  // ── Run-specific accounts ──────────────────────────────────────────
+  const roles = await api.get<Array<{ id: string; name: string }>>(`${API_BASE}/roles`, { headers });
+  const roleId = (name: string) => {
+    const role = roles.data.find((r) => r.name === name);
+    if (!role) throw new Error(`Expected seeded role ${name} — was prisma db seed run?`);
+    return role.id;
+  };
+
+  const createUser = async (username: string, role: string | null, initialPassword = 'InitialPassword123!') => {
+    const user = await api.post<{ id: string }>(
+      `${API_BASE}/users`,
+      { username, password: initialPassword, fullName: `PW ${username}` },
+      { headers },
+    );
+    if (role) {
+      await api.post(`${API_BASE}/users/${user.data.id}/roles`, { roleId: roleId(role) }, { headers });
+    }
+    return user.data.id;
+  };
+  // New accounts start with mustChangePassword — clear it by changing to
+  // RUN_PASSWORD, so the UI tests aren't blocked by the forced redirect.
+  const activate = async (username: string) => {
+    const first = await login(username, 'InitialPassword123!');
+    await api.post(
+      `${API_BASE}/auth/change-password`,
+      { currentPassword: 'InitialPassword123!', newPassword: RUN_PASSWORD },
+      { headers: auth(first.accessToken) },
+    );
+  };
+
+  const supervisorUsername = `pw_sup_${runId}`;
+  const supervisorId = await createUser(supervisorUsername, 'station_supervisor');
+  await api.post(`${API_BASE}/users/${supervisorId}/station-scope`, { stationId: station.data.id }, { headers });
+
+  const adminUsername = `pw_admin_${runId}`;
+  await createUser(adminUsername, 'directorate_admin');
+
+  const registrarUsername = `pw_reg_${runId}`;
+  const registrarId = await createUser(registrarUsername, 'registration_employee');
+  await api.post(
+    `${API_BASE}/users/${registrarId}/registration-station-scope`,
+    { registrationStationId: registrationStation.data.id },
+    { headers },
   );
 
-  const adminLogin = await login('admin1', SEEDED_PASSWORD);
-  await axios.post(
-    `${API_BASE}/auth/change-password`,
-    { currentPassword: SEEDED_PASSWORD, newPassword: TEMP_PASSWORD },
-    { headers: auth(adminLogin.accessToken) },
-  );
-
-  // A dedicated throwaway user, deliberately left with
-  // mustChangePassword: true — this is what the redirect-and-block test
-  // exercises. No role needed; that test never touches permission-gated
-  // content.
   const needsChangeUsername = `pw_needschange_${runId}`;
-  const needsChangePassword = 'InitialPassword123!';
-  await axios.post(
-    `${API_BASE}/users`,
-    { username: needsChangeUsername, password: needsChangePassword, fullName: 'PW Needs Change' },
-    { headers: sysadminHeaders },
-  );
+  await createUser(needsChangeUsername, null);
 
-  // POST /auth/login is throttled to 5/min PER APP INSTANCE (not per
-  // username) — the 3 real logins just above (sysadmin1, supervisor1,
-  // admin1) already spend more than half that budget. Without this pause,
-  // the actual tests' own logins land in the same rolling window and get
-  // 429'd, which manifests as "stuck on /login" — genuinely confusing to
-  // debug from a UI-level failure. Wait out the window here, once, so the
-  // test phase starts with a clean budget.
-  await new Promise((resolve) => setTimeout(resolve, 61_000));
+  await activate(supervisorUsername);
+  await activate(adminUsername);
+  await activate(registrarUsername);
+
+  // The logins above spend most of the 5/min /auth/login budget. Wait out
+  // the window once, so the test phase starts with a clean budget.
+  await sleep(61_000);
 
   const fixtures: Fixtures = {
     runId,
     stationId: station.data.id,
     stationInternalCode: station.data.internalCode,
     stationName: station.data.name,
-    driverId: driver.data.id,
-    driverFullName: driver.data.fullName,
-    driverIdentityNumber,
-    supervisorUsername: 'supervisor1',
-    supervisorPassword: TEMP_PASSWORD,
-    supervisorUserId: supervisorUser.id,
-    adminUsername: 'admin1',
-    adminPassword: TEMP_PASSWORD,
+    registrationStationId: registrationStation.data.id,
+    registrationStationName: registrationStation.data.name,
+    ownerId: owner.data.id,
+    ownerFullName: owner.data.fullName,
+    ownerIdentityNumber,
+    vehicleId: vehicle.data.id,
+    vehicleCurrentPlate: vehicle.data.currentPlate,
+    cleanVehicleCurrentPlate: cleanVehicle.data.currentPlate,
+    cleanVehicleOwnerFullName: cleanOwner.data.fullName,
+    scanVehicleCurrentPlate: scanVehicle.data.currentPlate,
+    scanCardNumber: scanCard.data.cardNumber,
+    deskName,
+    supervisorUsername,
+    supervisorPassword: RUN_PASSWORD,
+    adminUsername,
+    adminPassword: RUN_PASSWORD,
+    registrarUsername,
+    registrarPassword: RUN_PASSWORD,
     needsChangeUsername,
-    needsChangePassword,
+    needsChangePassword: 'InitialPassword123!',
+    sysadminPasswordChanged,
   };
 
   writeFileSync(FIXTURES_PATH, JSON.stringify(fixtures, null, 2));

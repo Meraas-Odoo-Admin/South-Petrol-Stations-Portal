@@ -23,7 +23,15 @@ type ExceptionExportRow = Prisma.ExceptionGetPayload<{
     exceptionType: true;
     fillUpTransaction: {
       include: {
-        vehicle: { select: { id: true; internalCode: true; currentPlate: true } };
+        vehicle: {
+          select: {
+            id: true;
+            internalCode: true;
+            currentPlate: true;
+            owner: { select: { id: true; identityType: true; identityNumber: true; fullName: true } };
+          };
+        };
+        // Legacy-only (round 6) — see FILL_UP_HISTORY_INCLUDE's comment.
         driver: { select: { id: true; identityType: true; identityNumber: true; fullName: true } };
         station: { select: { id: true; internalCode: true; name: true } };
       };
@@ -39,6 +47,66 @@ function pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
     doc.on('error', reject);
     doc.end();
   });
+}
+
+interface PdfTableColumn {
+  header: string;
+  width: number;
+}
+
+// Item 14: PDF exports previously rendered each row as one pipe-delimited
+// text line (`doc.text(\`${a} | ${b} | ...\`)`) — readable but not a table:
+// no column alignment, no header emphasis, nothing that survives being
+// printed or resized. This draws an actual bordered/ruled table, wrapping
+// to a new page (with the header re-drawn) when a page fills up, same as
+// any real report generator would.
+function drawPdfTable(
+  doc: PDFKit.PDFDocument,
+  columns: PdfTableColumn[],
+  rows: string[][],
+  startY: number,
+): void {
+  const left = doc.page.margins.left;
+  const rowHeight = 20;
+  const bottomLimit = doc.page.height - doc.page.margins.bottom;
+
+  function drawHeader(y: number): number {
+    let x = left;
+    doc.font('Helvetica-Bold').fontSize(9);
+    for (const col of columns) {
+      doc.text(col.header, x + 2, y + 4, { width: col.width - 4, ellipsis: true });
+      x += col.width;
+    }
+    doc
+      .moveTo(left, y + rowHeight)
+      .lineTo(x, y + rowHeight)
+      .lineWidth(0.75)
+      .stroke();
+    return y + rowHeight;
+  }
+
+  let y = drawHeader(startY);
+  doc.font('Helvetica').fontSize(9);
+
+  for (const row of rows) {
+    if (y + rowHeight > bottomLimit) {
+      doc.addPage();
+      y = drawHeader(doc.page.margins.top);
+      doc.font('Helvetica').fontSize(9);
+    }
+    let x = left;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i]!;
+      doc.text(row[i] ?? '', x + 2, y + 4, { width: col.width - 4, ellipsis: true });
+      x += col.width;
+    }
+    doc
+      .moveTo(left, y + rowHeight)
+      .lineTo(x, y + rowHeight)
+      .lineWidth(0.25)
+      .stroke('#cccccc');
+    y += rowHeight;
+  }
 }
 
 @Injectable()
@@ -67,14 +135,26 @@ export class ReportsExportService {
     const doc = new PDFDocument({ margin: 50 });
     doc.fontSize(16).text('Daily Fill-Up Report', { underline: true });
     doc.moveDown();
-    doc.fontSize(11);
+    doc.fontSize(11).font('Helvetica');
     doc.text(`Station: ${report.stationId ?? 'All stations'}`);
     doc.text(`Date: ${report.date}`);
     doc.moveDown();
-    doc.text(`Total fill-ups: ${report.totalFillUps}`);
-    doc.text(`Total liters: ${report.totalLiters}`);
-    doc.text(`Exceptions pending: ${report.exceptionsPending}`);
-    doc.text(`Exceptions approved: ${report.exceptionsApproved}`);
+
+    drawPdfTable(
+      doc,
+      [
+        { header: 'Field', width: 220 },
+        { header: 'Value', width: 220 },
+      ],
+      [
+        ['Total fill-ups', String(report.totalFillUps)],
+        ['Total liters', String(report.totalLiters)],
+        ['Exceptions pending', String(report.exceptionsPending)],
+        ['Exceptions approved', String(report.exceptionsApproved)],
+      ],
+      doc.y,
+    );
+
     return pdfToBuffer(doc);
   }
 
@@ -85,7 +165,7 @@ export class ReportsExportService {
       { header: 'Date', key: 'date', width: 20 },
       { header: 'Station', key: 'station', width: 20 },
       { header: 'Vehicle', key: 'vehicle', width: 18 },
-      { header: 'Driver', key: 'driver', width: 24 },
+      { header: 'Owner', key: 'owner', width: 24 },
       { header: 'Exception Type', key: 'exceptionType', width: 20 },
       { header: 'Reason', key: 'reason', width: 30 },
       { header: 'Status', key: 'status', width: 12 },
@@ -102,35 +182,52 @@ export class ReportsExportService {
     const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
     doc.fontSize(16).text('Violations / Exceptions', { underline: true });
     doc.moveDown();
-    doc.fontSize(9);
 
-    for (const row of rows) {
-      const plain = this.violationRowToPlainObject(row);
-      doc.text(
-        `${plain.date} | ${plain.station} | ${plain.vehicle} | ${plain.driver} | ${plain.exceptionType} | ${plain.status} | ${plain.reason}`,
-      );
-    }
     if (rows.length === 0) {
-      doc.text('No violations match this filter.');
+      doc.fontSize(11).font('Helvetica').text('No violations match this filter.');
+      return pdfToBuffer(doc);
     }
+
+    drawPdfTable(
+      doc,
+      [
+        { header: 'Date', width: 110 },
+        { header: 'Station', width: 90 },
+        { header: 'Vehicle', width: 90 },
+        { header: 'Owner', width: 130 },
+        { header: 'Exception Type', width: 110 },
+        { header: 'Status', width: 70 },
+        { header: 'Reason', width: 200 },
+      ],
+      rows.map((row) => {
+        const plain = this.violationRowToPlainObject(row);
+        return [plain.date, plain.station, plain.vehicle, plain.owner, plain.exceptionType, plain.status, plain.reason];
+      }),
+      doc.y,
+    );
+
     return pdfToBuffer(doc);
   }
 
-  // Deliberately excludes driver.identityNumber (and identityType), even
+  // Deliberately excludes owner.identityNumber (and identityType), even
   // though the underlying query fetches it (ReportsService's
-  // FILL_UP_HISTORY_INCLUDE is shared with the driver/vehicle history JSON
-  // endpoints, which DO need it). §8's masking rule is UI-only for the JSON
-  // endpoints because there's a frontend downstream to apply it — an
+  // FILL_UP_HISTORY_INCLUDE is shared with the vehicle-history JSON
+  // endpoint, which DOES need it). §8's masking rule is UI-only for the
+  // JSON endpoint because there's a frontend downstream to apply it — an
   // exported file has no such step; whoever opens it sees exactly what's
-  // written here, permanently. driver.fullName is fine to keep (not the
+  // written here, permanently. owner.fullName is fine to keep (not the
   // sensitive part); the identity number itself never reaches either
   // export format. Do not add it back without re-deciding this.
+  //
+  // Round 6: "Owner" replaces "Driver" as the export column — falls back
+  // to the legacy driver.fullName only for pre-round-6 fill-ups that have
+  // no vehicle owner set at all.
   private violationRowToPlainObject(row: ExceptionExportRow) {
     return {
       date: row.fillUpTransaction.occurredAt.toISOString(),
       station: row.fillUpTransaction.station.internalCode,
       vehicle: row.fillUpTransaction.vehicle.currentPlate,
-      driver: row.fillUpTransaction.driver.fullName,
+      owner: row.fillUpTransaction.vehicle.owner?.fullName ?? row.fillUpTransaction.driver?.fullName ?? '—',
       exceptionType: row.exceptionType.name,
       reason: row.reason,
       status: row.approvedById ? 'approved' : 'pending',

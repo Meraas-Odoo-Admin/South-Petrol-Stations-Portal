@@ -18,10 +18,6 @@ export class CreateFillUpDto {
 
   @ApiProperty()
   @IsString()
-  driverId!: string;
-
-  @ApiProperty()
-  @IsString()
   stationId!: string;
 
   @ApiProperty({ enum: FuelType })

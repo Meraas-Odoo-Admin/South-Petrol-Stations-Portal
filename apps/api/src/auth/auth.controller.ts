@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { AllowPendingPasswordChange } from '../common/decorators/allow-pending-password-change.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from './types/jwt-payload.interface';
 
@@ -52,6 +53,7 @@ export class AuthController {
   // Authenticated (not just @Public) so we know who's logging out for the
   // audit trail, but requires no specific permission beyond being logged in.
   @RequirePermission()
+  @AllowPendingPasswordChange()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
@@ -67,6 +69,7 @@ export class AuthController {
   }
 
   @RequirePermission()
+  @AllowPendingPasswordChange()
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   async changePassword(
@@ -84,6 +87,7 @@ export class AuthController {
   // current user + permissions (they're otherwise only ever checked
   // server-side, per request).
   @RequirePermission()
+  @AllowPendingPasswordChange()
   @Get('me')
   getMe(@CurrentUser() user: AuthenticatedUser) {
     return this.auth.getMe(user.id);

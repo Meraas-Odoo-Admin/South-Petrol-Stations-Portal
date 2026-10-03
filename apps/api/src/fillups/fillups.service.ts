@@ -10,9 +10,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
-import { FillUpsRepository } from './fillups.repository';
+import { FillUpsRepository, StandingExceptionsRepository } from './fillups.repository';
 import { FillUpRuleEngine } from './rule-engine/fill-up-rule-engine';
+import type { RuleTrigger } from './rule-engine/types';
 import { CreateFillUpDto } from './dto/create-fillup.dto';
+import { CreateExceptionTypeDto } from './dto/create-exception-type.dto';
+import { UpdateExceptionTypeDto } from './dto/update-exception-type.dto';
 
 const FILL_UP_WITH_EXCEPTION_INCLUDE = { exception: true } as const;
 
@@ -21,12 +24,11 @@ type ExistingFillUp = Prisma.FillUpTransactionGetPayload<{
 }>;
 
 // A reused Idempotency-Key is only a valid retry if it describes the SAME
-// fill-up. A different vehicleId/driverId/etc under the same key is a
-// client bug (key collision or a copy-paste mistake), not a retry — it
-// must never silently resolve to the wrong transaction.
+// fill-up. A different vehicleId/etc under the same key is a client bug
+// (key collision or a copy-paste mistake), not a retry — it must never
+// silently resolve to the wrong transaction.
 function payloadMatchesExisting(dto: CreateFillUpDto, existing: ExistingFillUp): boolean {
   if (dto.vehicleId !== existing.vehicleId) return false;
-  if (dto.driverId !== existing.driverId) return false;
   if (dto.stationId !== existing.stationId) return false;
   if (dto.fuelType !== existing.fuelType) return false;
   if (!existing.quantityLiters.equals(dto.quantityLiters)) return false;
@@ -46,13 +48,94 @@ export class FillUpsService {
     private readonly rbac: RbacService,
     private readonly settings: SystemSettingsService,
     private readonly repo: FillUpsRepository,
+    private readonly standingExceptionsRepo: StandingExceptionsRepository,
   ) {
     // Constructed directly rather than DI-injected: FillUpRuleEngine takes
-    // plain SettingsReader/FillUpHistoryReader interfaces (see rule-engine/
-    // types.ts) so it stays independently unit-testable without Nest's
-    // TestingModule. SystemSettingsService/FillUpsRepository are the real
-    // Prisma-backed implementations of those interfaces.
-    this.ruleEngine = new FillUpRuleEngine(this.settings, this.repo);
+    // plain SettingsReader/FillUpHistoryReader/StandingExceptionReader
+    // interfaces (see rule-engine/types.ts) so it stays independently
+    // unit-testable without Nest's TestingModule.
+    // SystemSettingsService/FillUpsRepository/StandingExceptionsRepository
+    // are the real Prisma-backed implementations of those interfaces.
+    this.ruleEngine = new FillUpRuleEngine(this.settings, this.repo, this.standingExceptionsRepo);
+  }
+
+  // Round 7 item 1: the fill-up form's pre-submit rule-review screen —
+  // returns every applicable rule's real actual/limit numbers, computed by
+  // the SAME rule engine a real submission uses (FillUpRuleEngine.
+  // evaluateWithChecks), never a separate client-side estimate. Gated on
+  // fillups:create (not vehicles:read) since it's part of the fill-up
+  // recording flow specifically, same reasoning as getFuelPrices/
+  // listExceptionTypes below.
+  //
+  // Registration pivot, phase 1: allowances are per municipality, so the
+  // preview needs the station too — it resolves the municipality exactly
+  // the way create() does (same scope check, same refusal for a station
+  // with no municipality or one that isn't live), so the numbers shown are
+  // the ones a real submit at that station will be judged by.
+  async previewRules(vehicleId: string, stationId: string, actorId: string) {
+    const scope = await this.rbac.getStationScope(actorId);
+    if (scope !== null && !scope.includes(stationId)) {
+      throw new ForbiddenException('You do not have access to this station.');
+    }
+    const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) {
+      throw new NotFoundException('Vehicle not found.');
+    }
+    const municipalityId = await this.resolveRecordingMunicipality(stationId);
+    const { checks } = await this.ruleEngine.evaluateWithChecks(
+      vehicleId,
+      vehicle.ownerId,
+      municipalityId,
+      new Date(),
+    );
+    return { checks };
+  }
+
+  // The municipality a fill-up at this station is recorded in — stamped
+  // onto the FillUpTransaction and used to scope every rule-engine count.
+  // Refuses (machine-checkable markers, mapped to Arabic by the fill-up
+  // screen — same convention as OWNER_IDENTITY_PROVISIONAL) rather than
+  // ever stamping null:
+  //  - STATION_HAS_NO_MUNICIPALITY: Station.municipalityId is still null.
+  //  - MUNICIPALITY_NOT_LIVE: the municipality is still PREPARING — no
+  //    fill-up can be recorded there until an admin switches it to LIVE.
+  private async resolveRecordingMunicipality(stationId: string): Promise<string> {
+    const station = await this.prisma.station.findUnique({
+      where: { id: stationId },
+      select: { municipality: { select: { id: true, status: true } } },
+    });
+    if (!station) {
+      throw new NotFoundException('Station not found.');
+    }
+    if (!station.municipality) {
+      throw new ConflictException('STATION_HAS_NO_MUNICIPALITY');
+    }
+    if (station.municipality.status !== 'LIVE') {
+      throw new ConflictException('MUNICIPALITY_NOT_LIVE');
+    }
+    return station.municipality.id;
+  }
+
+  // Human-readable snapshot of the specific prior fill-up that triggered a
+  // rule — used both for the Exception.triggerDetail persisted at
+  // submission time (item 8) and for the inline 422 rejection response, so
+  // the same shape backs both surfaces.
+  private async describeTrigger(trigger: RuleTrigger | undefined) {
+    if (!trigger) {
+      return null;
+    }
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: trigger.vehicleId },
+      select: { internalCode: true, currentPlate: true },
+    });
+    return {
+      vehicleId: trigger.vehicleId,
+      vehicleInternalCode: vehicle?.internalCode ?? null,
+      vehicleCurrentPlate: vehicle?.currentPlate ?? null,
+      // ISO string, not a raw Date — this is stored as JSON (Exception.
+      // triggerDetail) and returned as JSON over the API either way.
+      occurredAt: trigger.occurredAt.toISOString(),
+    };
   }
 
   async create(dto: CreateFillUpDto, idempotencyKey: string, actorId: string) {
@@ -80,23 +163,46 @@ export class FillUpsService {
     if (existing) {
       if (!payloadMatchesExisting(dto, existing)) {
         throw new ConflictException(
-          'This Idempotency-Key was already used for a different fill-up (mismatched vehicle, driver, station, fuel type, quantity, or occurredAt). Use a new key for a new submission.',
+          'This Idempotency-Key was already used for a different fill-up (mismatched vehicle, station, fuel type, quantity, or occurredAt). Use a new key for a new submission.',
         );
       }
       return { status: 'existing' as const, transaction: existing };
     }
 
-    const vehicle = await this.prisma.vehicle.findUnique({ where: { id: dto.vehicleId } });
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: dto.vehicleId },
+      include: { owner: true },
+    });
     if (!vehicle) {
       throw new NotFoundException('Vehicle not found.');
     }
-    const driver = await this.prisma.driver.findUnique({ where: { id: dto.driverId } });
-    if (!driver) {
-      throw new NotFoundException('Driver not found.');
-    }
-    const station = await this.prisma.station.findUnique({ where: { id: dto.stationId } });
-    if (!station) {
-      throw new NotFoundException('Station not found.');
+    // Resolved once here and stamped onto the row below — never looked up
+    // again through the station afterward (see the schema comment on
+    // FillUpTransaction.municipalityId). Runs before either branch, so an
+    // exception-mode submission can't bypass it either.
+    const municipalityId = await this.resolveRecordingMunicipality(dto.stationId);
+
+    // Round 11 item 1: a DRIVERS_LICENSE-identified owner is a one-time,
+    // provisional stand-in — the client's own framing was "only the first
+    // fill is available," a hard block, not a flaggable/exception-
+    // routable rule like the checks FillUpRuleEngine evaluates. Deliberately
+    // structured as a separate check here (not folded into the rule
+    // engine's RuleFailureReason set) since it must ALSO block exception
+    // mode below — every other rule is bypassable by recording an
+    // exception, this one specifically must not be. "First fill-up" means
+    // this vehicle has zero PERSISTED FillUpTransaction rows so far — a
+    // prior rejected attempt never created one, so it doesn't count.
+    if (vehicle.owner?.identityType === 'DRIVERS_LICENSE') {
+      const priorFillUpCount = await this.prisma.fillUpTransaction.count({
+        where: { vehicleId: dto.vehicleId },
+      });
+      if (priorFillUpCount > 0) {
+        // Machine-checkable marker, not prose — the frontend maps this to
+        // a specific Arabic message (never shows raw English text per the
+        // code-leak audit) rather than the generic fallback every other
+        // non-422 error gets.
+        throw new ForbiddenException('OWNER_IDENTITY_PROVISIONAL');
+      }
     }
 
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
@@ -105,23 +211,38 @@ export class FillUpsService {
     );
 
     if (!exceptionModeFieldsPresent) {
-      const ruleResult = await this.ruleEngine.evaluate(dto.vehicleId, dto.driverId, occurredAt);
+      const ruleResult = await this.ruleEngine.evaluate(
+        dto.vehicleId,
+        vehicle.ownerId,
+        municipalityId,
+        occurredAt,
+      );
       if (!ruleResult.allowed) {
-        return { status: 'rejected' as const, reason: ruleResult.reason };
+        return {
+          status: 'rejected' as const,
+          reason: ruleResult.reason,
+          trigger: await this.describeTrigger(ruleResult.trigger),
+        };
       }
 
       const transaction = await this.prisma.$transaction(async (tx) => {
         const created = await tx.fillUpTransaction.create({
           data: {
             vehicleId: dto.vehicleId,
-            driverId: dto.driverId,
             stationId: dto.stationId,
+            municipalityId,
             fuelType: dto.fuelType,
             quantityLiters: dto.quantityLiters,
             occurredAt,
             recordedById: actorId,
             isException: false,
             idempotencyKey,
+            // Set only when a rule that would have blocked this fill-up
+            // was instead auto-allowed by an active StandingException —
+            // "auto-allowed with no trace" is exactly what the standing-
+            // exception design explicitly must NOT do.
+            standingExceptionId: ruleResult.coveredBy?.standingExceptionId,
+            coveredRule: ruleResult.coveredBy?.rule,
           },
         });
 
@@ -131,7 +252,14 @@ export class FillUpsService {
             action: 'CREATE',
             entityType: 'FillUpTransaction',
             entityId: created.id,
-            newValue: { vehicleId: created.vehicleId, stationId: created.stationId, isException: false },
+            newValue: {
+              vehicleId: created.vehicleId,
+              stationId: created.stationId,
+              municipalityId: created.municipalityId,
+              isException: false,
+              standingExceptionId: ruleResult.coveredBy?.standingExceptionId ?? undefined,
+              coveredRule: ruleResult.coveredBy?.rule ?? undefined,
+            },
           },
           tx,
         );
@@ -146,8 +274,31 @@ export class FillUpsService {
     }
 
     // Exception mode: "no hard block, exception with a mandatory reason"
-    // (docs/OPEN_ITEMS.md, resolved). The rule engine is bypassed entirely
-    // — this is the request that already knows it's over-cap.
+    // (docs/OPEN_ITEMS.md, resolved). The rule engine's verdict is never
+    // used to BLOCK this request — but it IS run once, diagnostic-only, to
+    // capture which rule actually would have fired and which specific
+    // prior fill-up triggered it (item 8). Never trust a client-supplied
+    // diagnostic for this — always re-derive it server-side, same as any
+    // other authoritative check.
+    const diagnostic = await this.ruleEngine.evaluate(
+      dto.vehicleId,
+      vehicle.ownerId,
+      municipalityId,
+      occurredAt,
+    );
+    const triggerReason = diagnostic.allowed ? null : diagnostic.reason;
+    const triggerDetail = diagnostic.allowed ? null : await this.describeTrigger(diagnostic.trigger);
+
+    // Round 12: recording an exception is now gated by its own permission,
+    // separate from fillups:create — the client wants this to be "a tick
+    // box in the settings given to certain users they pick," per-user, not
+    // a blanket ability everyone who can record a normal fill-up also gets.
+    // See UserPermission for the per-user grant mechanism.
+    const permissions = await this.rbac.getPermissionsForUser(actorId);
+    if (!permissions.has('fillups:record_exception')) {
+      throw new ForbiddenException('You are not authorized to record fill-ups as exceptions.');
+    }
+
     if (!dto.reason) {
       throw new BadRequestException(
         'reason is required when submitting a fill-up with an exception.',
@@ -174,8 +325,8 @@ export class FillUpsService {
       const created = await tx.fillUpTransaction.create({
         data: {
           vehicleId: dto.vehicleId,
-          driverId: dto.driverId,
           stationId: dto.stationId,
+          municipalityId,
           fuelType: dto.fuelType,
           quantityLiters: dto.quantityLiters,
           occurredAt,
@@ -191,7 +342,17 @@ export class FillUpsService {
           exceptionTypeId: dto.exceptionTypeId!,
           reason: dto.reason!,
           proofReference: dto.proofReference,
-          approvedById: null,
+          // Round 12: anyone who holds fillups:record_exception (checked
+          // above) no longer needs a separate supervisor/admin approval —
+          // "I don't want them to be approved by the supervisor or admin, I
+          // just want them go as exception." Auto-approved by the same
+          // actor who recorded it, immediately, at creation. The
+          // fillups:approve_exception queue (approveException below) is
+          // left in place unchanged for any legacy pending rows — this
+          // permission check just means no NEW row is ever created pending.
+          approvedById: actorId,
+          triggerReason,
+          triggerDetail: triggerDetail ?? undefined,
         },
       });
 
@@ -204,6 +365,7 @@ export class FillUpsService {
           newValue: {
             vehicleId: created.vehicleId,
             stationId: created.stationId,
+            municipalityId: created.municipalityId,
             isException: true,
             exceptionTypeId: dto.exceptionTypeId,
           },
@@ -223,12 +385,11 @@ export class FillUpsService {
   // Ordinary station scoping (CLAUDE.md rule 3, non-negotiable) IS enforced
   // below. What's still provisional is narrower than that: any holder of
   // fillups:approve_exception may approve any exception at any station
-  // within their scope — §13 item 4 (security-authority scope for a
-  // station) is still pending from the client, and once answered, approval
-  // may additionally need to be restricted to the station's specific
-  // SecurityAuthority rather than "the caller's scope includes this
-  // station" being sufficient. That further restriction is NOT implemented
-  // now; flagged so it isn't mistaken for a finished design.
+  // within their scope. §13 item 4 is now answered (one SecurityAuthority
+  // per municipality, OPEN_ITEMS.md #4), but whether approval should
+  // additionally be restricted to that authority's people is part of the
+  // later supervisor-roles phase, not implemented here; flagged so it
+  // isn't mistaken for a finished design.
   async approveException(fillUpId: string, actorId: string) {
     const transaction = await this.prisma.fillUpTransaction.findUnique({
       where: { id: fillUpId },
@@ -271,6 +432,89 @@ export class FillUpsService {
         where: { id: fillUpId },
         include: FILL_UP_WITH_EXCEPTION_INCLUDE,
       });
+    });
+  }
+
+  // Round 4 feedback, item 3: an auto-calculated read-only cost field
+  // (quantity × price-per-liter) on the fill-up form. Per CLAUDE.md rule 4,
+  // the price itself is a SystemSetting, not a hardcoded constant — gated
+  // on fillups:create (same reasoning as exception-types above) rather
+  // than settings:manage, since any station employee who can record a
+  // fill-up needs to see the price, not just admins.
+  async getFuelPrices(): Promise<Record<'PETROL_95' | 'DIESEL' | 'KEROSENE', number>> {
+    const [petrol95, diesel, kerosene] = await Promise.all([
+      this.settings.getNumber('fillup.price_per_liter.PETROL_95'),
+      this.settings.getNumber('fillup.price_per_liter.DIESEL'),
+      this.settings.getNumber('fillup.price_per_liter.KEROSENE'),
+    ]);
+    return { PETROL_95: petrol95, DIESEL: diesel, KEROSENE: kerosene };
+  }
+
+  // The frontend's "submit as exception" flow needs to know which
+  // categories exist and which require proof BEFORE submitting — there was
+  // no read endpoint for ExceptionType at all until now (CLAUDE.md rule 5:
+  // exception categories are a lookup table, so this is just exposing rows
+  // that already exist, not adding new data).
+  listActiveExceptionTypes() {
+    return this.prisma.exceptionType.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // Admin panel, item 7's "exception types itself should be DB-driven, not
+  // hardcoded" — the table already was (CLAUDE.md rule 5), what was
+  // missing was a way to manage it without a raw DB write. Includes
+  // inactive types too — an admin editing the catalog needs to see
+  // everything, not just what's currently offered to a submitter.
+  listAllExceptionTypes() {
+    return this.prisma.exceptionType.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  async createExceptionType(dto: CreateExceptionTypeDto, actorId: string) {
+    const existing = await this.prisma.exceptionType.findUnique({ where: { key: dto.key } });
+    if (existing) {
+      throw new ConflictException('key is already in use.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.exceptionType.create({
+        data: { key: dto.key, name: dto.name, requiresProof: dto.requiresProof ?? true },
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'CREATE',
+          entityType: 'ExceptionType',
+          entityId: created.id,
+          newValue: { key: created.key, name: created.name, requiresProof: created.requiresProof },
+        },
+        tx,
+      );
+      return created;
+    });
+  }
+
+  async updateExceptionType(id: string, dto: UpdateExceptionTypeDto, actorId: string) {
+    const before = await this.prisma.exceptionType.findUnique({ where: { id } });
+    if (!before) {
+      throw new NotFoundException('Exception type not found.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.exceptionType.update({ where: { id }, data: dto });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'UPDATE',
+          entityType: 'ExceptionType',
+          entityId: id,
+          oldValue: { name: before.name, requiresProof: before.requiresProof, isActive: before.isActive },
+          newValue: { name: updated.name, requiresProof: updated.requiresProof, isActive: updated.isActive },
+        },
+        tx,
+      );
+      return updated;
     });
   }
 }

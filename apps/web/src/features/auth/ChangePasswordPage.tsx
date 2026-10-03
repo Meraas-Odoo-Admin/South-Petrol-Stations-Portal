@@ -1,33 +1,84 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { isAxiosError } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
+import { BrandMark } from '../../components/BrandMark';
+import { EyeIcon } from '../../components/EyeIcon';
+import { APP_NAME, APP_TAGLINE } from '../../lib/appInfo';
 
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'كلمة المرور الحالية مطلوبة'),
-  newPassword: z.string().min(8, 'يجب ألا تقل كلمة المرور الجديدة عن 8 أحرف'),
-});
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'كلمة المرور الحالية مطلوبة'),
+    newPassword: z.string().min(8, 'يجب ألا تقل كلمة المرور الجديدة عن 8 أحرف'),
+    confirmPassword: z.string().min(1, 'تأكيد كلمة المرور مطلوب'),
+  })
+  .refine((values) => values.newPassword === values.confirmPassword, {
+    message: 'الكلمتان غير متطابقتين',
+    path: ['confirmPassword'],
+  });
 
 type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;
 
+interface StrengthCheck {
+  label: string;
+  met: boolean;
+}
+
+function evaluateStrength(password: string): { checks: StrengthCheck[]; score: number } {
+  const checks: StrengthCheck[] = [
+    { label: 'ثمانية أحرف أو أكثر', met: password.length >= 8 },
+    { label: 'تحتوي رقمًا واحدًا على الأقل', met: /\d/.test(password) },
+    { label: 'تحتوي حرفًا كبيرًا (يُنصح به)', met: /[A-Z]/.test(password) },
+  ];
+  const score = checks.filter((c) => c.met).length;
+  return { checks, score };
+}
+
+function strengthLabel(score: number): { text: string; tone: string } {
+  if (score <= 1) return { text: 'ضعيفة', tone: 'text-danger' };
+  if (score === 2) return { text: 'مقبولة', tone: 'text-accent-dark' };
+  return { text: 'قوية — مقبولة', tone: 'text-ok' };
+}
+
+// Matches design/"Fuel Control System - Round 2 Screens.dc.html" 3c
+// (mobile only — no desktop artboard exists for this screen, a documented
+// gap; the outer shell here reuses 3a/3b's login-shell wrapper so desktop
+// isn't left in the old plain-slate state, but the two-card body below is
+// 3c's own content, drawn 1:1 including the previously-missing Arabic
+// password-strength indicator).
 export function ChangePasswordPage() {
   const { changePassword, user } = useAuth();
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Round 14: "it should also be put in the first login password change,
+  // and basically any field that contains a password" — LoginPage already
+  // has a show/hide toggle on its one password field; these three never
+  // did. Independent per field, same reasoning as three separate fields
+  // needing three separate answers to "is this one showing right now".
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ChangePasswordFormValues>({ resolver: zodResolver(changePasswordSchema) });
+
+  const newPassword = watch('newPassword') ?? '';
+  const confirmPassword = watch('confirmPassword') ?? '';
+  const { checks, score } = useMemo(() => evaluateStrength(newPassword), [newPassword]);
+  const strength = strengthLabel(score);
+  const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
   async function onSubmit(values: ChangePasswordFormValues) {
     setServerError(null);
     try {
-      await changePassword(values);
+      await changePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword });
       navigate('/', { replace: true });
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 401) {
@@ -38,51 +89,193 @@ export function ChangePasswordPage() {
     }
   }
 
+  // Round 14: the eye-toggle button lives INSIDE this same flex row as a
+  // sibling of the <input>, not absolutely positioned over it — same
+  // structure LoginPage's own password field already uses. Deliberate:
+  // these inputs carry their own `dir="ltr"` (so typed characters read
+  // left-to-right regardless of the page's rtl), and CSS logical
+  // properties (ps-*/pe-*) resolve against an ELEMENT's OWN direction —
+  // an absolutely-positioned icon reserved via pe-* on an ltr-dir'd input
+  // would reserve space on the wrong physical side, the exact bug just
+  // fixed on DateField's calendar icon. A plain flex row sidesteps the
+  // whole class of bug since sibling layout order doesn't depend on either
+  // child's own dir.
+  const fieldRowClass =
+    'mt-2 flex h-[52px] items-center gap-2 rounded-sm bg-surface-alt px-3.5 focus-within:ring-2 focus-within:ring-accent';
+  const fieldInputClass =
+    'min-w-0 flex-1 bg-transparent text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none';
+
+  // Round 14: this page used to be a bare, unbranded card — a visible
+  // downgrade right after LoginPage's polished two-tone shell (same auth
+  // flow, same user, jarringly different visual quality). Now shares
+  // LoginPage's exact brand mark and mobile header treatment. Also fixed
+  // live: the "الخطوة الأولى قبل الاستخدام" badge used to show
+  // unconditionally, even for a user voluntarily changing their password
+  // from the sidebar long after their first login — now only shown for
+  // the actual forced first-login flow, matching the paragraph below it
+  // (which already branched on this correctly).
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 ps-4 pe-4">
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="w-full max-w-sm rounded-lg bg-white p-6 shadow"
-      >
-        <h1 className="mb-2 text-xl font-bold text-slate-900">تغيير كلمة المرور</h1>
-        {user?.mustChangePassword && (
-          <p className="mb-4 text-sm text-amber-700">
-            يجب تغيير كلمة المرور قبل متابعة استخدام النظام.
+    <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
+      <div className="w-full max-w-[480px] overflow-hidden bg-surface shadow-lg lg:rounded-lg">
+        <div className="flex flex-col items-center gap-3 bg-primary py-8 text-white lg:hidden">
+          <BrandMark variant="white" size={44} />
+          <div className="text-center">
+            <p className="text-[18px] font-black">{APP_NAME}</p>
+            <p className="mt-1 text-[11px] font-medium opacity-90">{APP_TAGLINE}</p>
+          </div>
+        </div>
+
+        <div className="p-6 lg:p-10">
+          <div className="mb-7 hidden items-center gap-3 lg:flex">
+            <BrandMark />
+            <div>
+              <p className="text-[18px] font-black text-ink">{APP_NAME}</p>
+              <p className="text-[11px] font-medium text-ink-soft">{APP_TAGLINE}</p>
+            </div>
+          </div>
+
+          {user?.mustChangePassword && (
+            <div className="mb-2 inline-block rounded-full bg-primary-100 px-3 py-1.5 text-[11px] font-bold text-primary-dark">
+              الخطوة الأولى قبل الاستخدام
+            </div>
+          )}
+          <h1 className="mt-3 text-[22px] font-black text-ink">اختر كلمة مرور جديدة</h1>
+          <p className="mt-2 text-[13px] leading-[1.7] text-ink-soft">
+            {user?.mustChangePassword
+              ? 'كلمة المرور المؤقتة التي سلّمك إياها المشرف تُستخدم مرة واحدة فقط.'
+              : 'اختر كلمة مرور جديدة لحسابك.'}
           </p>
-        )}
 
-        <label className="mb-1 block text-sm font-medium text-slate-700">كلمة المرور الحالية</label>
-        <input
-          type="password"
-          {...register('currentPassword')}
-          className="mb-1 w-full rounded border border-slate-300 px-3 py-2"
-          autoComplete="current-password"
-        />
-        {errors.currentPassword && (
-          <p className="mb-2 text-sm text-red-600">{errors.currentPassword.message}</p>
-        )}
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
+          <div className="rounded-md border border-line p-4">
+            <label className="text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
+            <div className={fieldRowClass}>
+              <input
+                type={showCurrent ? 'text' : 'password'}
+                {...register('currentPassword')}
+                dir="ltr"
+                className={fieldInputClass}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrent((s) => !s)}
+                className="shrink-0 text-ink-soft"
+                aria-label={showCurrent ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                <EyeIcon open={showCurrent} size={17} />
+              </button>
+            </div>
+            {errors.currentPassword && (
+              <p className="mt-1.5 text-[12px] text-danger">{errors.currentPassword.message}</p>
+            )}
+          </div>
 
-        <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">كلمة المرور الجديدة</label>
-        <input
-          type="password"
-          {...register('newPassword')}
-          className="mb-1 w-full rounded border border-slate-300 px-3 py-2"
-          autoComplete="new-password"
-        />
-        {errors.newPassword && (
-          <p className="mb-2 text-sm text-red-600">{errors.newPassword.message}</p>
-        )}
+          <div className="rounded-md border border-line p-4">
+            <label className="text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
+            <div className={fieldRowClass}>
+              <input
+                type={showNew ? 'text' : 'password'}
+                {...register('newPassword')}
+                dir="ltr"
+                className={fieldInputClass}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew((s) => !s)}
+                className="shrink-0 text-ink-soft"
+                aria-label={showNew ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                <EyeIcon open={showNew} size={17} />
+              </button>
+            </div>
+            {errors.newPassword && <p className="mt-1.5 text-[12px] text-danger">{errors.newPassword.message}</p>}
 
-        {serverError && <p className="mt-3 text-sm text-red-600">{serverError}</p>}
+            {/* 4 segments per artboard 3c — the 3 checks below can only
+                ever fill 3 of them; the 4th stays empty even at "قوية"
+                (matches the artboard's own screenshot: 3 filled + 1 empty
+                for the strong state, not a 4th unreachable check). */}
+            <div className="mt-3.5 flex gap-1.5">
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 flex-1 rounded-full ${i < score ? (score >= 3 ? 'bg-ok' : 'bg-accent') : 'bg-surface-alt'}`}
+                />
+              ))}
+            </div>
+            {newPassword.length > 0 && (
+              <p className={`mt-2 text-[12.5px] font-extrabold ${strength.tone}`}>{strength.text}</p>
+            )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="mt-5 w-full rounded bg-slate-900 py-2 font-medium text-white disabled:opacity-50"
-        >
-          {isSubmitting ? '...جارٍ الحفظ' : 'حفظ'}
-        </button>
-      </form>
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {checks.map((check) => (
+                <li key={check.label} className="flex items-center gap-2 text-[12px] text-ink-soft">
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
+                      check.met ? 'bg-ok text-white' : 'bg-surface-alt'
+                    }`}
+                  >
+                    {check.met && (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                        <path d="M4 12l6 6L20 6" />
+                      </svg>
+                    )}
+                  </span>
+                  {check.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-md border border-line p-4">
+            <label className="text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
+            <div className={fieldRowClass}>
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                {...register('confirmPassword')}
+                dir="ltr"
+                className={fieldInputClass}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((s) => !s)}
+                className="shrink-0 text-ink-soft"
+                aria-label={showConfirm ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                <EyeIcon open={showConfirm} size={17} />
+              </button>
+            </div>
+            {errors.confirmPassword && (
+              <p className="mt-1.5 text-[12px] text-danger">{errors.confirmPassword.message}</p>
+            )}
+            {passwordsMatch && !errors.confirmPassword && (
+              <p className="mt-2 flex items-center gap-1.5 text-[12.5px] font-bold text-ok">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                  <path d="M4 12l6 6L20 6" />
+                </svg>
+                الكلمتان متطابقتان
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-md bg-accent-100 px-4 py-3 text-[12px] leading-[1.7] text-accent-dark">
+            بعد الحفظ سيُطلب منك الدخول بكلمة المرور الجديدة في المرة القادمة.
+          </div>
+
+          {serverError && <p className="text-[13px] text-danger">{serverError}</p>}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="mt-1 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
+          >
+            {isSubmitting ? '...جارٍ الحفظ' : 'حفظ والمتابعة'}
+          </button>
+        </form>
+        </div>
+      </div>
     </div>
   );
 }

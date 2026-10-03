@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -7,8 +9,24 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
+// Round 20 (LAN phone testing over HTTPS): see apps/web/vite.config.ts's
+// matching comment — the refresh-token cookie is Secure-flagged (CLAUDE.md
+// rule 9, non-negotiable), which browsers refuse to set/send outside a
+// secure context (HTTPS, or the special-cased "localhost"). A phone on the
+// LAN is neither, so without this it can log in but never stays logged in.
+// Optional: only kicks in when ../.certs/dev-*.pem exist (see vite.config.ts
+// for how to generate them with mkcert), so `pnpm dev` with no certs
+// generated still serves plain HTTP as before.
+function loadHttpsOptions(): { cert: Buffer; key: Buffer } | undefined {
+  const certPath = resolve(__dirname, '../../../.certs/dev-cert.pem');
+  const keyPath = resolve(__dirname, '../../../.certs/dev-key.pem');
+  if (!existsSync(certPath) || !existsSync(keyPath)) return undefined;
+  return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const httpsOptions = loadHttpsOptions();
+  const app = await NestFactory.create(AppModule, { httpsOptions });
 
   app.use(helmet());
   app.use(cookieParser());
@@ -46,7 +64,8 @@ async function bootstrap() {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
-  console.log(`API listening on http://localhost:${port}/api/v1`);
+  const protocol = httpsOptions ? 'https' : 'http';
+  console.log(`API listening on ${protocol}://localhost:${port}/api/v1`);
 }
 
 bootstrap();

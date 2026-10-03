@@ -97,17 +97,13 @@ export class ReportsController {
       .send(buffer);
   }
 
-  @RequirePermission('reports:view')
-  @Get('drivers/:driverId/history')
-  getDriverHistory(
-    @Param('driverId') driverId: string,
-    @Query() query: HistoryQueryDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ) {
-    return this.reports.getDriverHistory(driverId, query, actor.id);
-  }
-
-  @RequirePermission('reports:view')
+  // vehicles:read — "this vehicle's history" shown inline on the vehicle
+  // detail page (gated on vehicles:read to reach the page at all), not a
+  // directorate-level report. Round 6: the equivalent driver-history
+  // endpoint was removed along with the rest of the Driver management
+  // surface (see docs/DESIGN_owner_based_fillups.md) — history is
+  // vehicle/owner-scoped now, not driver-scoped.
+  @RequirePermission('vehicles:read')
   @Get('vehicles/:vehicleId/history')
   getVehicleHistory(
     @Param('vehicleId') vehicleId: string,

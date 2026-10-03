@@ -35,13 +35,16 @@ describe('Auth session lifecycle (e2e)', () => {
   const usernameLockout = `e2e_auth_lockout_${runId}`;
   const usernameMe = `e2e_auth_me_${runId}`;
   const usernameChangePw = `e2e_auth_changepw_${runId}`;
+  const usernamePending = `e2e_auth_pending_${runId}`;
 
   let refreshUserId: string;
   let logoutUserId: string;
   let lockoutUserId: string;
   let meUserId: string;
   let changePwUserId: string;
+  let pendingUserId: string;
   let meRoleId: string;
+  let pendingRoleId: string;
   let meStation: { id: string; internalCode: string; name: string };
   let meCompanyId: string;
 
@@ -101,17 +104,40 @@ describe('Auth session lifecycle (e2e)', () => {
 
     const changePwUser = await createUser(usernameChangePw);
     changePwUserId = changePwUser.id;
+
+    // ── Fixture for the mustChangePassword server-side enforcement tests ──
+    // Real vehicles:read grant so a 403 here can only be explained by the
+    // password-change gate, not by the user simply lacking the permission.
+    const vehiclesReadPermission = await prisma.permission.upsert({
+      where: { key: 'vehicles:read' },
+      create: { key: 'vehicles:read' },
+      update: {},
+    });
+    const pendingRole = await prisma.role.create({ data: { name: `e2e_auth_pending_role_${runId}` } });
+    pendingRoleId = pendingRole.id;
+    await prisma.rolePermission.create({ data: { roleId: pendingRole.id, permissionId: vehiclesReadPermission.id } });
+
+    const pendingUser = await prisma.user.create({
+      data: {
+        username: usernamePending,
+        passwordHash: await argon2.hash(password),
+        fullName: `E2E Auth ${usernamePending}`,
+        mustChangePassword: true,
+      },
+    });
+    pendingUserId = pendingUser.id;
+    await prisma.userRole.create({ data: { userId: pendingUser.id, roleId: pendingRole.id } });
   }, 30_000);
 
   afterAll(async () => {
-    const allUserIds = [refreshUserId, logoutUserId, lockoutUserId, meUserId, changePwUserId];
+    const allUserIds = [refreshUserId, logoutUserId, lockoutUserId, meUserId, changePwUserId, pendingUserId];
     await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
-    await prisma.rolePermission.deleteMany({ where: { roleId: meRoleId } });
-    await prisma.role.delete({ where: { id: meRoleId } });
+    await prisma.rolePermission.deleteMany({ where: { roleId: { in: [meRoleId, pendingRoleId] } } });
+    await prisma.role.deleteMany({ where: { id: { in: [meRoleId, pendingRoleId] } } });
     await prisma.station.delete({ where: { id: meStation.id } });
     await prisma.company.delete({ where: { id: meCompanyId } });
     await app.close();
@@ -347,5 +373,60 @@ describe('Auth session lifecycle (e2e)', () => {
       where: { userId: changePwUserId, action: 'CHANGE_PASSWORD' },
     });
     expect(auditRow).toBeDefined();
+  });
+
+  // ── mustChangePassword server-side enforcement ───────────────────────
+  // Previously only enforced client-side (RequireAuth.tsx redirecting to
+  // /change-password) — a still-valid access token for a
+  // mustChangePassword: true user could call any other authenticated
+  // endpoint directly. PermissionsGuard now fails closed on every route
+  // except the ones carrying @AllowPendingPasswordChange().
+
+  it('rejects an unrelated authenticated call from a mustChangePassword:true user even though they hold the permission it needs', async () => {
+    const pair = await authService.issueTokenPair(pendingUserId, usernamePending);
+
+    // Sanity check: this user genuinely holds vehicles:read, so a 403 here
+    // can only be explained by the pending-password-change gate.
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/vehicles')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .expect(403);
+    expect(res.body.message).toBe('Password change is required before this action.');
+  });
+
+  it('still allows GET /auth/me and POST /auth/logout for a mustChangePassword:true user', async () => {
+    const pair = await authService.issueTokenPair(pendingUserId, usernamePending);
+
+    const meRes = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .expect(200);
+    expect(meRes.body.mustChangePassword).toBe(true);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .expect(204);
+  });
+
+  it('lets the same pending user through to the previously-blocked endpoint immediately after completing the change', async () => {
+    const pair = await authService.issueTokenPair(pendingUserId, usernamePending);
+    const newPassword = 'PendingNoLongerPending789!';
+
+    await request(app.getHttpServer())
+      .get('/api/v1/vehicles')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .expect(403);
+
+    const changeRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${pair.accessToken}`)
+      .send({ currentPassword: password, newPassword })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/vehicles')
+      .set('Authorization', `Bearer ${changeRes.body.accessToken}`)
+      .expect(200);
   });
 });
