@@ -21,6 +21,17 @@ const https =
     ? { cert: readFileSync(certPath), key: readFileSync(keyPath) }
     : undefined;
 
+// Phone testing through a public HTTPS tunnel (`pnpm dev:phone`, README
+// "Testing on a real phone"). The tunnel terminates HTTPS and forwards plain
+// HTTP to this dev server, so: no local mkcert HTTPS here, the tunnel's
+// hostname must be allowed, and the browser reaches the API through THIS
+// origin (/api → the API), which keeps the strict, Secure refresh cookie
+// first-party and needs no CORS entry for a random tunnel hostname.
+const phoneTunnel = process.env.PHONE_TUNNEL === '1';
+const apiProxyTarget =
+  process.env.API_PROXY_TARGET ??
+  `${existsSync(resolve(__dirname, '../../.certs/dev-cert.pem')) ? 'https' : 'http'}://localhost:3000`;
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -41,6 +52,11 @@ export default defineConfig({
     // reach this dev server via the PC's LAN IP — see README/CLAUDE.md for
     // the accompanying VITE_API_BASE_URL/CORS_ORIGINS LAN-testing notes.
     host: true,
-    https,
+    https: phoneTunnel ? undefined : https,
+    ...(phoneTunnel && {
+      // Cloudflare quick tunnels are served from random *.trycloudflare.com names.
+      allowedHosts: ['.trycloudflare.com'],
+      proxy: { '/api': { target: apiProxyTarget, changeOrigin: true, secure: false } },
+    }),
   },
 });

@@ -571,6 +571,7 @@ This is a system tracking government-adjacent security data (national IDs, vehic
 ## 10. Migration & environment strategy
 
 - All schema changes go through `prisma migrate dev` locally, committed as migration files, applied in staging/prod via `prisma migrate deploy` in CI/CD — never manual `ALTER TABLE` against prod.
+- **Once any environment holds real data (Sabha go-live), existing migrations are never edited. Every change goes in a new migration.** Editing a migration in place is only acceptable before it has been applied anywhere with real data.
 - Prefer additive migrations (new nullable column, new table) over destructive ones (drop column, rename). When a field genuinely needs to go away, deprecate it for one release cycle first.
 - Three environments minimum: `dev` (local docker-compose Postgres), `staging` (mirrors prod, used for the directorate to review before each release), `prod`.
 - Seed script (`prisma/seed.ts`) populates: the six known companies, the confirmed station list *tagged with company* (§13 blocks a fully clean import — seed what's solid now, re-run the seed once the client's company-attribution answers land), the four starting roles/permissions, and default `system_settings` values (`fillup.max_per_week = 3`, `fillup.min_gap_days = 2`).

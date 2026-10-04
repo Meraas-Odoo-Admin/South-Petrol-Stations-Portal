@@ -24,6 +24,8 @@ Fuel fill-up tracking system for stations under Sabha Security Directorate's ove
 
 10. **Never log national IDs, administrative IDs, or phone numbers.** Log entity IDs, not PII.
 
+11. **Once any environment holds real data (Sabha go-live), existing migrations are never edited.** Every schema or backfill change goes in a new migration, however small. Editing a migration in place is allowed only while no environment that has applied it holds real data (the Phase 4a migrations were edited in place before their first commit, which is the only such exception).
+
 ## Working style
 
 - One roadmap phase (see `docs/IMPLEMENTATION_PLAN.md` §11) per session/branch. Don't jump ahead to a later phase while an earlier phase's "done means" checklist is still red.

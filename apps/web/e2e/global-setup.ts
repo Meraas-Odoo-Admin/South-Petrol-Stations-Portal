@@ -153,6 +153,15 @@ async function main() {
     throw new Error('Expected the seeded LIVE municipality سبها — was prisma db seed run?');
   }
 
+  // Start every run from grace with no dates, whatever an aborted earlier run
+  // (grace.spec changes them) left behind — otherwise a leftover deadline in
+  // the past makes the fixture fill-up below fail with CARD_REQUIRED.
+  await api.patch(
+    `${API_BASE}/municipalities/${sabha.id}`,
+    { awarenessStartDate: null, cardRequiredFromDate: null },
+    { headers },
+  );
+
   const company = await api.post(`${API_BASE}/companies`, { name: `PW Test Co ${runId}` }, { headers });
   const station = await api.post(
     `${API_BASE}/stations`,

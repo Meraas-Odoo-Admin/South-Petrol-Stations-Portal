@@ -260,8 +260,20 @@ export function MunicipalitiesAdminPage() {
                       <StatusPill variant={m.stage === 'CARD_REQUIRED' ? 'ok' : 'neutral'}>
                         {STAGE_LABELS[m.stage ?? 'GRACE']}
                       </StatusPill>
-                      {m.status === 'LIVE' && !m.cardRequiredFromDate && (
-                        <p className="mt-1 text-[10.5px] text-accent-dark">لا يوجد موعد نهائي — السماح مفتوح</p>
+                      {/* Persistent: grace is running (LIVE, or awareness already
+                          started) and nothing says when it ends, so cars without a
+                          card are accepted indefinitely. */}
+                      {(m.status === 'LIVE' || m.awarenessStartDate) && !m.cardRequiredFromDate && (
+                        <p
+                          role="alert"
+                          className="mt-1.5 rounded-sm border border-accent bg-accent-100 px-2 py-1.5 text-[11px] font-extrabold text-ink"
+                          data-testid={`municipality-no-deadline-warning-${m.id}`}
+                        >
+                          ⚠ فترة السماح فعّالة — لم يُحدَّد موعد نهائي
+                          <span className="block text-[10.5px] font-bold text-ink-soft">
+                            تُقبل التعبئة بدون بطاقة بلا حدّ زمني حتى تحدد الموعد.
+                          </span>
+                        </p>
                       )}
                       <button
                         type="button"

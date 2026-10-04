@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadFixtures, loginAs } from './helpers';
+import { fillDigitBoxes, loadFixtures, loginAs } from './helpers';
 
 const fixtures = loadFixtures();
 
@@ -23,8 +23,7 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
   const random = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
   const identity = `1${random(11)}`;
   const ownerName = `PW Registered Owner ${fixtures.runId}`;
-  await page.getByTestId('registration-identity-input-box-0').click();
-  await page.keyboard.type(identity);
+  await fillDigitBoxes(page, 'registration-identity-input', identity);
   await page.getByTestId('registration-owner-search').click();
   await expect(page.getByTestId('registration-owner-new')).toBeVisible();
   await page.getByTestId('registration-owner-name').fill(ownerName);
@@ -34,9 +33,8 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
 
   // ── Then the vehicle ─────────────────────────────────────────────────
   const plateSeq = random(7);
-  await page.getByTestId('registration-plate-input-box-0').fill('7');
-  await page.getByTestId('registration-plate-input-box-2').click();
-  await page.keyboard.type(plateSeq);
+  await fillDigitBoxes(page, 'registration-plate-input', '7');
+  await fillDigitBoxes(page, 'registration-plate-input', plateSeq, 2);
   await page.getByTestId('registration-vehicle-save').click();
 
   await expect(page.getByTestId('registration-success')).toContainText('تم تسجيل المركبة');
@@ -65,16 +63,14 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
 
   // ── Same plate again, for the owner just registered: caught ──────────
   await page.getByRole('button', { name: 'تسجيل مركبة أخرى' }).click();
-  await page.getByTestId('registration-identity-input-box-0').click();
-  await page.keyboard.type(identity);
+  await fillDigitBoxes(page, 'registration-identity-input', identity);
   await page.getByTestId('registration-owner-search').click();
   // Found this time — picked, not re-created.
   await expect(page.getByTestId('registration-owner-found')).toContainText(ownerName);
   await page.getByTestId('registration-owner-pick').click();
 
-  await page.getByTestId('registration-plate-input-box-0').fill('7');
-  await page.getByTestId('registration-plate-input-box-2').click();
-  await page.keyboard.type(plateSeq);
+  await fillDigitBoxes(page, 'registration-plate-input', '7');
+  await fillDigitBoxes(page, 'registration-plate-input', plateSeq, 2);
 
   // Flagged before saving, naming the vehicle it already belongs to.
   const warning = page.getByTestId('registration-duplicate-currentPlate');

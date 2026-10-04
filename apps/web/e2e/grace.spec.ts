@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 import { test, expect, type Page } from '@playwright/test';
-import { loadFixtures, loginAs } from './helpers';
+import { fillDigitBoxes, loadFixtures, loginAs } from './helpers';
 
 const fixtures = loadFixtures();
 
@@ -25,16 +25,18 @@ function tripoliDay(offsetDays: number): string {
 
 const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 
-// Types a plate into the two groups of boxes: the city code, then the number.
-// `arabic` types Arabic-Indic digits, as on an Arabic keyboard.
+// Types a plate into the two groups of boxes: the city code (boxes 0-1, a
+// single digit goes in box 0), then the number (boxes 2-8). `arabic` enters
+// Arabic-Indic digits, as on an Arabic keyboard; the box must hold the
+// Western digit afterwards.
 async function typePlateDigits(page: Page, prefix: string, digits: string, arabic = false) {
-  const box = (i: number) => page.getByTestId(`fillup-mobile-plate-input-box-${i}`);
-  const press = async (d: string) =>
-    arabic ? page.keyboard.insertText(ARABIC_DIGITS[Number(d)]!) : page.keyboard.type(d);
-  await box(0).click();
-  for (const d of prefix) await press(d);
-  if (prefix.length === 1) await box(2).click();
-  for (const d of digits) await press(d);
+  const enter = async (digit: string, index: number) => {
+    const box = page.getByTestId(`fillup-mobile-plate-input-box-${index}`);
+    await box.fill(arabic ? ARABIC_DIGITS[Number(digit)]! : digit);
+    await expect(box).toHaveValue(digit);
+  };
+  for (let i = 0; i < prefix.length; i++) await enter(prefix[i]!, i);
+  for (let i = 0; i < digits.length; i++) await enter(digits[i]!, 2 + i);
 }
 
 async function clearPlate(page: Page) {
@@ -76,7 +78,15 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
     await loginAs(admin, 'sysadmin1', fixtures.sysadminPasswordChanged ? 'PwTemp123!' : process.env.PW_SYSADMIN_PASSWORD || 'ChangeMe123!');
     await admin.goto('/admin/municipalities');
     await expect(admin.locator('tr', { hasText: 'سبها' }).first()).toBeVisible();
+    // Independent of earlier runs: start from a known state (no dates = grace
+    // with no deadline), whatever an aborted run left behind. Restored in `finally`.
+    await setStageDates(admin, '', '');
     await shot(admin, '00-municipalities-initial');
+    // Grace with no deadline shows a persistent admin warning for سبها.
+    const sabhaRow = admin.locator('tr', { hasText: 'سبها' }).first();
+    await expect(sabhaRow.getByTestId(/municipality-no-deadline-warning-/)).toContainText(
+      'فترة السماح فعّالة — لم يُحدَّد موعد نهائي',
+    );
 
     // ── Step 1: grace — an unregistered plate is recorded, a too-soon retry
     // typed differently (leading zero, Arabic digits) is blocked, and a
@@ -141,16 +151,14 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
     await loginAs(registrar, fixtures.registrarUsername, fixtures.registrarPassword);
     await registrar.locator('aside').getByRole('link', { name: 'تسجيل المركبات' }).click();
     const identity = `1${Math.floor(Math.random() * 1e11).toString().padStart(11, '0')}`;
-    await registrar.getByTestId('registration-identity-input-box-0').click();
-    await registrar.keyboard.type(identity);
+    await fillDigitBoxes(registrar, 'registration-identity-input', identity);
     await registrar.getByTestId('registration-owner-search').click();
     await registrar.getByTestId('registration-owner-name').fill(`PW Grace Owner ${fixtures.runId}`);
     await registrar.getByTestId('registration-owner-phone').fill('0912345678');
     await registrar.getByTestId('registration-owner-save').click();
     await expect(registrar.getByTestId('registration-owner-selected')).toBeVisible();
-    await registrar.getByTestId('registration-plate-input-box-0').fill('7');
-    await registrar.getByTestId('registration-plate-input-box-2').click();
-    for (const d of firstPlateDigits) await registrar.keyboard.type(d);
+    await fillDigitBoxes(registrar, 'registration-plate-input', '7');
+    await fillDigitBoxes(registrar, 'registration-plate-input', firstPlateDigits, 2);
     await registrar.getByTestId('registration-vehicle-save').click();
     await expect(registrar.getByTestId('registration-success')).toContainText('تم تسجيل المركبة');
     // Only the 7-… fill-up joins the car; the 71-… one is another car.
@@ -161,6 +169,8 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
     await setStageDates(admin, tripoliDay(0), tripoliDay(10));
     await expect(admin.getByTestId(/municipality-stage-/).first()).toBeVisible();
     await shot(admin, '05-municipalities-awareness');
+    // With a deadline set, the warning goes away.
+    await expect(sabhaRow.getByTestId(/municipality-no-deadline-warning-/)).toHaveCount(0);
 
     await page.goto('/fillups/new');
     await page.getByTestId('fillup-type-plate-instead').first().click();

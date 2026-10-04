@@ -58,6 +58,28 @@ rules Claude Code (or any contributor) follows on this project, see
    - API: http://localhost:3000/api/v1 (health check at `/api/v1/health`, Swagger at `/api/docs`)
    - Web: http://localhost:5173
 
+## Testing on a real phone (HTTPS tunnel)
+
+The camera and QR scanner only work in a secure context (HTTPS). `pnpm dev:phone` starts the API, the web
+dev server and a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/),
+then prints a public `https://<random>.trycloudflare.com` address to open on the phone.
+
+1. Install `cloudflared` once (`brew install cloudflared`, or the
+   [downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)).
+2. Make sure local Postgres is running and the normal setup above is done (`apps/api/.env`, migrations, seed).
+3. From the repo root run `pnpm dev:phone` (`npm run dev:phone` works too).
+4. Open the printed `https://….trycloudflare.com` address on the phone and log in as usual.
+5. When you finish, press **Ctrl+C** in that terminal. That stops the API, the web server and the tunnel.
+
+How it works: the tunnel forwards to the web dev server over plain HTTP. In this mode (`PHONE_TUNNEL=1`) the web
+app calls the API through a relative path (`VITE_API_BASE_URL=/api/v1`), and Vite proxies `/api` to the local API,
+so the login cookie stays first-party and no CORS setting is needed for the random hostname. Vite accepts only
+`*.trycloudflare.com` as a tunnel host (`server.allowedHosts`). The local mkcert HTTPS (`.certs/`) is not used in this mode.
+
+> **The link is public while it runs.** Anyone who has the address can reach your dev server and its data. Use
+> test accounts, share the address with nobody, and close the tunnel (Ctrl+C) right after testing. A new run gives
+> a new address.
+
 ## Monorepo layout
 
 ```
@@ -74,6 +96,7 @@ Run from the repo root, across all workspaces:
 
 ```sh
 pnpm dev         # start apps/api and apps/web in watch mode
+pnpm dev:phone   # same, plus a public HTTPS tunnel for testing on a real phone
 pnpm build       # build all workspaces
 pnpm lint        # ESLint across all workspaces
 pnpm typecheck   # TypeScript project checks across all workspaces
