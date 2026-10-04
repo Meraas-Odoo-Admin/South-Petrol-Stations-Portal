@@ -1,3 +1,4 @@
+import { FillUpPlate } from '../../components/FillUpPlate';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -9,11 +10,9 @@ import { apiClient } from '../../lib/apiClient';
 import { downloadBlob } from '../../lib/download';
 import { useAuth } from '../auth/AuthProvider';
 import { maskIdentityNumber } from '../../lib/masking';
-import { formatLicensePlate } from '../../lib/libyanFormats';
 import { Pagination } from '../../components/Pagination';
 import { StationSelect } from '../../components/StationSelect';
 import { DateField } from '../../components/DateField';
-import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
@@ -155,10 +154,10 @@ export function ViolationsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-[13px] font-extrabold text-ink">
-                      {row.fillUpTransaction.vehicle.owner?.fullName ?? '—'}
+                      {row.fillUpTransaction.vehicle?.owner?.fullName ?? '—'}
                     </p>
                     <p className="mt-0.5 text-[11.5px] text-ink-soft">
-                      <LtrText>{formatLicensePlate(row.fillUpTransaction.vehicle.currentPlate)}</LtrText>
+                      <FillUpPlate vehicle={row.fillUpTransaction.vehicle} typedPlate={row.fillUpTransaction.typedPlate} />
                       {' — '}
                       {row.fillUpTransaction.station.internalCode}
                     </p>
@@ -231,16 +230,16 @@ export function ViolationsPage() {
                   </td>
                   <td className="px-[18px] py-3">{row.fillUpTransaction.station.internalCode}</td>
                   <td className="px-[18px] py-3">
-                    <LtrText>{formatLicensePlate(row.fillUpTransaction.vehicle.currentPlate)}</LtrText>
+                    <FillUpPlate vehicle={row.fillUpTransaction.vehicle} typedPlate={row.fillUpTransaction.typedPlate} />
                   </td>
                   <td className="px-[18px] py-3 font-medium text-ink">
-                    {row.fillUpTransaction.vehicle.owner?.fullName ?? '—'}
+                    {row.fillUpTransaction.vehicle?.owner?.fullName ?? '—'}
                   </td>
                   <td className="px-[18px] py-3">
-                    {row.fillUpTransaction.vehicle.owner ? (
+                    {row.fillUpTransaction.vehicle?.owner ? (
                       <OwnerIdentityReveal
-                        ownerId={row.fillUpTransaction.vehicle.owner.id}
-                        maskedValue={maskIdentityNumber(row.fillUpTransaction.vehicle.owner.identityNumber, permissions)}
+                        ownerId={row.fillUpTransaction.vehicle?.owner.id}
+                        maskedValue={maskIdentityNumber(row.fillUpTransaction.vehicle?.owner.identityNumber, permissions)}
                       />
                     ) : (
                       '—'

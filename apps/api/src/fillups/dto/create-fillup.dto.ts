@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsISO8601,
   IsNumber,
@@ -7,14 +8,32 @@ import {
   IsPositive,
   IsString,
   Max,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { FuelType } from '@prisma/client';
 
 export class CreateFillUpDto {
-  @ApiProperty()
+  // Phase 4a: how the vehicle is identified. At least one of vehicleId,
+  // cardNumber (a scan) or plate (typed) is required. The server decides what
+  // it all means: a cardNumber must be an active card (and its vehicle wins);
+  // a typed plate that matches a registered vehicle IS that vehicle; only a
+  // plate matching none is recorded as an unregistered vehicle.
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
-  vehicleId!: string;
+  vehicleId?: string;
+
+  @ApiProperty({ required: false, description: 'The card number read from the QR, when the card was scanned.' })
+  @IsOptional()
+  @IsString()
+  cardNumber?: string;
+
+  @ApiProperty({ required: false, description: 'The plate exactly as the employee typed it.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  plate?: string;
 
   @ApiProperty()
   @IsString()
@@ -55,4 +74,20 @@ export class CreateFillUpDto {
   @IsOptional()
   @IsString()
   proofReference?: string;
+
+  // Phase 4a, from the card deadline on: a station supervisor authorizes ONE
+  // fill-up for a vehicle that would be refused for having no card. Needs
+  // the fillups:emergency_override permission (checked server-side) and a
+  // written reason. Waives only the card requirement — the gap and weekly
+  // limits still apply.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  emergencyOverride?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  overrideReason?: string;
 }

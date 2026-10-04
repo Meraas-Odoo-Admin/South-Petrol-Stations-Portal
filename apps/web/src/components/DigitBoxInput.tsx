@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { toWesternDigits } from '@fuel-tracking/shared-types';
 import { isAllComplete, joinGroups, splitToGroups, totalBoxes, type DigitGroup } from '../lib/digitBoxGroups';
 
 // Round 7 item 2: ONE reusable component for every "boxed digit entry,
@@ -251,7 +252,8 @@ export function DigitBoxInput({
   }
 
   function handleBoxChange(flatIndex: number, raw: string) {
-    const digit = raw.replace(/\D/g, '').slice(-1);
+    // Arabic-Indic digits typed on an Arabic keyboard count as digits.
+    const digit = toWesternDigits(raw).replace(/\D/g, '').slice(-1);
     if (!digit) return;
     setDigitAt(flatIndex, digit);
     advanceFocusAfterDigit(flatIndex);
@@ -289,7 +291,7 @@ export function DigitBoxInput({
   }
 
   function handlePaste(flatIndex: number, event: ClipboardEvent<HTMLInputElement>) {
-    const digits = event.clipboardData.getData('text').replace(/\D/g, '');
+    const digits = toWesternDigits(event.clipboardData.getData('text')).replace(/\D/g, '');
     if (!digits) return;
     event.preventDefault();
     let cursor = flatIndex;

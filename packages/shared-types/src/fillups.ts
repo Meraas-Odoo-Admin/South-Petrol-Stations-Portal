@@ -18,8 +18,39 @@ export type RuleFailureReason =
   | 'OWNER_WEEKLY_CAP_REACHED'
   | 'LITERS_PER_PERSON_CAP_REACHED';
 
+// Phase 4a: how a fill-up identified its vehicle. Set by the server only.
+export type FillUpIdentification =
+  | 'CARD_SCAN'
+  | 'TYPED_REGISTERED'
+  | 'TYPED_UNREGISTERED'
+  | 'EMERGENCY_OVERRIDE';
+
+export type MunicipalityStage = 'GRACE' | 'AWARENESS' | 'CARD_REQUIRED';
+
+export interface RegistrationStationInfo {
+  id: string;
+  name: string;
+  address: string | null;
+  workingHours: string | null;
+  contactPhone: string | null;
+}
+
+// Shown on the success screen after a no-card-scan fill-up in the awareness stage.
+export interface AwarenessNotice {
+  cardRequiredFromDate: string;
+  registrationStations: RegistrationStationInfo[];
+}
+
 export interface CreateFillUpRequest {
-  vehicleId: string;
+  // One of vehicleId / cardNumber / plate identifies the vehicle (the server
+  // resolves them in that order: card, vehicle, typed plate).
+  vehicleId?: string;
+  cardNumber?: string;
+  plate?: string;
+  // Waives only the card requirement after the deadline. Needs the
+  // fillups:emergency_override permission and a written reason.
+  emergencyOverride?: boolean;
+  overrideReason?: string;
   stationId: string;
   fuelType: FuelType;
   quantityLiters: number;
@@ -48,7 +79,7 @@ export interface ExceptionTypeOption {
 // tester to guess). null for a weekly-cap violation (no single triggering
 // row — it's an aggregate count) or when the rule engine ran clean.
 export interface RuleTriggerDetail {
-  vehicleId: string;
+  vehicleId: string | null;
   vehicleInternalCode: string | null;
   vehicleCurrentPlate: string | null;
   occurredAt: string;
@@ -79,7 +110,13 @@ export interface FillUpExceptionRaw {
 // rows still carry it.
 export interface FillUpTransactionRaw {
   id: string;
-  vehicleId: string;
+  // Null for a fill-up recorded against an unregistered plate (Phase 4a)
+  // until the vehicle is registered and the row is linked.
+  vehicleId: string | null;
+  typedPlate: string | null;
+  normalizedPlate: string | null;
+  identifiedBy: FillUpIdentification;
+  overrideReason: string | null;
   driverId: string | null;
   stationId: string;
   // The municipality the fill-up happened in, stamped at creation from
@@ -98,9 +135,11 @@ export interface FillUpTransactionRaw {
   exception: FillUpExceptionRaw | null;
 }
 
+export type FillUpTransactionWithAwareness = FillUpTransactionRaw & { awareness: AwarenessNotice | null };
+
 export type CreateFillUpResult =
   | { allowed: false; reason: RuleFailureReason; trigger: RuleTriggerDetail | null; requiresException: true }
-  | FillUpTransactionRaw;
+  | FillUpTransactionWithAwareness;
 
 // GET /fillups/rule-preview?vehicleId=X&stationId=Y — round 7 item 1's pre-submit
 // rule-review breakdown. `actual: null` means there's no prior history to
@@ -116,4 +155,13 @@ export interface RuleCheckDetail {
 
 export interface RulePreviewResponse {
   checks: RuleCheckDetail[];
+  // Owner-level rules that cannot be evaluated for an unregistered plate
+  // (there is no owner yet). Empty for a registered vehicle.
+  skippedRules: RuleFailureReason[];
+  identifiedBy: FillUpIdentification;
+  registered: boolean;
+  stage: MunicipalityStage;
+  cardRequiredFromDate: string | null;
+  vehicleId: string | null;
+  plate: string | null;
 }

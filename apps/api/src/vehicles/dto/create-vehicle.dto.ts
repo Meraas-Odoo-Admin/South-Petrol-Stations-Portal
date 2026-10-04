@@ -4,9 +4,9 @@ import { Transform } from 'class-transformer';
 import { VehicleUsageType } from '@prisma/client';
 import {
   CHASSIS_NUMBER_REGEX,
-  LICENSE_PLATE_REGEX,
   REGISTRATION_BOOKLET_REGEX,
 } from '../../common/validators/libyan-formats';
+import { IsLibyanPlate } from '../../common/validators/libyan-plate.validator';
 
 export class CreateVehicleDto {
   // Round 5 feedback: no auto-generation existed anywhere for this — it
@@ -23,9 +23,9 @@ export class CreateVehicleDto {
   @MinLength(1)
   internalCode?: string;
 
-  @ApiProperty({ description: 'City code (1-2 digits) + sequence (1-7 digits), optional hyphen/space separator.' })
+  @ApiProperty({ description: 'City code (1-2 digits) + a separator + serial number (1-7 digits). A plate with no separator is refused.' })
   @IsString()
-  @Matches(LICENSE_PLATE_REGEX, { message: 'currentPlate must be a city code plus sequence, e.g. "12-3456".' })
+  @IsLibyanPlate()
   currentPlate!: string;
 
   // Chassis numbers are case-insensitive on input but stored/compared

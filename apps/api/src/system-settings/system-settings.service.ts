@@ -70,7 +70,13 @@ export class SystemSettingsService implements SettingsReader {
       where: { triggerReason: config.triggerReason },
       select: {
         fillUpTransaction: {
-          select: { vehicleId: true, occurredAt: true, vehicle: { select: { ownerId: true } } },
+          select: {
+            vehicleId: true,
+            occurredAt: true,
+            municipalityId: true,
+            normalizedPlate: true,
+            vehicle: { select: { ownerId: true } },
+          },
         },
       },
     });
@@ -78,14 +84,22 @@ export class SystemSettingsService implements SettingsReader {
     let noLongerViolating = 0;
     for (const { fillUpTransaction } of exceptions) {
       if (!fillUpTransaction) continue;
-      const { vehicleId, occurredAt, vehicle } = fillUpTransaction;
-      if (config.scope === 'owner' && !vehicle.ownerId) continue; // nothing to aggregate against
+      const { vehicleId, occurredAt, vehicle, municipalityId, normalizedPlate } = fillUpTransaction;
+      // A fill-up for an unregistered plate (no vehicle, so no owner): the
+      // owner-level caps can't apply to it, and its vehicle-level count is
+      // that plate's own history in its municipality.
+      if (!vehicle && config.scope === 'owner') continue;
+      if (vehicle && config.scope === 'owner' && !vehicle.ownerId) continue; // nothing to aggregate against
       const windowStart = windowStrategy.windowStart(occurredAt, weekStartDay);
       const lookbackStart = new Date(occurredAt.getTime() - LOOKBACK_DAYS * DAY_MS);
 
       const countInWindow = await this.prisma.fillUpTransaction.count({
         where: {
-          ...(config.scope === 'vehicle' ? { vehicleId } : { vehicle: { ownerId: vehicle.ownerId } }),
+          ...(config.scope === 'vehicle'
+            ? vehicleId
+              ? { vehicleId }
+              : { vehicleId: null, normalizedPlate, municipalityId }
+            : { vehicle: { ownerId: vehicle!.ownerId } }),
           occurredAt: { gte: lookbackStart < windowStart ? windowStart : lookbackStart, lt: occurredAt },
         },
       });

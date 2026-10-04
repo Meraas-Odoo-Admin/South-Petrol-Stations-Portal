@@ -48,12 +48,13 @@ export class FillUpsController {
       return { allowed: false, reason: result.reason, trigger: result.trigger, requiresException: true };
     }
 
+    // `awareness` is present only in the awareness stage, on a fill-up
+    // recorded without a card scan: the deadline and the registration
+    // stations the success screen shows the driver.
     if (result.status === 'existing') {
       res.status(200);
-      return result.transaction;
     }
-
-    return result.transaction;
+    return { ...result.transaction, awareness: result.awareness };
   }
 
   @RequirePermission('fillups:approve_exception')
@@ -110,18 +111,30 @@ export class FillUpsController {
   @RequirePermission('fillups:create')
   @Get('rule-preview')
   previewRules(
-    @Query('vehicleId') vehicleId: string,
     @Query('stationId') stationId: string,
+    @Query('vehicleId') vehicleId: string | undefined,
+    @Query('cardNumber') cardNumber: string | undefined,
+    @Query('plate') plate: string | undefined,
+    @Query('emergencyOverride') emergencyOverride: string | undefined,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    if (!vehicleId) {
-      throw new BadRequestException('vehicleId is required.');
+    if (!vehicleId && !cardNumber && !plate) {
+      throw new BadRequestException('vehicleId, cardNumber or plate is required.');
     }
     // Allowances are counted per municipality, and the station decides
     // which one — without it the preview can't match a real submit.
     if (!stationId) {
       throw new BadRequestException('stationId is required.');
     }
-    return this.fillups.previewRules(vehicleId, stationId, actor.id);
+    return this.fillups.previewRules(
+      {
+        vehicleId: vehicleId || undefined,
+        cardNumber: cardNumber || undefined,
+        plate: plate || undefined,
+        emergencyOverride: emergencyOverride === 'true',
+      },
+      stationId,
+      actor.id,
+    );
   }
 }

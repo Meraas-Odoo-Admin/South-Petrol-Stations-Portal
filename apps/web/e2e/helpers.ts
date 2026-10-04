@@ -85,3 +85,16 @@ export async function navigateInApp(page: Page, path: string): Promise<void> {
   );
   await expect(page).toHaveURL(path);
 }
+
+// Fills a DigitBoxInput one box at a time with Playwright's auto-waiting
+// fill() (visible, enabled, editable) and checks each box kept its digit.
+// Raw keyboard.type() relies on focus having moved to the next box between
+// keystrokes, which is a React state update away and loses digits when the
+// machine is slow.
+export async function fillDigitBoxes(page: Page, testId: string, digits: string, startIndex = 0): Promise<void> {
+  for (let i = 0; i < digits.length; i += 1) {
+    const box = page.getByTestId(`${testId}-box-${startIndex + i}`);
+    await box.fill(digits[i]!);
+    await expect(box).toHaveValue(digits[i]!);
+  }
+}

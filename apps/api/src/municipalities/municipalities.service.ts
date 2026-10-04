@@ -1,6 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import type { Municipality } from '@prisma/client';
+import {
+  calendarDayString,
+  calendarDayToDate,
+  computeStage,
+  isValidCalendarDay,
+  tripoliDay,
+} from '../common/utils/grace-stage';
 import { CreateMunicipalityDto } from './dto/create-municipality.dto';
 import { UpdateMunicipalityDto } from './dto/update-municipality.dto';
 
@@ -23,6 +31,17 @@ export class MunicipalitiesService {
   // here so the form doesn't need a second lookup.
   private readonly include = { securityAuthority: { select: { id: true, name: true } } } as const;
 
+  // What the API (and so the UI) sees: the two dates as plain YYYY-MM-DD
+  // calendar days and the stage computed server-side for right now.
+  private present<T extends Municipality>(municipality: T) {
+    return {
+      ...municipality,
+      awarenessStartDate: calendarDayString(municipality.awarenessStartDate),
+      cardRequiredFromDate: calendarDayString(municipality.cardRequiredFromDate),
+      stage: computeStage(new Date(), municipality),
+    };
+  }
+
   async create(dto: CreateMunicipalityDto, actorId: string) {
     const existing = await this.prisma.municipality.findUnique({ where: { name: dto.name } });
     if (existing) {
@@ -42,14 +61,19 @@ export class MunicipalitiesService {
       newValue: { name: municipality.name, status: municipality.status },
     });
 
-    return municipality;
+    return this.present(municipality);
   }
 
-  findAll() {
-    return this.prisma.municipality.findMany({ orderBy: { name: 'asc' }, include: this.include });
+  async findAll() {
+    const rows = await this.prisma.municipality.findMany({ orderBy: { name: 'asc' }, include: this.include });
+    return rows.map((m) => this.present(m));
   }
 
   async findOne(id: string) {
+    return this.present(await this.findRaw(id));
+  }
+
+  private async findRaw(id: string) {
     const municipality = await this.prisma.municipality.findUnique({ where: { id }, include: this.include });
     if (!municipality) {
       throw new NotFoundException('Municipality not found.');
@@ -58,7 +82,8 @@ export class MunicipalitiesService {
   }
 
   async update(id: string, dto: UpdateMunicipalityDto, actorId: string) {
-    const before = await this.findOne(id);
+    const before = await this.findRaw(id);
+    const stageDates = this.resolveStageDates(before, dto);
 
     // A municipality can't go live without the one security authority
     // that oversees its stations (registration pivot plan §5/§11).
@@ -84,12 +109,41 @@ export class MunicipalitiesService {
       }
     }
 
-    const { confirmName: _confirmName, ...data } = dto;
+    const {
+      confirmName: _confirmName,
+      awarenessStartDate: _awareness,
+      cardRequiredFromDate: _deadline,
+      ...data
+    } = dto;
     const municipality = await this.prisma.municipality.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        ...(stageDates.changed.awarenessStartDate
+          ? { awarenessStartDate: stageDates.next.awarenessStartDate ? calendarDayToDate(stageDates.next.awarenessStartDate) : null }
+          : {}),
+        ...(stageDates.changed.cardRequiredFromDate
+          ? { cardRequiredFromDate: stageDates.next.cardRequiredFromDate ? calendarDayToDate(stageDates.next.cardRequiredFromDate) : null }
+          : {}),
+      },
       include: this.include,
     });
+
+    // Moving a stage date changes what every pump does from that day on, so
+    // it gets its own audit entry with the old and new values.
+    if (stageDates.changed.awarenessStartDate || stageDates.changed.cardRequiredFromDate) {
+      await this.audit.log({
+        userId: actorId,
+        action: 'UPDATE_STAGE_DATES',
+        entityType: 'Municipality',
+        entityId: municipality.id,
+        oldValue: {
+          awarenessStartDate: calendarDayString(before.awarenessStartDate),
+          cardRequiredFromDate: calendarDayString(before.cardRequiredFromDate),
+        },
+        newValue: stageDates.next,
+      });
+    }
 
     await this.audit.log({
       userId: actorId,
@@ -100,6 +154,51 @@ export class MunicipalitiesService {
       newValue: { name: municipality.name, status: municipality.status, code: municipality.code },
     });
 
-    return municipality;
+    return this.present(municipality);
+  }
+
+  // Validates a change to the two stage dates and returns what changed.
+  //  - each must be a real calendar day;
+  //  - awareness must start before the deadline (checked on the resulting
+  //    pair, so changing one against the stored other is covered);
+  //  - a deadline moved to today (Tripoli) or earlier starts enforcement
+  //    immediately, so — like LIVE → PREPARING — it needs the municipality's
+  //    name typed as confirmation, on the API as well as in the UI.
+  private resolveStageDates(
+    before: Municipality,
+    dto: UpdateMunicipalityDto,
+  ): {
+    next: { awarenessStartDate: string | null; cardRequiredFromDate: string | null };
+    changed: { awarenessStartDate: boolean; cardRequiredFromDate: boolean };
+  } {
+    const current = {
+      awarenessStartDate: calendarDayString(before.awarenessStartDate),
+      cardRequiredFromDate: calendarDayString(before.cardRequiredFromDate),
+    };
+    const next = { ...current };
+    for (const field of ['awarenessStartDate', 'cardRequiredFromDate'] as const) {
+      if (dto[field] === undefined) continue;
+      const value = dto[field];
+      if (value !== null && !isValidCalendarDay(value)) {
+        throw new BadRequestException('INVALID_DATE');
+      }
+      next[field] = value;
+    }
+    if (next.awarenessStartDate && next.cardRequiredFromDate && next.awarenessStartDate >= next.cardRequiredFromDate) {
+      throw new BadRequestException('AWARENESS_NOT_BEFORE_DEADLINE');
+    }
+    const changed = {
+      awarenessStartDate: next.awarenessStartDate !== current.awarenessStartDate,
+      cardRequiredFromDate: next.cardRequiredFromDate !== current.cardRequiredFromDate,
+    };
+    if (
+      changed.cardRequiredFromDate &&
+      next.cardRequiredFromDate &&
+      next.cardRequiredFromDate <= tripoliDay(new Date()) &&
+      dto.confirmName?.trim() !== before.name
+    ) {
+      throw new BadRequestException('CONFIRMATION_NAME_MISMATCH');
+    }
+    return { next, changed };
   }
 }

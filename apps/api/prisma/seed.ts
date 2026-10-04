@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { normalizePlate } from '@fuel-tracking/shared-types';
 // Round 20: split out to rbac-catalog.ts (a side-effect-free module) so
 // bootstrap-prod.ts can reuse this exact catalog without importing this
 // file itself, which would also run this file's own `main()` (below,
@@ -1288,6 +1289,7 @@ async function main() {
       create: {
         internalCode: spec.internalCode,
         currentPlate: spec.currentPlate,
+        normalizedPlate: normalizePlate(spec.currentPlate),
         chassisNumber: spec.chassisNumber,
         vehicleTypeId: vehicleTypesByName.get(spec.vehicleType)?.id,
         model: spec.model,
@@ -1360,6 +1362,7 @@ async function main() {
           occurredAt,
           recordedById: recordedBy.id,
           isException: false,
+          identifiedBy: 'TYPED_REGISTERED',
           idempotencyKey,
         },
         update: {},

@@ -226,8 +226,12 @@ export class ReportsExportService {
     return {
       date: row.fillUpTransaction.occurredAt.toISOString(),
       station: row.fillUpTransaction.station.internalCode,
-      vehicle: row.fillUpTransaction.vehicle.currentPlate,
-      owner: row.fillUpTransaction.vehicle.owner?.fullName ?? row.fillUpTransaction.driver?.fullName ?? '—',
+      // Phase 4a: a fill-up for an unregistered plate has no vehicle record —
+      // it shows the plate as typed, marked as unregistered, and no owner.
+      vehicle: row.fillUpTransaction.vehicle
+        ? row.fillUpTransaction.vehicle.currentPlate
+        : `${row.fillUpTransaction.typedPlate ?? '—'} (unregistered)`,
+      owner: row.fillUpTransaction.vehicle?.owner?.fullName ?? row.fillUpTransaction.driver?.fullName ?? '—',
       exceptionType: row.exceptionType.name,
       reason: row.reason,
       status: row.approvedById ? 'approved' : 'pending',

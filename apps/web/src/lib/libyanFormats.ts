@@ -17,7 +17,9 @@ import type { KeyboardEvent } from 'react';
 export const NATIONAL_ID_REGEX = /^[12]\d{11}$/;
 export const ADMINISTRATIVE_ID_REGEX = /^9\d{11}$/;
 export const NATIONAL_OR_ADMINISTRATIVE_ID_REGEX = /^([12]\d{11}|9\d{11})$/;
-export const LICENSE_PLATE_REGEX = /^\d{1,2}[-\s]?\d{1,7}$/;
+// A city code and a serial number WITH a separator between them — a plate
+// with none can't be told apart (81234567: city 8 or 81?), so it is refused.
+export const LICENSE_PLATE_REGEX = /^\d{1,2}[-\s]\d{1,7}$/;
 export const CHASSIS_NUMBER_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
 export const REGISTRATION_BOOKLET_REGEX = /^[A-Za-z0-9]{6,12}$/;
 // Round 20: mirrors apps/api/src/common/validators/libyan-formats.ts —

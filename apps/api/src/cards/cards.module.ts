@@ -8,5 +8,6 @@ import { RegistrationStationsModule } from '../registration-stations/registratio
   imports: [RegistrationStationsModule],
   controllers: [CardsController],
   providers: [CardsService, CardRendererService],
+  exports: [CardRendererService],
 })
 export class CardsModule {}

@@ -1,5 +1,6 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, VehicleChangeType, VehicleUsageType } from '@prisma/client';
+import { normalizePlate, plateSearchTerm } from '@fuel-tracking/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -70,10 +71,22 @@ function findVehicleByChangeValue(
     case VehicleChangeType.BOOKLET_CHANGE:
       return prisma.vehicle.findUnique({ where: { registrationBooklet: value } });
     case VehicleChangeType.PLATE_CHANGE:
-      return prisma.vehicle.findUnique({ where: { currentPlate: value } });
+      // Matched by the normalized plate too: the same plate typed another
+      // way is still the same plate.
+      return prisma.vehicle.findFirst({
+        where: { OR: plateMatchClauses(value) },
+      });
     default:
       throw new Error(`findVehicleByChangeValue called for a non-unique changeType: ${changeType}`);
   }
+}
+
+// A vehicle's stored text OR its canonical plate matches. A plate with no
+// canonical form (no separator) can only match by its exact text — it must
+// never match the rows whose normalizedPlate is NULL.
+function plateMatchClauses(plate: string): Prisma.VehicleWhereInput[] {
+  const normalized = normalizePlate(plate);
+  return [{ currentPlate: plate }, ...(normalized ? [{ normalizedPlate: normalized }] : [])];
 }
 
 // A computed `{ [field]: value }` can't type-check against
@@ -87,7 +100,7 @@ function buildChangeUpdateData(changeType: VehicleChangeType, value: string): Pr
     case VehicleChangeType.BOOKLET_CHANGE:
       return { registrationBooklet: value };
     case VehicleChangeType.PLATE_CHANGE:
-      return { currentPlate: value };
+      return { currentPlate: value, normalizedPlate: normalizePlate(value) };
     case VehicleChangeType.OWNER_CHANGE:
       return { owner: { connect: { id: value } } };
     case VehicleChangeType.USAGE_TYPE_CHANGE:
@@ -110,7 +123,15 @@ export class VehiclesService {
     const select = { id: true, internalCode: true, currentPlate: true } as const;
     const checks: Array<[VehicleDuplicate['field'], Promise<VehicleDuplicate['vehicle'] | null>]> = [];
     if (values.currentPlate) {
-      checks.push(['currentPlate', this.prisma.vehicle.findUnique({ where: { currentPlate: values.currentPlate }, select })]);
+      // By the normalized plate (and the stored text, for rows that predate
+      // the column): `8-1234567`, `8 1234567` and `٨-١٢٣٤٥٦٧` are one plate.
+      checks.push([
+        'currentPlate',
+        this.prisma.vehicle.findFirst({
+          where: { OR: plateMatchClauses(values.currentPlate) },
+          select,
+        }),
+      ]);
     }
     if (values.chassisNumber) {
       checks.push(['chassisNumber', this.prisma.vehicle.findUnique({ where: { chassisNumber: values.chassisNumber }, select })]);
@@ -204,14 +225,47 @@ export class VehiclesService {
       }
     }
 
+    // The DTO already refuses a plate that can't be split into a city code
+    // and a serial number; this keeps the service honest if called directly.
+    const normalizedPlate = normalizePlate(dto.currentPlate);
+    if (!normalizedPlate) {
+      throw new BadRequestException('PLATE_INVALID');
+    }
+
     return this.prisma.$transaction(async (tx) => {
+      // Serializes against a fill-up being recorded for this same plate
+      // (FillUpsService takes the same per-plate lock), so a fill-up can't
+      // slip in between the link below and the commit and stay unlinked.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'plate:' + normalizedPlate}))`;
+      const clash = await tx.vehicle.findFirst({
+        where: { normalizedPlate },
+        select: { id: true, internalCode: true, currentPlate: true },
+      });
+      if (clash) {
+        throw new ConflictException({
+          message: 'VEHICLE_DUPLICATE',
+          details: { conflicts: [{ field: 'currentPlate', vehicle: clash }] },
+        });
+      }
+
       const vehicle = await tx.vehicle.create({
         data: {
           ...vehicleFields,
+          normalizedPlate,
           internalCode,
           registeredAtRegistrationStationId: registrationStationId,
           registeredById: actorId,
         },
+      });
+
+      // Phase 4a: fill-ups recorded earlier for this plate while it was
+      // unregistered (grace / awareness) join the new vehicle, in this same
+      // transaction, so its history and its limits carry on without a gap.
+      // ONLY the vehicle link is added — typedPlate, identifiedBy and the
+      // stamped municipality stay exactly as recorded.
+      const linked = await tx.fillUpTransaction.updateMany({
+        where: { vehicleId: null, normalizedPlate },
+        data: { vehicleId: vehicle.id },
       });
 
       // Seed the plate history with the vehicle's initial plate so
@@ -234,8 +288,20 @@ export class VehiclesService {
         },
         tx,
       );
+      if (linked.count > 0) {
+        await this.audit.log(
+          {
+            userId: actorId,
+            action: 'LINK_UNREGISTERED_FILLUPS',
+            entityType: 'Vehicle',
+            entityId: vehicle.id,
+            newValue: { linkedFillUps: linked.count, normalizedPlate },
+          },
+          tx,
+        );
+      }
 
-      return vehicle;
+      return { ...vehicle, linkedFillUps: linked.count };
     });
   }
 
@@ -270,7 +336,22 @@ export class VehiclesService {
     return this.prisma.vehicle.findMany({
       where: {
         internalCode: query.internalCode ? { contains: query.internalCode } : undefined,
-        currentPlate: query.currentPlate ? { contains: query.currentPlate } : undefined,
+        // Plates match on the normalized form too, so a plate typed with a
+        // different separator or in Arabic-Indic digits still finds it.
+        ...(query.currentPlate
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { currentPlate: { contains: query.currentPlate } },
+                    ...(plateSearchTerm(query.currentPlate)
+                      ? [{ normalizedPlate: { contains: plateSearchTerm(query.currentPlate) } }]
+                      : []),
+                  ],
+                },
+              ],
+            }
+          : {}),
         chassisNumber: query.chassisNumber ? { contains: query.chassisNumber } : undefined,
         usageType: query.usageType,
         model: query.brand ? { equals: query.brand } : undefined,
@@ -285,6 +366,7 @@ export class VehiclesService {
           ? [
               { internalCode: { contains: query.search, mode: 'insensitive' } },
               { currentPlate: { contains: query.search, mode: 'insensitive' } },
+              ...(plateSearchTerm(query.search) ? [{ normalizedPlate: { contains: plateSearchTerm(query.search) } }] : []),
               { chassisNumber: { contains: query.search, mode: 'insensitive' } },
               { owner: { fullName: { contains: query.search, mode: 'insensitive' } } },
               { owner: { identityNumber: { contains: query.search } } },
@@ -376,8 +458,12 @@ export class VehiclesService {
       throw new ConflictException('newPlate is the same as the current plate.');
     }
 
-    const existingByPlate = await this.prisma.vehicle.findUnique({
-      where: { currentPlate: dto.newPlate },
+    const newNormalized = normalizePlate(dto.newPlate);
+    if (!newNormalized) {
+      throw new BadRequestException('PLATE_INVALID');
+    }
+    const existingByPlate = await this.prisma.vehicle.findFirst({
+      where: { id: { not: id }, OR: plateMatchClauses(dto.newPlate) },
     });
     if (existingByPlate) {
       throw new ConflictException('currentPlate is already in use by another vehicle.');
@@ -401,7 +487,7 @@ export class VehiclesService {
 
       const updated = await tx.vehicle.update({
         where: { id },
-        data: { currentPlate: dto.newPlate },
+        data: { currentPlate: dto.newPlate, normalizedPlate: newNormalized },
       });
 
       await this.audit.log(

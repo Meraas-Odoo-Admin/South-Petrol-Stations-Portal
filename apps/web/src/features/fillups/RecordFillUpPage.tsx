@@ -1,3 +1,5 @@
+import { PrintRegistrationSheetButton } from '../../components/PrintRegistrationSheetButton';
+import { FillUpPlate } from '../../components/FillUpPlate';
 import { useEffect, useRef, useState } from 'react';
 import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +8,8 @@ import { z } from 'zod';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { isAxiosError, type AxiosError } from 'axios';
 import type {
+  AwarenessNotice,
+  RegistrationStationInfo,
   CreateFillUpRequest,
   CreateFillUpResult,
   DailyReportResponse,
@@ -20,7 +24,8 @@ import { StationSelect } from '../../components/StationSelect';
 import { LtrText } from '../../components/LtrText';
 import { DigitBoxInput } from '../../components/DigitBoxInput';
 import { PLATE_DIGIT_GROUPS, isAllComplete, splitToGroups } from '../../lib/digitBoxGroups';
-import { formatLicensePlate, normalizePlateSearchTerm } from '../../lib/libyanFormats';
+import { formatLicensePlate } from '../../lib/libyanFormats';
+import { normalizePlate, platesMatch, plateSearchTerm } from '@fuel-tracking/shared-types';
 import { fuelTypeLabel } from '../../lib/labels';
 import { useAuth } from '../auth/AuthProvider';
 import { useStations } from '../stations/useStations';
@@ -284,7 +289,7 @@ function DayListRail({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-ink">
-                    <LtrText>{formatLicensePlate(row.vehicle.currentPlate)}</LtrText>
+                    <FillUpPlate vehicle={row.vehicle} typedPlate={row.typedPlate} />
                   </span>
                   {i === 0 ? (
                     <span className="text-[10.5px] font-bold text-ok">الآن</span>
@@ -322,7 +327,9 @@ const FUEL_TYPES: { value: CreateFillUpRequest['fuelType']; label: string }[] = 
 
 const fillUpSchema = z.object({
   stationId: z.string().min(1, 'اختر المحطة'),
-  vehicleId: z.string().min(1, 'اختر المركبة'),
+  // Empty for an unregistered plate (Phase 4a) — onSubmit checks that SOME
+  // way of identifying the vehicle exists.
+  vehicleId: z.string(),
   fuelType: z.enum(['PETROL_95', 'DIESEL', 'KEROSENE']),
   // Kept as a string field (not z.coerce.number()) to sidestep RHF/zod's
   // input-vs-output generic mismatch for coerced schemas — converted to a
@@ -396,6 +403,11 @@ interface ConfirmationSummary {
   // fill-up, but for an exception it now genuinely varies, so the
   // confirmation screen can no longer assume every exception is pending.
   isApproved: boolean;
+  // Phase 4a: no vehicle record, so no owner; and the awareness notice the
+  // server returns after a no-card-scan fill-up in the awareness stage.
+  unregistered: boolean;
+  isOverride: boolean;
+  awareness: AwarenessNotice | null;
 }
 
 // Round 8 built the guided step sequence from design/feedback-2026-08-31/
@@ -533,6 +545,15 @@ export function RecordFillUpPage() {
   // Set only by a card scan: the match step then shows the big "is this the
   // vehicle?" confirmation instead of the typed-plate preview.
   const [scannedCard, setScannedCard] = useState<ScannedCard | null>(null);
+  // Phase 4a: a plate typed at the pump that matched no vehicle, confirmed
+  // by the employee as "record it as unregistered".
+  const [unregisteredPlate, setUnregisteredPlate] = useState<string | null>(null);
+  // Set when the server refuses with CARD_REQUIRED (from the preview or the
+  // submit): the stations to send the owner to.
+  const [cardRequired, setCardRequired] = useState<CardRequiredInfo | null>(null);
+  const [overrideOn, setOverrideOn] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const canOverride = hasPermission('fillups:emergency_override');
 
   const fillUpForm = useForm<FillUpFormValues>({
     resolver: zodResolver(fillUpSchema),
@@ -577,19 +598,34 @@ export function RecordFillUpPage() {
   // and the station decides which one — so the preview is per
   // (vehicle, station) and waits until both are chosen.
   const previewStationId = fillUpForm.watch('stationId');
+  // Who the fill-up is for, as the server wants it: the card number when the
+  // card was scanned (so the server records CARD_SCAN), else the vehicle, else
+  // the unregistered plate as typed. The server re-resolves all of it.
+  const identifiers: Pick<CreateFillUpRequest, 'vehicleId' | 'cardNumber' | 'plate'> =
+    scannedCard && scannedCard.vehicle.id === selectedVehicleId
+      ? { vehicleId: selectedVehicleId, cardNumber: scannedCard.cardNumber }
+      : selectedVehicleId
+        ? { vehicleId: selectedVehicleId }
+        : unregisteredPlate
+          ? { plate: unregisteredPlate }
+          : {};
+  const hasSubject = !!selectedVehicleId || !!unregisteredPlate;
+  const overrideParams = overrideOn ? { emergencyOverride: true, overrideReason: overrideReason.trim() } : {};
   const rulePreviewQuery = useQuery({
-    queryKey: ['fillups', 'rule-preview', selectedVehicleId, previewStationId],
+    queryKey: ['fillups', 'rule-preview', identifiers, previewStationId, overrideOn, overrideReason.trim()],
     queryFn: async () =>
       (
         await apiClient.get<RulePreviewResponse>('/fillups/rule-preview', {
-          params: { vehicleId: selectedVehicleId, stationId: previewStationId },
+          params: { ...identifiers, stationId: previewStationId, ...overrideParams },
         })
       ).data,
-    enabled: !!selectedVehicleId && !!previewStationId,
+    enabled: hasSubject && !!previewStationId && (!overrideOn || overrideReason.trim().length > 0),
     // A station that can't take fill-ups (no municipality / not live) is
     // a definitive answer, not a transient failure — don't retry it.
     retry: (failureCount, error) => !(isAxiosError(error) && error.response?.status === 409) && failureCount < 3,
   });
+  const previewCardRequired = isAxiosError(rulePreviewQuery.error) ? cardRequiredFrom(rulePreviewQuery.error) : null;
+  const activeCardRequired = cardRequired ?? previewCardRequired;
   const rulePreviewErrorMessage = isAxiosError(rulePreviewQuery.error)
     ? stationBlockedMessage(rulePreviewQuery.error)
     : null;
@@ -746,13 +782,13 @@ export function RecordFillUpPage() {
     queryFn: async () =>
       (
         await apiClient.get<{ id: string; internalCode: string; currentPlate: string; model: string | null }[]>('/vehicles', {
-          params: { search: normalizePlateSearchTerm(debouncedPlateValue), take: 5 },
+          params: { search: plateSearchTerm(debouncedPlateValue), take: 5 },
         })
       ).data,
     enabled: plateSearchWorthwhile,
   });
   const matchedVehicle = plateLookupQuery.data?.find(
-    (v) => normalizePlateSearchTerm(v.currentPlate) === normalizePlateSearchTerm(plateValue),
+    (v) => platesMatch(v.currentPlate, plateValue),
   );
   // Live-search candidates shown below the keypad WHILE still typing —
   // distinct from matchedVehicle (exact match, drives auto-advance).
@@ -829,6 +865,10 @@ export function RecordFillUpPage() {
     setPlateValue('');
     setShowManualSearchMobile(false);
     setScannedCard(null);
+    setUnregisteredPlate(null);
+    setCardRequired(null);
+    setOverrideOn(false);
+    setOverrideReason('');
     setPlateEntryMode(qrScanSupported ? 'scan' : 'type');
     setCameraUnavailableHint(false);
     idempotencyKeyRef.current = newIdempotencyKey();
@@ -873,7 +913,8 @@ export function RecordFillUpPage() {
   function toBasePayload(values: FillUpFormValues): CreateFillUpRequest {
     return {
       stationId: values.stationId,
-      vehicleId: values.vehicleId,
+      ...identifiers,
+      ...(overrideOn ? { emergencyOverride: true, overrideReason: overrideReason.trim() } : {}),
       fuelType: values.fuelType,
       quantityLiters: Number(values.quantityLiters),
     };
@@ -883,10 +924,11 @@ export function RecordFillUpPage() {
     values: FillUpFormValues,
     isException: boolean,
     isApproved: boolean,
+    awareness: AwarenessNotice | null,
   ): ConfirmationSummary {
     const stationName = stations?.find((s) => s.id === values.stationId)?.name ?? '';
     return {
-      vehicleLabel: selectedVehicleLabel,
+      vehicleLabel: selectedVehicleLabel || (unregisteredPlate ? formatLicensePlate(unregisteredPlate) : ''),
       ownerLabel: selectedVehicle?.owner?.fullName ?? '—',
       stationId: values.stationId,
       stationName,
@@ -895,20 +937,41 @@ export function RecordFillUpPage() {
       occurredAt: new Date().toISOString(),
       isApproved,
       isException,
+      unregistered: !values.vehicleId,
+      isOverride: overrideOn,
+      awareness,
     };
   }
 
   async function onSubmitFillUp(values: FillUpFormValues) {
     setSubmitError(null);
     setSuccess(null);
+    if (!hasSubject) {
+      setSubmitError('اختر المركبة أو اكتب رقم اللوحة أولًا.');
+      setMobileStep('plate');
+      return;
+    }
     try {
       const result = await submitFillUp(toBasePayload(values));
       if (isRejected(result)) {
         setRejection({ reason: result.reason, trigger: result.trigger });
         return;
       }
-      setSuccess(buildConfirmationSummary(values, result.isException, !result.isException || result.exception?.approvedById != null));
+      setSuccess(
+        buildConfirmationSummary(
+          values,
+          result.isException,
+          !result.isException || result.exception?.approvedById != null,
+          result.awareness ?? null,
+        ),
+      );
     } catch (error) {
+      const required = isAxiosError(error) ? cardRequiredFrom(error) : null;
+      if (required) {
+        setCardRequired(required);
+        setMobileStep('match');
+        return;
+      }
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
   }
@@ -963,6 +1026,7 @@ export function RecordFillUpPage() {
           fillUpForm.getValues(),
           result.isException,
           !result.isException || result.exception?.approvedById != null,
+          result.awareness ?? null,
         ),
       );
     } catch (error) {
@@ -1072,6 +1136,19 @@ export function RecordFillUpPage() {
               </span>
             </div>
           </Card>
+
+          {success.unregistered && (
+            <p className="mt-4 w-full rounded-sm bg-accent-100 p-3 text-[12.5px] font-bold text-accent-dark" data-testid="fillup-success-unregistered">
+              سُجِّلت على لوحة غير مسجلة. ستُربط بالمركبة تلقائيًا عند تسجيلها.
+            </p>
+          )}
+          {success.isOverride && (
+            <p className="mt-4 w-full rounded-sm bg-danger-100 p-3 text-[12.5px] font-bold text-danger" data-testid="fillup-success-override">
+              سُجِّلت بتفويض طارئ وستظهر كاستثناء في التقارير.
+            </p>
+          )}
+          {success.awareness && <AwarenessBlock awareness={success.awareness} />}
+          <PrintRegistrationSheetButton stationId={success.stationId} className="mt-3" />
 
           <div className="mt-6 flex w-full flex-col gap-2.5">
             <PillButton onClick={resetAll} className="h-[52px] w-full text-[15px]">
@@ -1253,9 +1330,24 @@ export function RecordFillUpPage() {
                 {/* Registration pivot, phase 2: petrol stations never
                     register vehicles — registration happens only at a
                     registration station. An unknown plate is simply
-                    "not registered", with no way to create it here (the
-                    grace-period handling arrives in Phase 4). */}
-                {plateHasNoCandidates && plateComplete && <NotRegisteredNotice />}
+                    "not registered", with no way to create it here. Phase 4a:
+                    during grace and awareness the fill-up can still be
+                    recorded against the plate as an unregistered vehicle. */}
+                {plateHasNoCandidates && plateComplete && (
+                  <NotRegisteredNotice
+                    onRecord={
+                      (canViewAllStations && !fillUpForm.watch('stationId')) || normalizePlate(plateValue) === null
+                        ? undefined
+                        : () => {
+                            fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
+                            setSelectedVehicleLabel('');
+                            setUnregisteredPlate(plateValue);
+                            setCardRequired(null);
+                            setMobileStep('match');
+                          }
+                    }
+                  />
+                )}
                 {qrScanSupported && (
                   <PillButton
                     variant="secondary"
@@ -1271,6 +1363,9 @@ export function RecordFillUpPage() {
                     يمكنك تجربة المسح مرة أخرى بعد السماح بإذن الكاميرا من إعدادات الجهاز.
                   </p>
                 )}
+                <div className="mt-3 text-center">
+                  <PrintRegistrationSheetButton stationId={fillUpForm.watch('stationId') || undefined} />
+                </div>
                 <button
                   type="button"
                   data-testid="fillup-mobile-manual-search-toggle"
@@ -1315,12 +1410,74 @@ export function RecordFillUpPage() {
           />
         )}
 
+        {mobileStep === 'match' && !vehicleSelected && unregisteredPlate && (
+          <Card className="p-5 text-center" data-testid="fillup-unregistered-confirm">
+            <p className="text-[12px] font-bold text-ink-soft">هل هذه هي اللوحة التي أمامك؟</p>
+            <p className="mt-3 text-[44px] font-black leading-none text-ink" data-testid="fillup-unregistered-plate">
+              <LtrText>{formatLicensePlate(unregisteredPlate)}</LtrText>
+            </p>
+            <p className="mt-3 inline-block rounded-sm bg-accent-100 px-3 py-1 text-[13px] font-bold text-accent-dark">
+              مركبة غير مسجلة
+            </p>
+            <p className="mt-2 text-[12px] leading-[1.8] text-ink-soft">
+              تُسجَّل التعبئة على اللوحة كما كُتبت، وتُحتسب الفواصل والحدود الأسبوعية على هذه اللوحة في هذه البلدية. لا
+              يوجد مالك لتطبيق قواعد المالك.
+            </p>
+            {activeCardRequired && !overrideOn && (
+              <CardRequiredPanel
+                info={activeCardRequired}
+                canOverride={canOverride}
+                onOverride={(reason) => {
+                  setOverrideReason(reason);
+                  setOverrideOn(true);
+                  setCardRequired(null);
+                }}
+              />
+            )}
+            {overrideOn && <OverrideNotice onCancel={() => setOverrideOn(false)} />}
+            <PillButton
+              data-testid="fillup-unregistered-confirm-yes"
+              className="mt-5 h-14 w-full text-[16px]"
+              disabled={!!activeCardRequired && !overrideOn}
+              onClick={() => setMobileStep('fuel')}
+            >
+              نعم، هذه هي اللوحة
+            </PillButton>
+            <button
+              type="button"
+              onClick={() => {
+                setUnregisteredPlate(null);
+                setCardRequired(null);
+                setOverrideOn(false);
+                setPlateValue('');
+                setMobileStep('plate');
+              }}
+              className="mt-3 block w-full text-center text-[12px] font-bold text-ink-soft"
+            >
+              تصحيح الرقم
+            </button>
+          </Card>
+        )}
+
         {mobileStep === 'match' && vehicleSelected && scannedCard?.vehicle.id !== vehicleSelected && (
           <Card className="p-4">
             <VehiclePreviewCard vehicleId={vehicleSelected} idSuffix="-mobile" />
+            {activeCardRequired && !overrideOn && (
+              <CardRequiredPanel
+                info={activeCardRequired}
+                canOverride={canOverride}
+                onOverride={(reason) => {
+                  setOverrideReason(reason);
+                  setOverrideOn(true);
+                  setCardRequired(null);
+                }}
+              />
+            )}
+            {overrideOn && <OverrideNotice onCancel={() => setOverrideOn(false)} />}
             <PillButton
               data-testid="fillup-mobile-continue-to-fuel"
               className="mt-4 h-12 w-full text-[14px]"
+              disabled={!!activeCardRequired && !overrideOn}
               onClick={() => setMobileStep('fuel')}
             >
               متابعة إلى الوقود
@@ -1329,6 +1486,8 @@ export function RecordFillUpPage() {
               type="button"
               onClick={() => {
                 fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
+                setCardRequired(null);
+                setOverrideOn(false);
                 setPlateValue('');
                 setMobileStep('plate');
               }}
@@ -1446,6 +1605,11 @@ export function RecordFillUpPage() {
                   rejection={effectiveRejection}
                   idSuffix="-mobile"
                 />
+                {rulePreviewQuery.data && rulePreviewQuery.data.skippedRules.length > 0 && (
+                  <p className="mt-3 rounded-sm bg-accent-100 p-2.5 text-[11.5px] leading-[1.7] text-accent-dark" data-testid="fillup-skipped-rules">
+                    مركبة غير مسجلة — لا يوجد مالك، فلا تُطبَّق قواعد المالك ({rulePreviewQuery.data.skippedRules.map((r) => RULE_CHECK_LABELS[r]).join('، ')}).
+                  </p>
+                )}
               </Card>
 
               {submitError && <p className="text-[13px] text-danger">{submitError}</p>}
@@ -1537,12 +1701,154 @@ function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onC
 
 // Registration pivot, phase 2: what the pump screen shows for a plate the
 // registry doesn't have. Shared by the plate step and the manual search.
-export function NotRegisteredNotice() {
+//
+// Phase 4a: during grace and awareness the plate can still be recorded as an
+// unregistered vehicle (onRecord); after the deadline the server refuses it
+// and the refusal panel takes over. Where onRecord is absent (the manual
+// search) the notice is informational only.
+export function NotRegisteredNotice({ onRecord }: { onRecord?: () => void }) {
   return (
     <div className="mt-3 rounded-sm bg-accent-100 p-3 text-center" data-testid="fillup-not-registered">
       <p className="text-[13px] font-bold text-accent-dark">هذه المركبة غير مسجّلة في المنظومة</p>
       <p className="mt-1 text-[12px] text-ink-soft">
-        يجب تسجيل المركبة في أحد مكاتب التسجيل أولًا، ولا يمكن تسجيلها من محطة الوقود.
+        لا يمكن تسجيل المركبة من محطة الوقود — يتم ذلك في أحد مكاتب التسجيل.
+      </p>
+      {onRecord && (
+        <PillButton
+          data-testid="fillup-record-unregistered"
+          className="mt-3 h-11 w-full text-[13px]"
+          onClick={onRecord}
+        >
+          تسجيل التعبئة كمركبة غير مسجلة
+        </PillButton>
+      )}
+    </div>
+  );
+}
+
+// The server's 409 CARD_REQUIRED refusal (details.registrationStations is the
+// live list of active registration stations in the municipality).
+export interface CardRequiredInfo {
+  cardRequiredFromDate: string | null;
+  registrationStations: RegistrationStationInfo[];
+}
+
+function cardRequiredFrom(error: AxiosError<unknown>): CardRequiredInfo | null {
+  const data = error.response?.data as
+    | { message?: string; details?: { cardRequiredFromDate?: string | null; registrationStations?: RegistrationStationInfo[] } }
+    | undefined;
+  if (error.response?.status !== 409 || data?.message !== 'CARD_REQUIRED') return null;
+  return {
+    cardRequiredFromDate: data.details?.cardRequiredFromDate ?? null,
+    registrationStations: data.details?.registrationStations ?? [],
+  };
+}
+
+function RegistrationStationList({ stations }: { stations: RegistrationStationInfo[] }) {
+  if (stations.length === 0) {
+    return <p className="mt-2 text-[12px] text-ink-soft">لا توجد مكاتب تسجيل فعّالة حاليًا — راجع المشرف.</p>;
+  }
+  return (
+    <ul className="mt-2 space-y-2 text-start" data-testid="registration-stations-list">
+      {stations.map((st) => (
+        <li key={st.id} className="rounded-sm bg-surface p-2.5 text-[12.5px]">
+          <p className="font-bold text-ink">{st.name}</p>
+          {st.address && <p className="text-ink-soft">{st.address}</p>}
+          {st.workingHours && <p className="text-ink-soft">{st.workingHours}</p>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// After the deadline: no active card, no fill-up. Says so in Arabic and
+// lists where to get one. A holder of fillups:emergency_override can waive
+// the card (and only the card) with a written reason.
+function CardRequiredPanel({
+  info,
+  canOverride,
+  onOverride,
+}: {
+  info: CardRequiredInfo;
+  canOverride: boolean;
+  onOverride: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-4 rounded-sm border-t-4 border-danger bg-danger-100 p-3 text-start" data-testid="fillup-card-required">
+      <p className="text-[14px] font-extrabold text-danger">لا يمكن تعبئة هذه المركبة بدون بطاقة فعّالة</p>
+      <p className="mt-1.5 text-[12.5px] leading-[1.8] text-ink">
+        يجب على المالك استلام بطاقته من أحد مكاتب التسجيل التالية:
+      </p>
+      <RegistrationStationList stations={info.registrationStations} />
+      {canOverride && (
+        <div className="mt-3">
+          {!open ? (
+            <button
+              type="button"
+              data-testid="fillup-override-open"
+              className="text-[12px] font-bold text-danger underline"
+              onClick={() => setOpen(true)}
+            >
+              تفويض طارئ (للمشرف فقط)
+            </button>
+          ) : (
+            <div data-testid="fillup-override-form">
+              <p className="text-[11.5px] leading-[1.7] text-ink-soft">
+                يتجاوز التفويض شرط البطاقة فقط — تبقى الفواصل والحدود الأسبوعية سارية، وتُسجَّل التعبئة كاستثناء باسمك.
+              </p>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+                maxLength={500}
+                placeholder="سبب التفويض (إلزامي)"
+                data-testid="fillup-override-reason"
+                className="mt-2 w-full rounded-sm bg-surface p-2 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+              <PillButton
+                variant="danger"
+                data-testid="fillup-override-confirm"
+                className="mt-2 h-10 w-full text-[13px] !border-0 !bg-danger !text-white"
+                disabled={reason.trim().length === 0}
+                onClick={() => onOverride(reason.trim())}
+              >
+                تأكيد التفويض الطارئ
+              </PillButton>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverrideNotice({ onCancel }: { onCancel: () => void }) {
+  return (
+    <div className="mt-4 rounded-sm bg-danger-100 p-2.5 text-[12px] font-bold text-danger" data-testid="fillup-override-active">
+      تفويض طارئ فعّال — شرط البطاقة متجاوَز لهذه التعبئة فقط.
+      <button type="button" onClick={onCancel} className="ms-2 underline">
+        إلغاء
+      </button>
+    </div>
+  );
+}
+
+// Awareness stage, after every fill-up that did not scan a card: tells the
+// employee what to say and hand over, with the live station list.
+function AwarenessBlock({ awareness }: { awareness: AwarenessNotice }) {
+  // The deadline is a calendar day, not an instant — format it as UTC so the
+  // viewer's timezone can never shift it by a day.
+  const date = new Date(`${awareness.cardRequiredFromDate}T00:00:00Z`).toLocaleDateString('ar', { timeZone: 'UTC' });
+  return (
+    <div className="mt-4 w-full rounded-sm bg-accent-100 p-4 text-start" data-testid="fillup-awareness">
+      <p className="text-[13px] font-bold leading-[1.9] text-accent-dark">
+        ابتداءً من {date} لن تتم تعبئة أي مركبة بدون بطاقة. استلم بطاقتك من أحد مكاتب التسجيل التالية:
+      </p>
+      <RegistrationStationList stations={awareness.registrationStations} />
+      <p className="mt-3 text-[13px] font-extrabold text-ink" data-testid="fillup-awareness-flyer">
+        سلّم السائق نشرة التوعية
       </p>
     </div>
   );
@@ -1576,6 +1882,17 @@ function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): s
   // to read as "go fix the owner's identity," not "something went wrong."
   if (error.response?.status === 403 && error.response.data?.message === 'OWNER_IDENTITY_PROVISIONAL') {
     return 'هوية مالك هذه المركبة مؤقتة (رخصة قيادة) وصالحة لأول تعبئة فقط. أضف رقمًا وطنيًا أو إداريًا حقيقيًا لبيانات المالك قبل تسجيل تعبئة أخرى.';
+  }
+  // Phase 4a plate markers.
+  const marker = error.response?.data?.message;
+  if (error.response?.status === 400 && marker === 'PLATE_INVALID') {
+    return 'رقم اللوحة غير صالح: يجب أن يتكوّن من رمز المدينة ورقم اللوحة يفصل بينهما فاصل.';
+  }
+  if (error.response?.status === 409 && marker === 'PLATE_AMBIGUOUS') {
+    return 'تطابق هذه اللوحة أكثر من مركبة مسجّلة. اطلب من مكتب التسجيل مراجعتها.';
+  }
+  if (error.response?.status === 409 && marker === 'PLATE_NOW_REGISTERED') {
+    return 'سُجِّلت هذه المركبة للتو في مكتب التسجيل. أعد إدخال اللوحة للمتابعة.';
   }
   return 'تعذر إتمام العملية. حاول مرة أخرى.';
 }

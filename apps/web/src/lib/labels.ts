@@ -65,6 +65,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'fillups:create': 'تسجيل تعبئة',
   'fillups:update': 'تعديل تعبئة (غير مفعّلة حاليًا)',
   'fillups:record_exception': 'تسجيل تعبئة كاستثناء دون موافقة',
+  'fillups:emergency_override': 'تفويض طارئ لتعبئة بدون بطاقة',
+  'registration_sheet:print': 'طباعة قائمة مكاتب التسجيل',
   'fillups:approve_exception': 'اعتماد استثناء تعبئة',
   'settings:manage': 'إدارة إعدادات المنظومة',
   'audit:view': 'عرض سجل التغييرات',

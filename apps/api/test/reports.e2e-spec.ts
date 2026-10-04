@@ -173,6 +173,7 @@ describe('Reports (e2e)', () => {
           occurredAt,
           recordedById: scopedUserId,
           idempotencyKey: `e2e-rpt-${runId}-${key}`,
+          identifiedBy: 'TYPED_REGISTERED' as const,
         },
       });
     }
@@ -189,6 +190,7 @@ describe('Reports (e2e)', () => {
         occurredAt,
         recordedById: scopedUserId,
         idempotencyKey: `e2e-rpt-${runId}-a4`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
         isException: true,
       },
     });
@@ -210,6 +212,7 @@ describe('Reports (e2e)', () => {
         occurredAt,
         recordedById: scopedUserId,
         idempotencyKey: `e2e-rpt-${runId}-a5`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
         isException: true,
       },
     });
@@ -234,6 +237,7 @@ describe('Reports (e2e)', () => {
         occurredAt,
         recordedById: scopedUserId,
         idempotencyKey: `e2e-rpt-${runId}-a6`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
       },
     });
 
@@ -247,6 +251,7 @@ describe('Reports (e2e)', () => {
         occurredAt,
         recordedById: scopedUserId,
         idempotencyKey: `e2e-rpt-${runId}-b2`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
         isException: true,
       },
     });

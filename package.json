@@ -8,6 +8,7 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "pnpm --parallel --filter ./apps/* run dev",
+    "dev:phone": "node scripts/dev-phone.mjs",
     "build:packages": "pnpm --filter @fuel-tracking/shared-types run build",
     "build": "pnpm --recursive run build",
     "lint": "pnpm run build:packages && pnpm --recursive run lint",

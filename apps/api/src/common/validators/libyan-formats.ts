@@ -9,7 +9,8 @@ export const ADMINISTRATIVE_ID_REGEX = /^9\d{11}$/; // residents/non-nationals/t
 // did) — deliberately permissive rather than invented, per
 // docs/OPEN_ITEMS.md. Revisit once the client confirms the real format.
 export const DRIVERS_LICENSE_REGEX = /^[A-Za-z0-9]{4,20}$/;
-export const LICENSE_PLATE_REGEX = /^\d{1,2}[-\s]?\d{1,7}$/; // city code + sequence
+// Plates are validated by IsLibyanPlate (libyan-plate.validator.ts), which uses the
+// shared normalizer — a city code and a serial number with a separator.
 export const CHASSIS_NUMBER_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/; // ISO 3779 VIN, excludes I/O/Q
 // VehicleOwner.nationalId isn't discriminated by a separate identityType
 // field like Driver is, so it accepts either shape.

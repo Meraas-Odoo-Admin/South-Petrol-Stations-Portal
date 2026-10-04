@@ -17,9 +17,28 @@ export type RuleFailureReason =
 // unless the UI can name which one. Vehicle-level checks don't need this
 // (the triggering vehicle is already the one being submitted).
 export interface RuleTrigger {
-  vehicleId: string;
+  // Null when the prior fill-up was for an unregistered plate.
+  vehicleId: string | null;
   occurredAt: Date;
 }
+
+// Who the fill-up is for — what the allowance is counted against.
+//  - vehicle: a registered vehicle (and its owner, when it has one).
+//  - plate: a plate with no registered vehicle (grace / awareness stages),
+//    counted by its normalized plate within the municipality. There's no
+//    owner, so the three owner-level rules cannot apply, and no standing
+//    exception can cover anything (those are granted to a vehicle/owner).
+export type RuleSubject =
+  | { kind: 'vehicle'; vehicleId: string; ownerId: string | null }
+  | { kind: 'plate'; normalizedPlate: string };
+
+// The rules that can't be evaluated for a plate-only subject. Surfaced in
+// the rule result so the screen says so instead of silently skipping them.
+export const OWNER_LEVEL_RULES: RuleFailureReason[] = [
+  'OWNER_GAP_TOO_SHORT',
+  'OWNER_WEEKLY_CAP_REACHED',
+  'LITERS_PER_PERSON_CAP_REACHED',
+];
 
 export type RuleResult =
   | { allowed: true; coveredBy?: { standingExceptionId: string; rule: RuleFailureReason } }
@@ -41,7 +60,7 @@ export interface RuleCheckDetail {
 }
 
 export interface FillUpHistoryRecord {
-  vehicleId: string;
+  vehicleId: string | null;
   occurredAt: Date;
   quantityLiters: number;
 }
@@ -60,6 +79,17 @@ export interface FillUpHistoryReader {
   // before `before`, within `lookbackDays`, ordered newest-first.
   getRecentForVehicle(
     vehicleId: string,
+    municipalityId: string,
+    before: Date,
+    lookbackDays: number,
+  ): Promise<FillUpHistoryRecord[]>;
+
+  // Same, for an unregistered plate: fill-ups recorded against that
+  // normalized plate (no vehicle yet) in `municipalityId`. Once the vehicle
+  // registers those rows are linked to it and are found through
+  // getRecentForVehicle instead.
+  getRecentForPlate(
+    normalizedPlate: string,
     municipalityId: string,
     before: Date,
     lookbackDays: number,

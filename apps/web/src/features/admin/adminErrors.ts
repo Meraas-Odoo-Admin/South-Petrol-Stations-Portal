@@ -12,6 +12,8 @@ const MESSAGES: Record<string, string> = {
   AUTHORITY_OF_LIVE_MUNICIPALITY: 'هذه الجهة تشرف على بلدية مفعّلة، ولا يمكن نقلها إلى بلدية أخرى.',
   SECURITY_AUTHORITY_NAME_TAKEN: 'توجد جهة أمنية بهذا الاسم مسبقًا.',
   MUNICIPALITY_CODE_TAKEN: 'هذا الرمز مستخدم لبلدية أخرى.',
+  INVALID_DATE: 'التاريخ غير صالح.',
+  AWARENESS_NOT_BEFORE_DEADLINE: 'تاريخ بدء التوعية يجب أن يسبق تاريخ اشتراط البطاقة.',
   DESK_NAME_TAKEN: 'يوجد مكتب بهذا الاسم في مكتب التسجيل هذا.',
 };
 
