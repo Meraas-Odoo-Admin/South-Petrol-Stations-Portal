@@ -5,7 +5,17 @@ import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import type { MunicipalityRef } from '../stations/types';
+import { PrintRegistrationSheetButton } from '../../components/PrintRegistrationSheetButton';
+import { DateField } from '../../components/DateField';
 import { adminErrorMessage } from './adminErrors';
+
+const STAGE_LABELS = { GRACE: 'سماح', AWARENESS: 'توعية', CARD_REQUIRED: 'البطاقة مطلوبة' } as const;
+
+// Today as an Africa/Tripoli calendar day (YYYY-MM-DD) — the server decides
+// the stage; this is only used to know when to ask for the typed name.
+function tripoliToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
+}
 
 const inputClass =
   'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
@@ -23,6 +33,10 @@ export function MunicipalitiesAdminPage() {
   const [newName, setNewName] = useState('');
   const [confirming, setConfirming] = useState<MunicipalityRef | null>(null);
   const [typedName, setTypedName] = useState('');
+  const [editingDates, setEditingDates] = useState<MunicipalityRef | null>(null);
+  const [awarenessDraft, setAwarenessDraft] = useState('');
+  const [deadlineDraft, setDeadlineDraft] = useState('');
+  const [datesTypedName, setDatesTypedName] = useState('');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'municipalities'],
@@ -53,6 +67,23 @@ export function MunicipalitiesAdminPage() {
       queryClient.invalidateQueries({ queryKey: ['stations'] });
     },
     onError: (err) => setError(adminErrorMessage(err, 'تعذر تغيير حالة البلدية.')),
+  });
+
+  const needsDeadlineConfirm = !!deadlineDraft && deadlineDraft <= tripoliToday();
+  const datesMutation = useMutation({
+    mutationFn: (payload: { id: string; awarenessStartDate: string | null; cardRequiredFromDate: string | null; confirmName?: string }) =>
+      apiClient.patch(`/municipalities/${payload.id}`, {
+        awarenessStartDate: payload.awarenessStartDate,
+        cardRequiredFromDate: payload.cardRequiredFromDate,
+        confirmName: payload.confirmName,
+      }),
+    onSuccess: () => {
+      setError(null);
+      setEditingDates(null);
+      setDatesTypedName('');
+      invalidate();
+    },
+    onError: (err) => setError(adminErrorMessage(err, 'تعذر حفظ تواريخ المراحل.')),
   });
 
   const codeMutation = useMutation({
@@ -121,6 +152,59 @@ export function MunicipalitiesAdminPage() {
         </Card>
       )}
 
+      {editingDates && (
+        <Card className="p-4" data-testid="municipality-dates-editor">
+          <p className="text-[13px] font-bold text-ink">مراحل «{editingDates.name}»</p>
+          <p className="mt-1.5 text-[12px] leading-[1.8] text-ink-soft">
+            التواريخ بتوقيت طرابلس، وتبدأ المرحلة عند منتصف الليل. اترك التاريخ فارغًا لعدم تحديده؛ بلا موعد نهائي تبقى
+            البلدية في مرحلة السماح.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-[11.5px] text-ink-soft">بدء التوعية</label>
+              <DateField value={awarenessDraft} onChange={setAwarenessDraft} inputClassName="h-9 text-[12.5px]" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11.5px] text-ink-soft">البطاقة مطلوبة ابتداءً من</label>
+              <DateField value={deadlineDraft} onChange={setDeadlineDraft} inputClassName="h-9 text-[12.5px]" />
+            </div>
+          </div>
+          {needsDeadlineConfirm && (
+            <div className="mt-3" data-testid="municipality-dates-confirm">
+              <p className="text-[12px] font-bold text-danger">
+                هذا الموعد اليوم أو قبله، فسيُرفض فورًا كل تعبئة بدون بطاقة فعّالة. للتأكيد اكتب اسم البلدية كما هو:
+              </p>
+              <input
+                value={datesTypedName}
+                onChange={(e) => setDatesTypedName(e.target.value)}
+                placeholder={editingDates.name}
+                className={`${inputClass} mt-2 w-56`}
+                data-testid="municipality-dates-confirm-name"
+              />
+            </div>
+          )}
+          <div className="mt-3 flex gap-3">
+            <PillButton
+              variant={needsDeadlineConfirm ? 'danger' : undefined}
+              disabled={datesMutation.isPending || (needsDeadlineConfirm && datesTypedName.trim() !== editingDates.name)}
+              onClick={() =>
+                datesMutation.mutate({
+                  id: editingDates.id,
+                  awarenessStartDate: awarenessDraft || null,
+                  cardRequiredFromDate: deadlineDraft || null,
+                  confirmName: needsDeadlineConfirm ? datesTypedName.trim() : undefined,
+                })
+              }
+            >
+              حفظ
+            </PillButton>
+            <PillButton variant="ghost" onClick={() => setEditingDates(null)}>
+              إلغاء
+            </PillButton>
+          </div>
+        </Card>
+      )}
+
       {error && <p className="text-sm text-danger">{error}</p>}
 
       <Card>
@@ -137,12 +221,13 @@ export function MunicipalitiesAdminPage() {
         {isError && <p className="p-4 text-sm text-danger">تعذر تحميل البلديات.</p>}
         {data && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-[12.5px]">
+            <table className="w-full min-w-[680px] text-[12.5px]">
               <thead>
                 <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">البلدية</th>
                   <th className="px-[18px] py-2.5 text-start">رمز البطاقات</th>
                   <th className="px-[18px] py-2.5 text-start">الحالة</th>
+                  <th className="px-[18px] py-2.5 text-start">المرحلة</th>
                   <th className="px-[18px] py-2.5 text-start">الجهة الأمنية</th>
                   <th className="px-[18px] py-2.5 text-start"></th>
                 </tr>
@@ -170,6 +255,28 @@ export function MunicipalitiesAdminPage() {
                       <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'}>
                         {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}
                       </StatusPill>
+                    </td>
+                    <td className="px-[18px] py-3" data-testid={`municipality-stage-${m.id}`}>
+                      <StatusPill variant={m.stage === 'CARD_REQUIRED' ? 'ok' : 'neutral'}>
+                        {STAGE_LABELS[m.stage ?? 'GRACE']}
+                      </StatusPill>
+                      {m.status === 'LIVE' && !m.cardRequiredFromDate && (
+                        <p className="mt-1 text-[10.5px] text-accent-dark">لا يوجد موعد نهائي — السماح مفتوح</p>
+                      )}
+                      <button
+                        type="button"
+                        className="mt-1 block text-[11px] font-bold text-primary underline"
+                        onClick={() => {
+                          setError(null);
+                          setAwarenessDraft(m.awarenessStartDate ?? '');
+                          setDeadlineDraft(m.cardRequiredFromDate ?? '');
+                          setDatesTypedName('');
+                          setEditingDates(m);
+                        }}
+                      >
+                        تواريخ المراحل
+                      </button>
+                      <PrintRegistrationSheetButton municipalityId={m.id} className="mt-1 block" />
                     </td>
                     <td className="px-[18px] py-3 text-ink-soft">
                       {m.securityAuthority?.name ?? <span className="text-ink-faint">— لا توجد —</span>}

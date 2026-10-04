@@ -23,6 +23,11 @@ export interface MunicipalityRef extends LookupRef {
   // Phase 3: card-number prefix (e.g. SBH); null until an admin sets it.
   code?: string | null;
   securityAuthority: LookupRef | null;
+  // Phase 4a: optional Africa/Tripoli calendar days (YYYY-MM-DD) and the
+  // stage the server computed from them.
+  awarenessStartDate?: string | null;
+  cardRequiredFromDate?: string | null;
+  stage?: 'GRACE' | 'AWARENESS' | 'CARD_REQUIRED';
 }
 
 export interface StationFuelAvailabilityRow {

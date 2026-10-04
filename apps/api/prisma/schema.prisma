@@ -112,6 +112,13 @@ model Municipality {
   // at them. LIVE: in normal use. New rows start PREPARING; switching to
   // LIVE requires the municipality's security authority to exist first.
   status               MunicipalityStatus    @default(PREPARING)
+  // Registration pivot, phase 4a: the two optional calendar days that move a
+  // LIVE municipality through its stages (go-live itself is `status`). Both
+  // are calendar days in Africa/Tripoli — a stage begins at 00:00 Tripoli
+  // time on its date. No deadline = grace indefinitely. See
+  // common/utils/grace-stage.ts, the only place the stage is computed.
+  awarenessStartDate   DateTime?             @db.Date
+  cardRequiredFromDate DateTime?             @db.Date
   // Exactly one per municipality (client-confirmed, OPEN_ITEMS.md #4) —
   // the authority overseeing every petrol station in it. Stations get
   // their authority from here, never picked per station.
@@ -573,6 +580,17 @@ model Vehicle {
   id                                String                  @id @default(cuid())
   internalCode                      String                  @unique // fixed forever, even if the plate changes
   currentPlate                      String                  @unique
+  // Registration pivot, phase 4a: currentPlate in its canonical form
+  // `<city>-<serial>` from the one shared normalizePlate() (Western digits,
+  // any separator read as one dash, no leading zeros — `8-1234567`,
+  // `8 1234567`, `٨-١٢٣٤٥٦٧` and `08-1234567` are all `8-1234567`, while
+  // `81-234567` stays a different plate). NULL when the stored plate can't
+  // be split into a city code and a serial number (e.g. no separator) —
+  // `plates:report` lists those. Every plate MATCH uses this column;
+  // currentPlate stays exactly as entered. Deliberately NOT unique: older
+  // data may already collide once normalized (reported, never merged) —
+  // uniqueness is enforced by the application on new writes.
+  normalizedPlate                   String?
   chassisNumber                     String?                 @unique
   // رقم كتيب السيارة — added for the anti-fraud chassis/booklet linkage
   // (docs/IMPLEMENTATION_PLAN.md phase note: chassis-booklet-linkage
@@ -612,6 +630,8 @@ model Vehicle {
   cards                             VehicleCard[]
   createdAt                         DateTime                @default(now())
   updatedAt                         DateTime                @updatedAt
+
+  @@index([normalizedPlate])
 }
 
 // Plates change (sale, re-registration, damage) — never lose fill-up history
@@ -740,8 +760,22 @@ model DriverVehicle {
 
 model FillUpTransaction {
   id                  String             @id @default(cuid())
-  vehicleId           String
-  vehicle             Vehicle            @relation(fields: [vehicleId], references: [id])
+  // Phase 4a: null for a fill-up recorded against a plate that isn't
+  // registered yet (grace / awareness stages). The database requires a
+  // vehicle OR a typed plate (CHECK FillUpTransaction_has_subject). When the
+  // vehicle registers, its earlier unregistered fill-ups get this link.
+  vehicleId           String?
+  vehicle             Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  // The plate exactly as the employee typed it, and its normalized form
+  // (the key the by-plate allowance counts use). Null for a card scan.
+  typedPlate          String?
+  normalizedPlate     String?
+  // How this fill-up identified its vehicle — Phase 4b's reports and the
+  // deadline-readiness numbers count on it.
+  identifiedBy        FillUpIdentification
+  // Written reason of a supervisor's emergency override (the card
+  // requirement waived at the deadline). Null otherwise.
+  overrideReason      String?
   // Nullable since round 6: fill-ups no longer require driver identity (see
   // docs/DESIGN_owner_based_fillups.md) — rule evaluation and standing
   // exceptions are scoped to the vehicle's owner instead. Kept (not
@@ -790,8 +824,17 @@ model FillUpTransaction {
   // lookups, and the per-vehicle leg of the owner lookups (which join
   // through Vehicle.ownerId).
   @@index([vehicleId, municipalityId, occurredAt])
+  // Phase 4a: allowance history of an unregistered plate, per municipality.
+  @@index([municipalityId, normalizedPlate, occurredAt])
   @@index([driverId, occurredAt])
   @@index([stationId, occurredAt])
+}
+
+enum FillUpIdentification {
+  CARD_SCAN // scanned the vehicle's card
+  TYPED_REGISTERED // typed plate of a registered vehicle
+  TYPED_UNREGISTERED // typed plate, no registered vehicle (grace / awareness)
+  EMERGENCY_OVERRIDE // supervisor waived the card requirement after the deadline
 }
 
 // Interim design, NOT from the original client questionnaire — flagged to

@@ -1,3 +1,4 @@
+import { FillUpPlate } from '../../components/FillUpPlate';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -17,7 +18,6 @@ import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerSearchSelect } from '../../components/OwnerSearchSelect';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { FUEL_TYPE_LABELS, fuelTypeLabel } from '../../lib/labels';
-import { formatLicensePlate } from '../../lib/libyanFormats';
 import { InfoHint } from '../../components/InfoHint';
 import { maskIdentityNumber } from '../../lib/masking';
 
@@ -249,10 +249,10 @@ export function DailyReportPage() {
                       </td>
                       <td className="px-[18px] py-3">{row.station.internalCode}</td>
                       <td className="px-[18px] py-3">
-                        <LtrText>{formatLicensePlate(row.vehicle.currentPlate)}</LtrText>
+                        <FillUpPlate vehicle={row.vehicle} typedPlate={row.typedPlate} />
                       </td>
                       <td className="px-[18px] py-3">
-                        {row.vehicle.owner ? (
+                        {row.vehicle?.owner ? (
                           <>
                             {row.vehicle.owner.fullName} —{' '}
                             <OwnerIdentityReveal

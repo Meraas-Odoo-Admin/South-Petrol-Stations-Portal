@@ -23,6 +23,18 @@ const https =
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // The shared package is CommonJS (the API requires it); the browser gets
+    // its TypeScript source instead, so its few runtime values — today the
+    // plate normalizer — work in dev and in the production bundle. Types
+    // still resolve through the package's built declarations.
+    alias: [
+      {
+        find: /^@fuel-tracking\/shared-types$/,
+        replacement: resolve(__dirname, '../../packages/shared-types/src/index.ts'),
+      },
+    ],
+  },
   server: {
     port: 5173,
     // Binds to 0.0.0.0 (not just 127.0.0.1) so a phone on the same LAN can

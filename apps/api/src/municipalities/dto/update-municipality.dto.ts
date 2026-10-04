@@ -32,4 +32,19 @@ export class UpdateMunicipalityDto {
   @IsOptional()
   @Matches(/^[A-Z]{2,5}$/, { message: 'code must be 2-5 uppercase letters.' })
   code?: string;
+
+  // Registration pivot, phase 4a: calendar days in Africa/Tripoli
+  // (YYYY-MM-DD); null clears one. Both optional — no deadline means grace
+  // indefinitely. The service checks the day is a real date, that awareness
+  // starts before the deadline, and demands the typed name when the new
+  // deadline is today or earlier (enforcement would start immediately).
+  @ApiProperty({ required: false, nullable: true, example: '2026-11-01' })
+  @IsOptional()
+  @IsString()
+  awarenessStartDate?: string | null;
+
+  @ApiProperty({ required: false, nullable: true, example: '2026-12-01' })
+  @IsOptional()
+  @IsString()
+  cardRequiredFromDate?: string | null;
 }

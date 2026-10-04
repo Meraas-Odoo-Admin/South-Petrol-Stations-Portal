@@ -124,6 +124,18 @@ export class RegistrationStationsService {
     });
   }
 
+  // The registration stations a driver can actually go to right now, in one
+  // municipality: status ACTIVE, in a LIVE municipality. Used by the pump's
+  // refusal and awareness messages and by the posted A4 sheet, always read
+  // live — a station that opens or closes is right on the next call.
+  async listActiveForMunicipality(municipalityId: string) {
+    return this.prisma.registrationStation.findMany({
+      where: { municipalityId, status: 'ACTIVE', municipality: { status: 'LIVE' } },
+      select: { id: true, name: true, address: true, workingHours: true, contactPhone: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // Every registration action (VehiclesService.create, OwnersService.create)
   // runs through this before writing anything. Refusals use machine-
   // checkable markers the registration screen maps to Arabic (same

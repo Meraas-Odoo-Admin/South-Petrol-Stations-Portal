@@ -41,7 +41,12 @@ class FakeHistory implements FillUpHistoryReader {
   constructor(
     private readonly byVehicle: Record<string, FillUpHistoryRecord[]> = {},
     private readonly byOwner: Record<string, FillUpHistoryRecord[]> = {},
+    private readonly byPlate: Record<string, FillUpHistoryRecord[]> = {},
   ) {}
+
+  async getRecentForPlate(normalizedPlate: string): Promise<FillUpHistoryRecord[]> {
+    return this.byPlate[normalizedPlate] ?? [];
+  }
 
   async getRecentForVehicle(vehicleId: string): Promise<FillUpHistoryRecord[]> {
     return this.byVehicle[vehicleId] ?? [];
@@ -334,6 +339,7 @@ describe('FillUpRuleEngine', () => {
 interface StampedFillUp extends FillUpHistoryRecord {
   ownerId: string | null;
   municipalityId: string;
+  normalizedPlate?: string;
 }
 
 class StampedFakeHistory implements FillUpHistoryReader {
@@ -364,6 +370,16 @@ class StampedFakeHistory implements FillUpHistoryReader {
 
   async getRecentForOwner(ownerId: string, municipalityId: string, before: Date, lookbackDays: number) {
     return this.select((f) => f.ownerId === ownerId, municipalityId, before, lookbackDays);
+  }
+
+  // Same as the repository: only rows with no vehicle yet, by normalized plate.
+  async getRecentForPlate(normalizedPlate: string, municipalityId: string, before: Date, lookbackDays: number) {
+    return this.select(
+      (f) => f.vehicleId === null && f.normalizedPlate === normalizedPlate,
+      municipalityId,
+      before,
+      lookbackDays,
+    );
   }
 }
 
@@ -571,5 +587,89 @@ describe('FillUpRuleEngine — per-municipality allowances', () => {
         expect(perMunicipality).toEqual(blind);
       }
     });
+  });
+});
+
+// ── Registration pivot, phase 4a: an unregistered plate ──────────────────
+//
+// A plate with no registered vehicle is counted by its normalized plate,
+// per municipality, with the same settings and the same two vehicle-level
+// rules. There is no owner, so the owner-level rules cannot apply — the
+// result says so — and no standing exception can cover anything.
+describe('FillUpRuleEngine — unregistered plate', () => {
+  const muniA = 'mun-a';
+  const muniB = 'mun-b';
+  const plate = '81234567';
+  const now = new Date('2026-08-23T12:00:00.000Z');
+
+  function plateFillUp(municipalityId: string, occurredAt: Date, normalizedPlate = plate): StampedFillUp {
+    return { vehicleId: null, ownerId: null, municipalityId, occurredAt, quantityLiters: 30, normalizedPlate };
+  }
+
+  function engineFor(fillUps: StampedFillUp[], covering: { id: string; rule: RuleFailureReason } | null = null) {
+    return new FillUpRuleEngine(
+      new FakeSettings(DEFAULT_SETTINGS),
+      new StampedFakeHistory(fillUps),
+      new FakeStandingExceptions(covering),
+    );
+  }
+
+  const subject = { kind: 'plate', normalizedPlate: plate } as const;
+
+  it('allows the first fill-up for a plate', async () => {
+    const result = await engineFor([]).evaluateSubject(subject, muniA, now);
+    expect(result).toEqual({ allowed: true });
+  });
+
+  it('blocks a second fill-up inside the minimum gap, citing the vehicle gap rule', async () => {
+    const engine = engineFor([plateFillUp(muniA, daysAgo(now, 1))]);
+    const result = await engine.evaluateSubject(subject, muniA, now);
+    expect(result).toMatchObject({ allowed: false, reason: 'VEHICLE_GAP_TOO_SHORT' });
+  });
+
+  it('blocks the fourth fill-up in a week once the gap is respected', async () => {
+    const engine = engineFor([
+      plateFillUp(muniA, daysAgo(now, 2.5)),
+      plateFillUp(muniA, daysAgo(now, 4.5)),
+      plateFillUp(muniA, daysAgo(now, 6.5)),
+    ]);
+    const result = await engine.evaluateSubject(subject, muniA, now);
+    expect(result).toMatchObject({ allowed: false, reason: 'VEHICLE_WEEKLY_CAP_REACHED' });
+  });
+
+  it('counts only the same municipality', async () => {
+    const engine = engineFor([plateFillUp(muniB, daysAgo(now, 1))]);
+    expect(await engine.evaluateSubject(subject, muniA, now)).toEqual({ allowed: true });
+  });
+
+  it('counts only the same normalized plate', async () => {
+    const engine = engineFor([plateFillUp(muniA, daysAgo(now, 1), '81234568')]);
+    expect(await engine.evaluateSubject(subject, muniA, now)).toEqual({ allowed: true });
+  });
+
+  it('does not count a row that has already been linked to a vehicle', async () => {
+    const linked: StampedFillUp = { ...plateFillUp(muniA, daysAgo(now, 1)), vehicleId: 'veh-1' };
+    expect(await engineFor([linked]).evaluateSubject(subject, muniA, now)).toEqual({ allowed: true });
+  });
+
+  it('reports the three owner-level rules as skipped, and returns only the vehicle-level checks', async () => {
+    const { checks, skipped } = await engineFor([]).evaluateSubjectWithChecks(subject, muniA, now);
+    expect(checks.map((c) => c.reason)).toEqual(['VEHICLE_GAP_TOO_SHORT', 'VEHICLE_WEEKLY_CAP_REACHED']);
+    expect(skipped).toEqual(['OWNER_GAP_TOO_SHORT', 'OWNER_WEEKLY_CAP_REACHED', 'LITERS_PER_PERSON_CAP_REACHED']);
+  });
+
+  it('never lets a standing exception cover a plate with no vehicle', async () => {
+    const engine = engineFor([plateFillUp(muniA, daysAgo(now, 1))], { id: 'se-1', rule: 'VEHICLE_GAP_TOO_SHORT' });
+    expect(await engine.evaluateSubject(subject, muniA, now)).toMatchObject({
+      allowed: false,
+      reason: 'VEHICLE_GAP_TOO_SHORT',
+    });
+  });
+
+  it('gives the same verdict through evaluateSubject and evaluateSubjectWithChecks', async () => {
+    const engine = engineFor([plateFillUp(muniA, daysAgo(now, 1))]);
+    const direct = await engine.evaluateSubject(subject, muniA, now);
+    const { result } = await engine.evaluateSubjectWithChecks(subject, muniA, now);
+    expect(result).toEqual(direct);
   });
 });

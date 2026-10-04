@@ -9,3 +9,9 @@ allowBuilds:
   argon2: true
   esbuild: true
   prisma: true
+# Before `pnpm run`, check that node_modules matches the lockfile. pnpm 11's
+# default ("install") reinstalls on its own, and that install can stop to ask
+# whether to purge node_modules, which aborts with no terminal (husky in VS
+# Code, CI, agents). "error" never prompts: a stale install still fails the
+# script with a clear "run pnpm install" message.
+verifyDepsBeforeRun: error

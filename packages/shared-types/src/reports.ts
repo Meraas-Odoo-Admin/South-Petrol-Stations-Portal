@@ -106,7 +106,10 @@ export interface ExceptionSummary {
 // toJSON), not a number. Parse before doing arithmetic on it.
 export interface FillUpHistoryEntry {
   id: string;
-  vehicleId: string;
+  // Null for an unregistered-plate fill-up (Phase 4a); typedPlate then names it.
+  vehicleId: string | null;
+  typedPlate: string | null;
+  identifiedBy: 'CARD_SCAN' | 'TYPED_REGISTERED' | 'TYPED_UNREGISTERED' | 'EMERGENCY_OVERRIDE';
   driverId: string | null;
   stationId: string;
   fuelType: FuelType;
@@ -116,7 +119,7 @@ export interface FillUpHistoryEntry {
   isException: boolean;
   idempotencyKey: string;
   createdAt: string;
-  vehicle: FillUpVehicleSummary;
+  vehicle: FillUpVehicleSummary | null;
   driver: FillUpDriverSummary | null;
   station: FillUpStationSummary;
   exception: ExceptionSummary | null;

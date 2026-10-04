@@ -414,12 +414,12 @@ export function VehicleDetailPage() {
                         <CodeText>{new Date(row.occurredAt).toLocaleString('en-GB')}</CodeText>
                       </td>
                       <td className="px-[18px] py-3">{row.station.internalCode}</td>
-                      <td className="px-[18px] py-3">{row.vehicle.owner?.fullName ?? '—'}</td>
+                      <td className="px-[18px] py-3">{row.vehicle?.owner?.fullName ?? '—'}</td>
                       <td className="px-[18px] py-3">
-                        {row.vehicle.owner ? (
+                        {row.vehicle?.owner ? (
                           <OwnerIdentityReveal
-                            ownerId={row.vehicle.owner.id}
-                            maskedValue={maskIdentityNumber(row.vehicle.owner.identityNumber, permissions)}
+                            ownerId={row.vehicle?.owner.id}
+                            maskedValue={maskIdentityNumber(row.vehicle?.owner.identityNumber, permissions)}
                           />
                         ) : (
                           '—'

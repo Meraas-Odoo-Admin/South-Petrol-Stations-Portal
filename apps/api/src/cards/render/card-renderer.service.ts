@@ -68,9 +68,13 @@ export class CardRendererService implements OnModuleDestroy {
     );
   }
 
-  private async withPage<T>(html: string, fn: (page: import('playwright-core').Page) => Promise<T>): Promise<T> {
+  private async withPage<T>(
+    html: string,
+    fn: (page: import('playwright-core').Page) => Promise<T>,
+    viewport: { width: number; height: number } = { width: 638, height: 1011 },
+  ): Promise<T> {
     const browser = await this.getBrowser();
-    const page = await browser.newPage({ viewport: { width: 638, height: 1011 } });
+    const page = await browser.newPage({ viewport });
     try {
       // JavaScript only runs our own fit script; no network is ever used.
       await page.route('**/*', (route) => (route.request().url().startsWith('data:') ? route.continue() : route.abort()));
@@ -102,6 +106,20 @@ export class CardRendererService implements OnModuleDestroy {
   renderCardPdf(data: Omit<CardFaceData, 'qrSvg'>, mode: CardRenderMode): Promise<Buffer> {
     return this.qrSvg(data.cardNumber).then((qrSvg) =>
       this.pdfFromHtml(buildCardHtml({ ...data, qrSvg }, mode, loadCardAssets())),
+    );
+  }
+
+  // An A4 page rendered from HTML with the same offline Chromium — used by
+  // the posted "registration stations" sheet. The HTML sets its own @page
+  // size and margins, and sets window.__cardReady once its fonts are loaded.
+  renderA4Pdf(html: string): Promise<Buffer> {
+    return this.withPage(
+      html,
+      async (page) =>
+        Buffer.from(
+          await page.pdf({ preferCSSPageSize: true, printBackground: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } }),
+        ),
+      { width: 794, height: 1123 },
     );
   }
 

@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Matches } from 'class-validator';
-import { LICENSE_PLATE_REGEX } from '../../common/validators/libyan-formats';
+import { IsString } from 'class-validator';
+import { IsLibyanPlate } from '../../common/validators/libyan-plate.validator';
 
 export class PlateChangeDto {
-  @ApiProperty({ description: 'City code (1-2 digits) + sequence (1-7 digits), optional hyphen/space separator.' })
+  @ApiProperty({ description: 'City code (1-2 digits) + a separator + serial number (1-7 digits). A plate with no separator is refused.' })
   @IsString()
-  @Matches(LICENSE_PLATE_REGEX, { message: 'newPlate must be a city code plus sequence, e.g. "12-3456".' })
+  @IsLibyanPlate()
   newPlate!: string;
 }

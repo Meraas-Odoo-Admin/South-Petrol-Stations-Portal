@@ -6,7 +6,8 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { VehicleChangeType, VehicleUsageType } from '@prisma/client';
-import { CHASSIS_NUMBER_REGEX, LICENSE_PLATE_REGEX, REGISTRATION_BOOKLET_REGEX } from './libyan-formats';
+import { CHASSIS_NUMBER_REGEX, REGISTRATION_BOOKLET_REGEX } from './libyan-formats';
+import { isLibyanPlate } from './libyan-plate.validator';
 
 // requestedValue's format depends on the sibling changeType field, same
 // reasoning as IsValidIdentityNumber for Driver.identityNumber.
@@ -37,7 +38,7 @@ class IsValidVehicleChangeValueConstraint implements ValidatorConstraintInterfac
       return Object.values(VehicleUsageType).includes(value as VehicleUsageType);
     }
     if (changeType === VehicleChangeType.PLATE_CHANGE) {
-      return LICENSE_PLATE_REGEX.test(value);
+      return isLibyanPlate(value);
     }
     if (changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
       return value.trim().length > 0;

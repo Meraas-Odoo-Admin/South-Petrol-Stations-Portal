@@ -100,6 +100,7 @@ describe('Standing exceptions (e2e)', () => {
           data: { username: `e2e_se_seed_${runId}`, passwordHash: await argon2.hash(password), fullName: 'seed' },
         })).id,
         idempotencyKey: `e2e-se-preload-${runId}`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
       },
     });
 

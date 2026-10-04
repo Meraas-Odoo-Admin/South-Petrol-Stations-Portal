@@ -489,6 +489,7 @@ describe('Fill-ups (e2e)', () => {
         occurredAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
         recordedById: recorderUserId,
         idempotencyKey: `e2e-fu-preload-${runId}-${index}`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
       })),
     });
 
@@ -645,6 +646,7 @@ describe('Fill-ups (e2e)', () => {
         recordedById: recorderOtherStationUserId,
         isException: true,
         idempotencyKey: `e2e-fu-stationb-pending-${runId}`,
+        identifiedBy: 'TYPED_REGISTERED' as const,
       },
     });
     await prisma.exception.create({

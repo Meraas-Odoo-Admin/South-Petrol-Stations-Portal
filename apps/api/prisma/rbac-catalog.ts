@@ -61,6 +61,18 @@ export const PERMISSIONS = [
   // permission needs no separate approval — their exceptions are
   // auto-approved at creation (see FillUpsService.create).
   { key: 'fillups:record_exception', description: 'Record a fill-up as an exception — auto-approved, no separate approval step' },
+  // Registration pivot, phase 4a: from the card deadline on, a station
+  // supervisor can authorize ONE fill-up for a vehicle with no card (an
+  // ambulance, an official convoy, a genuine emergency). Only supervisors
+  // and admins — never a station employee, never a registration role.
+  {
+    key: 'fillups:emergency_override',
+    description: 'Authorize a single fill-up without a card after the card deadline (written reason required, audited)',
+  },
+  {
+    key: 'registration_sheet:print',
+    description: "Print the A4 sheet of registration stations posted at the pump",
+  },
   {
     key: 'vehicle_types:read',
     description: 'View the vehicle type list',
@@ -149,6 +161,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:update',
     'fillups:approve_exception',
     'fillups:record_exception',
+    'fillups:emergency_override',
+    'registration_sheet:print',
     'standing_exceptions:manage',
     'owners:read',
     'owners:reveal_identity',
@@ -216,6 +230,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:update',
     'fillups:approve_exception',
     'fillups:record_exception',
+    'fillups:emergency_override',
+    'registration_sheet:print',
     'standing_exceptions:manage',
     'owners:reveal_identity',
     'settings:manage',

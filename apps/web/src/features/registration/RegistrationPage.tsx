@@ -54,6 +54,9 @@ interface RegisteredVehicle {
   id: string;
   internalCode: string;
   currentPlate: string;
+  // Phase 4a: earlier fill-ups on this plate that were recorded as
+  // "unregistered" and are now linked to this vehicle.
+  linkedFillUps?: number;
 }
 
 const REGISTRATION_STATUS_LABELS: Record<RegistrationStationRow['status'], string> = {
@@ -294,6 +297,11 @@ export function RegistrationPage() {
           <p className="mt-1 text-[12.5px] text-ink-soft">
             الرقم الداخلي <LtrText>{registered.vehicle.internalCode}</LtrText> — المالك {registered.ownerName}
           </p>
+          {!!registered.vehicle.linkedFillUps && registered.vehicle.linkedFillUps > 0 && (
+            <p className="mt-3 rounded-sm bg-accent-100 p-2.5 text-[12.5px] font-bold text-accent-dark" data-testid="registration-linked-fillups">
+              تم العثور على {registered.vehicle.linkedFillUps} تعبئة سابقة لهذه اللوحة وربطها بالمركبة.
+            </p>
+          )}
           {/* Registration pivot, phase 3: the card is issued and printed
               right here at the desk, straight after registering. */}
           <div className="mt-6 border-t border-line pt-5 text-start">

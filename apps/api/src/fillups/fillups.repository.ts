@@ -36,6 +36,27 @@ export class FillUpsRepository implements FillUpHistoryReader {
     return rows.map((r) => ({ ...r, quantityLiters: Number(r.quantityLiters) }));
   }
 
+  // Unregistered plate (Phase 4a): rows with no vehicle yet, matched by the
+  // normalized plate inside the municipality they were stamped with.
+  async getRecentForPlate(
+    normalizedPlate: string,
+    municipalityId: string,
+    before: Date,
+    lookbackDays: number,
+  ): Promise<FillUpHistoryRecord[]> {
+    const rows = await this.prisma.fillUpTransaction.findMany({
+      where: {
+        vehicleId: null,
+        normalizedPlate,
+        municipalityId,
+        occurredAt: { gte: new Date(before.getTime() - lookbackDays * DAY_MS), lt: before },
+      },
+      orderBy: { occurredAt: 'desc' },
+      select: { vehicleId: true, occurredAt: true, quantityLiters: true },
+    });
+    return rows.map((r) => ({ ...r, quantityLiters: Number(r.quantityLiters) }));
+  }
+
   async getRecentForOwner(
     ownerId: string,
     municipalityId: string,

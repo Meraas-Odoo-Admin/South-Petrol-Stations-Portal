@@ -1,10 +1,12 @@
 import { resolveWeekWindowStrategy } from './week-window.strategy';
+import { OWNER_LEVEL_RULES } from './types';
 import type {
   FillUpHistoryReader,
   FillUpHistoryRecord,
   RuleCheckDetail,
   RuleFailureReason,
   RuleResult,
+  RuleSubject,
   SettingsReader,
   StandingExceptionReader,
 } from './types';
@@ -76,11 +78,14 @@ export class FillUpRuleEngine {
   // draws on a separate allowance in each municipality. The limits
   // themselves stay system-wide SystemSetting values.
   private async computeChecks(
-    vehicleId: string,
-    ownerId: string | null,
+    subject: RuleSubject,
     municipalityId: string,
     occurredAt: Date,
   ): Promise<{ checks: (RuleCheckDetail & { record?: FillUpHistoryRecord })[] }> {
+    // Phase 4a: for a plate with no registered vehicle the "vehicle-level"
+    // rules count that plate's own history (same settings, same checks, same
+    // reasons); there's no owner, so the owner-level rules are left out.
+    const ownerId = subject.kind === 'vehicle' ? subject.ownerId : null;
     const maxPerWeekVehicle = await this.settings.getNumber('fillup.max_per_week');
     const minGapDaysVehicle = await this.settings.getNumber('fillup.min_gap_days');
     const maxPerWeekOwner = await this.settings.getNumber('fillup.max_per_week_per_owner');
@@ -94,12 +99,10 @@ export class FillUpRuleEngine {
     const windowStrategy = resolveWeekWindowStrategy(weekWindowMode);
     const windowStart = windowStrategy.windowStart(occurredAt, weekStartDay);
 
-    const recentForVehicle = await this.history.getRecentForVehicle(
-      vehicleId,
-      municipalityId,
-      occurredAt,
-      LOOKBACK_DAYS,
-    );
+    const recentForVehicle =
+      subject.kind === 'vehicle'
+        ? await this.history.getRecentForVehicle(subject.vehicleId, municipalityId, occurredAt, LOOKBACK_DAYS)
+        : await this.history.getRecentForPlate(subject.normalizedPlate, municipalityId, occurredAt, LOOKBACK_DAYS);
     const lastVehicleFillUp = recentForVehicle[0];
     const vehicleCountThisWeek = recordsInWindow(recentForVehicle, windowStart).length;
 
@@ -163,18 +166,22 @@ export class FillUpRuleEngine {
   // first-failure-wins — shared by evaluate() and evaluateWithChecks() so
   // the two never disagree on the final verdict.
   private async resolveViolations(
-    vehicleId: string,
-    ownerId: string | null,
+    subject: RuleSubject,
     occurredAt: Date,
     violations: Violation[],
   ): Promise<RuleResult> {
     for (const violation of violations) {
-      const covering = await this.standingExceptions?.findActiveCovering({
-        vehicleId,
-        ownerId,
-        rule: violation.reason,
-        at: occurredAt,
-      });
+      // A standing exception is granted to a vehicle or an owner; a plate
+      // with no registered vehicle has neither, so nothing can cover it.
+      const covering =
+        subject.kind === 'vehicle'
+          ? await this.standingExceptions?.findActiveCovering({
+              vehicleId: subject.vehicleId,
+              ownerId: subject.ownerId,
+              rule: violation.reason,
+              at: occurredAt,
+            })
+          : null;
       if (covering) {
         return { allowed: true, coveredBy: { standingExceptionId: covering.id, rule: violation.reason } };
       }
@@ -195,11 +202,15 @@ export class FillUpRuleEngine {
     municipalityId: string,
     occurredAt: Date,
   ): Promise<RuleResult> {
-    const { checks } = await this.computeChecks(vehicleId, ownerId, municipalityId, occurredAt);
+    return this.evaluateSubject({ kind: 'vehicle', vehicleId, ownerId }, municipalityId, occurredAt);
+  }
+
+  async evaluateSubject(subject: RuleSubject, municipalityId: string, occurredAt: Date): Promise<RuleResult> {
+    const { checks } = await this.computeChecks(subject, municipalityId, occurredAt);
     const violations: Violation[] = checks
       .filter((c) => !c.passed)
       .map((c) => ({ reason: c.reason, record: c.record }));
-    return this.resolveViolations(vehicleId, ownerId, occurredAt, violations);
+    return this.resolveViolations(subject, occurredAt, violations);
   }
 
   // Round 7 item 1: the fill-up form's pre-submit rule-review screen needs
@@ -213,11 +224,30 @@ export class FillUpRuleEngine {
     municipalityId: string,
     occurredAt: Date,
   ): Promise<{ result: RuleResult; checks: RuleCheckDetail[] }> {
-    const { checks } = await this.computeChecks(vehicleId, ownerId, municipalityId, occurredAt);
+    const { result, checks } = await this.evaluateSubjectWithChecks(
+      { kind: 'vehicle', vehicleId, ownerId },
+      municipalityId,
+      occurredAt,
+    );
+    return { result, checks };
+  }
+
+  // `skipped` lists the rules that cannot apply to this subject (the three
+  // owner-level rules for an unregistered plate) so the caller can say so.
+  async evaluateSubjectWithChecks(
+    subject: RuleSubject,
+    municipalityId: string,
+    occurredAt: Date,
+  ): Promise<{ result: RuleResult; checks: RuleCheckDetail[]; skipped: RuleFailureReason[] }> {
+    const { checks } = await this.computeChecks(subject, municipalityId, occurredAt);
     const violations: Violation[] = checks
       .filter((c) => !c.passed)
       .map((c) => ({ reason: c.reason, record: c.record }));
-    const result = await this.resolveViolations(vehicleId, ownerId, occurredAt, violations);
-    return { result, checks: checks.map(({ record: _record, ...rest }) => rest) };
+    const result = await this.resolveViolations(subject, occurredAt, violations);
+    return {
+      result,
+      checks: checks.map(({ record: _record, ...rest }) => rest),
+      skipped: subject.kind === 'plate' ? OWNER_LEVEL_RULES : [],
+    };
   }
 }

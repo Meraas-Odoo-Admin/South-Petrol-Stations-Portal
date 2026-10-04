@@ -11,3 +11,4 @@ export * from './auth';
 export * from './pagination';
 export * from './reports';
 export * from './fillups';
+export * from './plate';
