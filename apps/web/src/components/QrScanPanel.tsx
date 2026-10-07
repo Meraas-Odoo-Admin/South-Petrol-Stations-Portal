@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
-import type { IScannerControls } from '@zxing/browser';
 import { isAxiosError } from 'axios';
 import { apiClient } from '../lib/apiClient';
+import { ScanSession } from '../lib/cameraScanSession';
 import { PillButton } from './design/PillButton';
 import { LtrText } from './LtrText';
 
@@ -61,52 +61,45 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsRef = useRef<IScannerControls | null>(null);
-  const readerRef = useRef<BrowserQRCodeReader | null>(null);
-  // Stops the continuous decode loop re-processing the same frame while a
-  // lookup is in flight or an outcome is showing.
-  const handlingRef = useRef(false);
-  const stageRef = useRef(stage);
-  stageRef.current = stage;
-
-  async function lookUp(text: string) {
-    try {
-      const res = await apiClient.get<ScannedCard>(`/cards/scan/${encodeURIComponent(text)}`);
-      controlsRef.current?.stop();
-      onResolved(res.data);
-    } catch (error) {
-      setDecodedCode(text);
-      if (isAxiosError(error) && error.response?.status === 409) setStage('revoked');
-      else if (isAxiosError(error) && error.response?.status === 404) setStage('not-a-card');
-      else setStage('error');
-    }
-  }
+  // The scan in progress. Everything about the camera (opening it, the decode
+  // loop, releasing every track, "done after the first card") lives in
+  // ScanSession; this panel only shows its state.
+  const sessionRef = useRef<ScanSession<ScannedCard> | null>(null);
+  // The latest session's "fully released" promise: a new session (React
+  // StrictMode mounts twice in dev, or the screen reopens) waits for it.
+  const latestClosedRef = useRef<Promise<void> | undefined>(undefined);
 
   async function openCamera() {
-    handlingRef.current = false;
-    if (!readerRef.current) {
-      readerRef.current = new BrowserQRCodeReader();
-    }
-    try {
-      setStage('scanning');
-      const controls = await readerRef.current.decodeFromVideoDevice(
-        undefined,
-        videoRef.current ?? undefined,
-        (result) => {
-          if (!result || handlingRef.current || stageRef.current !== 'scanning') return;
-          handlingRef.current = true;
-          void lookUp(result.getText().trim()).finally(() => {
-            handlingRef.current = false;
-          });
+    const session = new ScanSession<ScannedCard>(
+      {
+        getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
+        createReader: () => new BrowserQRCodeReader(),
+        lookUp: async (text) => (await apiClient.get<ScannedCard>(`/cards/scan/${encodeURIComponent(text)}`)).data,
+      },
+      {
+        // Exactly once per scan; the session has already released the camera.
+        onResolved: (card) => onResolved(card),
+        onLookupFailed: (text, error) => {
+          setDecodedCode(text);
+          if (isAxiosError(error) && error.response?.status === 409) setStage('revoked');
+          else if (isAxiosError(error) && error.response?.status === 404) setStage('not-a-card');
+          else setStage('error');
         },
-      );
-      controlsRef.current = controls;
-      // Flashlight: only where the camera exposes it (Chrome on Android).
-      // Elsewhere the toggle simply isn't shown.
-      setTorchAvailable(typeof controls.switchTorch === 'function');
+      },
+    );
+    const after = latestClosedRef.current;
+    latestClosedRef.current = session.closed;
+    sessionRef.current = session;
+    setStage('scanning');
+    try {
+      await session.start(() => videoRef.current, after);
+      // Flashlight: only where the camera track itself reports torch support
+      // (Chrome on Android). Elsewhere, e.g. iOS Safari, the toggle isn't shown.
+      if (sessionRef.current === session) setTorchAvailable(session.torchSupported);
     } catch {
       // getUserMedia rejected: permission denied, no camera, or an
       // insecure context.
+      if (sessionRef.current !== session) return;
       setStage('denied');
       onCameraUnavailable();
     }
@@ -115,14 +108,16 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
   useEffect(() => {
     if (autoStart) void openCamera();
     return () => {
-      controlsRef.current?.stop();
+      // Unmount: release the camera for certain, even if it is still opening.
+      void sessionRef.current?.stop();
+      sessionRef.current = null;
     };
   }, []);
 
   async function toggleTorch() {
     const next = !torchOn;
     try {
-      await controlsRef.current?.switchTorch?.(next);
+      await sessionRef.current?.setTorch(next);
       setTorchOn(next);
     } catch {
       setTorchAvailable(false);
@@ -131,11 +126,12 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
 
   function rescan() {
     setDecodedCode(null);
+    sessionRef.current?.rescan();
     setStage('scanning');
   }
 
   function abandon() {
-    controlsRef.current?.stop();
+    void sessionRef.current?.stop();
     onCancel();
   }
 
@@ -150,7 +146,7 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
 
   return (
     <div className={overlayClass} data-testid="qr-scan-panel">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5 text-white">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 text-white">
         <div>
           <p className="text-[14px] font-extrabold">امسح بطاقة المركبة</p>
           <p className="text-[11px] opacity-70">وجّه رمز البطاقة نحو الكاميرا</p>
@@ -191,11 +187,17 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
       )}
 
       {(stage === 'scanning' || outcome) && (
-        <div className="relative flex flex-1 flex-col">
-          <div className="relative flex flex-1 items-center justify-center overflow-hidden">
+        // min-h-0 down the chain: a flex item won't shrink below its content
+        // by default, and the camera stream's own size (a tall portrait one
+        // on a phone) would push the bottom bar, and the "type the plate"
+        // link in it, out of the panel.
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {/* Absolutely positioned: the video fills the area and never
+                contributes to its size. */}
             <video
               ref={videoRef}
-              className={`h-full w-full object-cover ${outcome ? 'opacity-40' : ''}`}
+              className={`absolute inset-0 h-full w-full object-cover ${outcome ? 'opacity-40' : ''}`}
               muted
               playsInline
             />
@@ -228,7 +230,7 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
               </div>
             )}
           </div>
-          <div className="flex flex-col gap-2 border-t border-white/10 bg-[#0F1E1C] p-4">
+          <div className="flex shrink-0 flex-col gap-2 border-t border-white/10 bg-[#0F1E1C] p-4">
             {outcome ? (
               <div className="flex flex-wrap gap-2">
                 <PillButton variant="secondary" onClick={rescan}>

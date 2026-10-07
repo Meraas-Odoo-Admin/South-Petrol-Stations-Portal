@@ -64,12 +64,15 @@ The camera and QR scanner only work in a secure context (HTTPS). `pnpm dev:phone
 dev server and a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/),
 then prints a public `https://<random>.trycloudflare.com` address to open on the phone.
 
-1. Install `cloudflared` once (`brew install cloudflared`, or the
-   [downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)).
+1. Install `cloudflared` once: `winget install --id Cloudflare.cloudflared` on Windows (open a new terminal
+   afterwards so it is on the PATH), `brew install cloudflared` on macOS, or the
+   [downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
 2. Make sure local Postgres is running and the normal setup above is done (`apps/api/.env`, migrations, seed).
 3. From the repo root run `pnpm dev:phone` (`npm run dev:phone` works too).
 4. Open the printed `https://….trycloudflare.com` address on the phone and log in as usual.
-5. When you finish, press **Ctrl+C** in that terminal. That stops the API, the web server and the tunnel.
+5. When you finish, press **Ctrl+C** in that terminal. That stops the API, the web server and the tunnel, on Windows
+   too. If a server from an earlier run is still listening on port 3000 or 5173, the script stops with an error
+   instead of silently using another port: close the old one first.
 
 How it works: the tunnel forwards to the web dev server over plain HTTP. In this mode (`PHONE_TUNNEL=1`) the web
 app calls the API through a relative path (`VITE_API_BASE_URL=/api/v1`), and Vite proxies `/api` to the local API,
