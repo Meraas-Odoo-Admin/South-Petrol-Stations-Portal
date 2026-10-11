@@ -17,57 +17,39 @@ function tabClass({ isActive }: { isActive: boolean }): string {
 export function AdminLayout() {
   const { hasPermission } = useAuth();
 
+  // One list drives both the tabs and the subtitle, so the subtitle can
+  // only ever name sections the person can actually open (phase 4b).
+  const tabs = [
+    { to: '/admin/users', label: 'الحسابات', show: hasPermission('users:manage') },
+    { to: '/admin/registration-stations', label: 'مكاتب التسجيل', show: hasPermission('registration_stations:manage') },
+    {
+      to: '/admin/municipalities',
+      label: 'البلديات',
+      // The directorate admin sets the two stage dates but nothing else; the
+      // tab opens for them with only that on it.
+      show: hasPermission('municipalities:manage') || hasPermission('municipalities:set_stage_dates'),
+    },
+    { to: '/admin/security-authorities', label: 'الجهات الأمنية', show: hasPermission('security_authorities:manage') },
+    { to: '/admin/settings', label: 'الإعدادات', show: hasPermission('settings:manage') },
+    { to: '/admin/exception-types', label: 'أنواع الاستثناءات', show: hasPermission('exception_types:manage') },
+    { to: '/admin/vehicle-types', label: 'أنواع المركبات', show: hasPermission('vehicle_types:manage') },
+    { to: '/admin/audit-log', label: 'سجل التغييرات', show: hasPermission('audit:view') },
+  ].filter((tab) => tab.show);
+
   return (
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-paper">
       <div className="flex flex-wrap items-end justify-between gap-3 bg-surface px-6 py-5 shadow-sm">
         <div>
           <h1 className="text-xl font-extrabold text-ink">الإدارة</h1>
-          <div className="text-[11px] text-ink-faint">
-            الحسابات · مكاتب التسجيل · البلديات والجهات الأمنية · الإعدادات · سجل التغييرات
-          </div>
+          <div className="text-[12px] text-ink-soft">{tabs.map((tab) => tab.label).join(' · ')}</div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {hasPermission('users:manage') && (
-            <NavLink to="/admin/users" className={tabClass}>
-              الحسابات
+        <nav aria-label="أقسام الإدارة" className="flex flex-wrap gap-1.5">
+          {tabs.map((tab) => (
+            <NavLink key={tab.to} to={tab.to} className={tabClass}>
+              {tab.label}
             </NavLink>
-          )}
-          {hasPermission('registration_stations:manage') && (
-            <NavLink to="/admin/registration-stations" className={tabClass}>
-              مكاتب التسجيل
-            </NavLink>
-          )}
-          {hasPermission('municipalities:manage') && (
-            <NavLink to="/admin/municipalities" className={tabClass}>
-              البلديات
-            </NavLink>
-          )}
-          {hasPermission('security_authorities:manage') && (
-            <NavLink to="/admin/security-authorities" className={tabClass}>
-              الجهات الأمنية
-            </NavLink>
-          )}
-          {hasPermission('settings:manage') && (
-            <NavLink to="/admin/settings" className={tabClass}>
-              الإعدادات
-            </NavLink>
-          )}
-          {hasPermission('exception_types:manage') && (
-            <NavLink to="/admin/exception-types" className={tabClass}>
-              أنواع الاستثناءات
-            </NavLink>
-          )}
-          {hasPermission('vehicle_types:manage') && (
-            <NavLink to="/admin/vehicle-types" className={tabClass}>
-              أنواع المركبات
-            </NavLink>
-          )}
-          {hasPermission('audit:view') && (
-            <NavLink to="/admin/audit-log" className={tabClass}>
-              سجل التغييرات
-            </NavLink>
-          )}
-        </div>
+          ))}
+        </nav>
       </div>
       <div className="p-6">
         <Outlet />

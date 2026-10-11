@@ -11,6 +11,14 @@ export const PERMISSIONS = [
   // Settings-managed lookup lists, same read/manage split as companies:*.
   { key: 'municipalities:read', description: 'View the municipality list' },
   { key: 'municipalities:manage', description: 'Create/update municipalities' },
+  // Registration pivot, phase 4b: the Directorate's day-to-day lever. Sets a
+  // municipality's two stage dates (awareness start, card deadline) and
+  // nothing else — creating a municipality or switching preparing/live stays
+  // municipalities:manage.
+  {
+    key: 'municipalities:set_stage_dates',
+    description: "Set a municipality's awareness-start and card-deadline dates (nothing else about it)",
+  },
   { key: 'routes:read', description: 'View the station route/haulage-line list' },
   { key: 'routes:manage', description: 'Create/update station routes' },
   { key: 'security_authorities:read', description: 'View the security authority list' },
@@ -33,6 +41,21 @@ export const PERMISSIONS = [
     description: 'See stations in municipalities that are still being prepared (not live yet)',
   },
   { key: 'users:manage', description: 'Create/update users and station scope' },
+  // Registration pivot, phase 4b: a supervisor's own-staff tool. Never
+  // reaches beyond the employees of the supervisor's own stations/offices —
+  // enforced in UsersService, not only in the screen.
+  {
+    key: 'users:manage_staff',
+    description: 'Create and manage the employee accounts at your own stations or offices (supervisors)',
+  },
+  // Held only by system_admin (which holds everything). A role or account
+  // that carries it can be created, edited and promoted only by someone who
+  // holds it too — this is what stops a directorate admin from minting a
+  // system admin, without naming any role in code.
+  {
+    key: 'users:manage_system_admins',
+    description: 'Create, edit and promote the highest administrative accounts (system admins only)',
+  },
   { key: 'roles:manage', description: 'Assign/remove roles' },
   { key: 'reports:view_all_stations', description: 'View directorate-wide reports' },
   {
@@ -167,6 +190,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'owners:read',
     'owners:reveal_identity',
     'reports:view',
+    'users:manage_staff',
   ],
   // Search the registry (to avoid duplicates), register owners and
   // vehicles at their registration station(s), request corrections to
@@ -200,10 +224,12 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'cards:read',
     'cards:issue',
     'cards:cancel',
+    'users:manage_staff',
   ],
   directorate_admin: [
     'companies:read',
     'municipalities:read',
+    'municipalities:set_stage_dates',
     'routes:read',
     'security_authorities:read',
     'vehicle_types:read',

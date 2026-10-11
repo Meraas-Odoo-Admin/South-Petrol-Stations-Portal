@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
-import { killTreeCommand, portInUse, resolveBin } from './dev-phone-lib.mjs';
+import { findCloudflared, killTreeCommand, portInUse, resolveBin, windowsCloudflaredPaths } from './dev-phone-lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -42,4 +42,34 @@ test('portInUse sees a listening server and a free port', async () => {
   assert.equal(await portInUse(port), true);
   await new Promise((resolve) => server.close(resolve));
   assert.equal(await portInUse(port), false);
+});
+
+test('cloudflared on PATH is used as is, on every platform', () => {
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const found = findCloudflared({ platform, env: {}, runs: () => true, exists: () => false });
+    assert.equal(found, 'cloudflared');
+  }
+});
+
+test('on Windows, falls back to the folder winget installs into when PATH misses it', () => {
+  const env = { 'ProgramFiles(x86)': 'C:\Program Files (x86)', ProgramFiles: 'C:\Program Files' };
+  const wanted = path.join('C:\Program Files (x86)', 'cloudflared', 'cloudflared.exe');
+  const found = findCloudflared({ platform: 'win32', env, runs: () => false, exists: (p) => p === wanted });
+  assert.equal(found, wanted);
+});
+
+test('on Windows with cloudflared nowhere, nothing is found', () => {
+  const env = { ProgramFiles: 'C:\Program Files' };
+  assert.equal(findCloudflared({ platform: 'win32', env, runs: () => false, exists: () => false }), null);
+});
+
+test('off Windows, a missing cloudflared is not searched for in Program Files', () => {
+  const env = { ProgramFiles: 'C:\Program Files' };
+  assert.equal(findCloudflared({ platform: 'linux', env, runs: () => false, exists: () => true }), null);
+});
+
+test('the Windows search list skips unset variables and repeats nothing', () => {
+  const env = { ProgramFiles: 'C:\PF', ProgramW6432: 'C:\PF' };
+  assert.equal(windowsCloudflaredPaths(env).length, 1);
+  assert.deepEqual(windowsCloudflaredPaths({}), []);
 });

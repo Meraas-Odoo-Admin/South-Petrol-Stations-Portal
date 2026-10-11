@@ -13,8 +13,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed",
-    "plates:report": "ts-node --transpile-only prisma/plates-report.ts"
+    "prisma:seed": "node ../../scripts/refresh.mjs && prisma db seed",
+    "plates:report": "ts-node --transpile-only prisma/plates-report.ts",
+    "dev:reset-test-users": "ts-node --transpile-only prisma/reset-test-users.ts"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

@@ -34,6 +34,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'companies:manage': 'إدارة الشركات',
   'municipalities:read': 'عرض البلديات',
   'municipalities:manage': 'إدارة البلديات',
+  'municipalities:set_stage_dates': 'تحديد تاريخي التوعية واشتراط البطاقة للبلدية',
   'routes:read': 'عرض خطوط السير',
   'routes:manage': 'إدارة خطوط السير',
   'security_authorities:read': 'عرض الجهات الأمنية',
@@ -48,6 +49,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'stations:manage': 'إدارة المحطات',
   'stations:view_preparing': 'عرض محطات البلديات قيد الإعداد',
   'users:manage': 'إدارة الحسابات',
+  'users:manage_staff': 'إدارة حسابات موظفي محطتك أو مكتبك',
+  'users:manage_system_admins': 'إدارة حسابات مديري المنظومة',
   'roles:manage': 'إسناد الأدوار والصلاحيات الفردية',
   'reports:view_all_stations': 'عرض تقارير كل المحطات',
   'reports:view': 'عرض تقارير المحطة',
@@ -267,3 +270,54 @@ export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description:
 export function systemSettingLabel(key: string): { label: string; description: string } {
   return SYSTEM_SETTING_LABELS[key] ?? { label: key, description: '' };
 }
+
+// One plain sentence per job, shown on the job picker (phase 4b). Display
+// text only — nothing in the app's logic reads a role name. A job added later
+// still renders: it falls back to the description stored on the role.
+export const ROLE_DESCRIPTIONS: Record<string, string> = {
+  station_employee: 'يسجّل التعبئات في محطته فقط.',
+  station_supervisor: 'يعتمد الاستثناءات ويدير موظفي محطته.',
+  registration_employee: 'يسجّل المركبات والملاك ويصدر البطاقات في مكتبه.',
+  registration_supervisor: 'يعتمد التصحيحات ويدير موظفي مكتبه.',
+  directorate_admin: 'يرى كل المحطات والمكاتب ويدير الحسابات والإعدادات.',
+  system_admin: 'كل الصلاحيات، بما فيها إدارة مديري المنظومة.',
+};
+
+export function roleDescription(roleName: string, fallback?: string | null): string | null {
+  return ROLE_DESCRIPTIONS[roleName] ?? fallback ?? null;
+}
+
+// The three sides a job can be on (Role.kind; null = administration).
+export const JOB_SIDE_LABELS = {
+  PETROL_STATION: 'محطات الوقود',
+  REGISTRATION: 'مكاتب التسجيل',
+  ADMIN: 'الإدارة',
+} as const;
+
+export const ACCOUNT_STATUS_LABELS = {
+  active: 'نشط',
+  deactivated: 'موقوف',
+  locked: 'مقفل',
+  must_change: 'يجب تغيير كلمة المرور',
+} as const;
+
+// AuditLog.action values written for an account (phase 4b), as a sentence.
+export const ACCOUNT_ACTION_LABELS: Record<string, string> = {
+  CREATE: 'أُنشئ الحساب',
+  UPDATE: 'عُدّلت بيانات الحساب',
+  CHANGE_JOB: 'غُيّرت الوظيفة',
+  SET_PLACES: 'غُيّرت أماكن العمل',
+  DEACTIVATE_USER: 'أُوقف الحساب',
+  REACTIVATE_USER: 'أُعيد تفعيل الحساب',
+  RESET_PASSWORD: 'أُعيد تعيين كلمة المرور',
+  UNLOCK_USER: 'فُكّ قفل الحساب',
+  ASSIGN_ROLE: 'أُسند دور',
+  REMOVE_ROLE: 'أُزيل دور',
+  GRANT_PERMISSION: 'مُنحت صلاحية فردية',
+  REVOKE_PERMISSION: 'سُحبت صلاحية فردية',
+  ADD_STATION_SCOPE: 'أُضيفت محطة',
+  REMOVE_STATION_SCOPE: 'أُزيلت محطة',
+  ADD_REGISTRATION_STATION_SCOPE: 'أُضيف مكتب تسجيل',
+  REMOVE_REGISTRATION_STATION_SCOPE: 'أُزيل مكتب تسجيل',
+  CHANGE_PASSWORD: 'غيّر كلمة مروره',
+};

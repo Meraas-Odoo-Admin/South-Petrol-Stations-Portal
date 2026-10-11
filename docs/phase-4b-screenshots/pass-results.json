@@ -1,0 +1,116 @@
+{
+  "runId": "bjx9q",
+  "newUsername": "p4b.pass.bjx9q",
+  "results": [
+    {
+      "name": "admin1 logs in (forced password change handled)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "list opens, shows names/jobs/where/status/last login",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "find a user by search",
+      "ok": true,
+      "detail": "1 row"
+    },
+    {
+      "name": "filters: side + status narrow the list",
+      "ok": true,
+      "detail": "4 registration people"
+    },
+    {
+      "name": "create flow (desktop): who / job / where, then the one-time password",
+      "ok": true,
+      "detail": "password shown once"
+    },
+    {
+      "name": "the new person logs in with the temporary password and is forced to change it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "open the person page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "change the job (other side) and the place, with confirmation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "deactivate needs a reason; then reactivate with a reason",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "activity shows who did what and why",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "advanced options are closed by default and open on request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phone: list, person, create",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "phone: reset password shows the one-time password",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "directorate admin: municipalities show dates, no create/activate controls",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "set and clear Sabha stage dates",
+      "ok": false,
+      "detail": "locator.click: Timeout 30000ms exceeded."
+    },
+    {
+      "name": "supervisor1 logs in",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor sees «فريق العمل» in their own menu, not «الإدارة»",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor list shows only their own employees",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor create: only own station and only the employee job are offered",
+      "ok": false,
+      "detail": "jobOptions=3 fixed=0"
+    },
+    {
+      "name": "supervisor creates an employee for their station",
+      "ok": false,
+      "detail": "locator.click: Timeout 30000ms exceeded."
+    },
+    {
+      "name": "supervisor opening someone outside their scope is refused",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor: open one of their own people (phone)",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

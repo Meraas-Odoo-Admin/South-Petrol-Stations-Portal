@@ -1,6 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { UsersAccountsService } from './users-accounts.service';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { SetJobDto } from './dto/set-job.dto';
+import { SetPlacesDto } from './dto/set-places.dto';
+import { ReasonDto } from './dto/reason.dto';
+import { RequireAnyPermission } from '../common/decorators/require-any-permission.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { AssignPermissionDto } from './dto/assign-permission.dto';
@@ -13,24 +20,91 @@ import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 @ApiTags('users')
 @Controller('users')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly accounts: UsersAccountsService,
+  ) {}
 
-  @RequirePermission('users:manage')
+  // Phase 4b. Two kinds of caller reach these: admins (users:manage) and
+  // supervisors (users:manage_staff). The door is any-of; what each may do to
+  // WHICH person is decided in UsersAccountsService (user-access.ts), not here.
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
   @Post()
   create(@Body() dto: CreateUserDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.users.create(dto, actor.id);
+    return this.accounts.create(dto, actor.id);
   }
 
-  @RequirePermission('users:manage')
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
   @Get()
-  findAll() {
-    return this.users.findAll();
+  findAll(@Query() query: ListUsersQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.list(actor.id, query);
   }
 
-  @RequirePermission('users:manage')
+  // Declared before ':id' so it is not read as a user id.
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Get('options')
+  options(@CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.options(actor.id);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.users.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.detail(actor.id, id);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Get(':id/activity')
+  activity(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.activity(actor.id, id);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.updateProfile(actor.id, id, dto);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Put(':id/job')
+  setJob(@Param('id') id: string, @Body() dto: SetJobDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.setJob(actor.id, id, dto);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Put(':id/places')
+  setPlaces(@Param('id') id: string, @Body() dto: SetPlacesDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.setPlaces(actor.id, id, dto);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Post(':id/deactivate')
+  @HttpCode(200)
+  deactivate(@Param('id') id: string, @Body() dto: ReasonDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.deactivate(actor.id, id, dto.reason);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Post(':id/reactivate')
+  @HttpCode(200)
+  reactivate(@Param('id') id: string, @Body() dto: ReasonDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.reactivate(actor.id, id, dto.reason);
+  }
+
+  // The response carries the one-time password: never cached anywhere.
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Post(':id/reset-password')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  resetPassword(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.resetPassword(actor.id, id);
+  }
+
+  @RequireAnyPermission('users:manage', 'users:manage_staff')
+  @Post(':id/unlock')
+  @HttpCode(200)
+  unlock(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.unlock(actor.id, id);
   }
 
   @RequirePermission('roles:manage')

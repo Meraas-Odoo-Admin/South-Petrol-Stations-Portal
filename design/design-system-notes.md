@@ -1,3 +1,5 @@
+> **SUPERSEDED.** The canonical design rulebook is `apps/web/DESIGN.md` (with its machine-readable sidecar, `apps/web/.impeccable/design.json`). This file is kept for history only. Do not edit it.
+
 # Fuel Fill-Up Control System — Visual Style Guide
 
 For Claude Code: apply this to every screen, including ones not mocked in the design file, so the whole app reads as one system.

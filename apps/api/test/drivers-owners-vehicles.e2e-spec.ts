@@ -273,8 +273,13 @@ describe('Owners/Vehicles (e2e)', () => {
       .expect(201);
     ownerId = createRes.body.id;
 
+    // The list is oldest-first and paged, so on a database that already holds
+    // more than one page of owners a new one is not on the first page. Look it
+    // up by its own identity number, which does not depend on how much data
+    // exists.
     const listRes = await request(server)
       .get('/api/v1/owners')
+      .query({ search: `1${numericId11}` })
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     expect(listRes.body.map((o: { id: string }) => o.id)).toContain(ownerId);

@@ -1,0 +1,550 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T09:11:01.436Z",
+  "title": "Design System: ضبط الوقود (Fuel Control)",
+  "extensions": {
+    "colorMeta": {
+      "petrol-teal": {
+        "role": "primary",
+        "displayName": "Petrol Teal",
+        "canonical": "oklch(42.8% 0.073 -178.2)",
+        "tonalRamp": [
+          "#00120D",
+          "#002E27",
+          "#084D44",
+          "#2C6E64",
+          "#4C9185",
+          "#73B3A8",
+          "#9BD7CC",
+          "#C3FCF1"
+        ]
+      },
+      "petrol-teal-deep": {
+        "role": "primary",
+        "displayName": "Petrol Teal Deep",
+        "canonical": "oklch(36.3% 0.060 -176.6)",
+        "tonalRamp": [
+          "#00110D",
+          "#002D27",
+          "#1A4B45",
+          "#396C64",
+          "#578E86",
+          "#7DB1A8",
+          "#A3D5CC",
+          "#CBFAF2"
+        ]
+      },
+      "petrol-teal-tint": {
+        "role": "primary",
+        "displayName": "Petrol Teal Tint",
+        "canonical": "oklch(94.2% 0.013 179.5)",
+        "tonalRamp": [
+          "#070D0B",
+          "#1F2725",
+          "#3C4442",
+          "#5A6461",
+          "#7A8582",
+          "#9DA8A5",
+          "#C1CCC9",
+          "#E7F1EF"
+        ]
+      },
+      "gauge-amber": {
+        "role": "secondary",
+        "displayName": "Gauge Amber",
+        "canonical": "oklch(76.9% 0.140 74.3)",
+        "tonalRamp": [
+          "#220000",
+          "#441500",
+          "#673300",
+          "#8C5200",
+          "#B37300",
+          "#D59737",
+          "#F9BD68",
+          "#FFE395"
+        ]
+      },
+      "gauge-amber-deep": {
+        "role": "secondary",
+        "displayName": "Gauge Amber Deep",
+        "canonical": "oklch(63.0% 0.128 71.0)",
+        "tonalRamp": [
+          "#220000",
+          "#431600",
+          "#663300",
+          "#8B5200",
+          "#B1730D",
+          "#D49748",
+          "#F8BD74",
+          "#FFE39F"
+        ]
+      },
+      "gauge-amber-tint": {
+        "role": "secondary",
+        "displayName": "Gauge Amber Tint",
+        "canonical": "oklch(95.1% 0.036 82.2)",
+        "tonalRamp": [
+          "#110A01",
+          "#2C2414",
+          "#4B412E",
+          "#6B604B",
+          "#8D816A",
+          "#B0A38D",
+          "#D4C8B2",
+          "#F9EDD9"
+        ]
+      },
+      "violation-red": {
+        "role": "status",
+        "displayName": "Violation Red",
+        "canonical": "oklch(56.0% 0.163 33.3)",
+        "tonalRamp": [
+          "#2F0000",
+          "#550000",
+          "#7D1000",
+          "#A7341D",
+          "#D1553C",
+          "#F57D63",
+          "#FFA58B",
+          "#FFCDB3"
+        ]
+      },
+      "violation-red-deep": {
+        "role": "status",
+        "displayName": "Violation Red Deep",
+        "canonical": "oklch(44.8% 0.131 32.5)",
+        "tonalRamp": [
+          "#290000",
+          "#4D0100",
+          "#732214",
+          "#9B4130",
+          "#C4614E",
+          "#E78773",
+          "#FFAD99",
+          "#FFD4C1"
+        ]
+      },
+      "violation-red-tint": {
+        "role": "status",
+        "displayName": "Violation Red Tint",
+        "canonical": "oklch(94.0% 0.024 36.5)",
+        "tonalRamp": [
+          "#120806",
+          "#2E221E",
+          "#4D3E3A",
+          "#6E5D58",
+          "#907E78",
+          "#B3A09B",
+          "#D7C5BF",
+          "#FCEAE5"
+        ]
+      },
+      "approved-green": {
+        "role": "status",
+        "displayName": "Approved Green",
+        "canonical": "oklch(51.9% 0.096 166.2)",
+        "tonalRamp": [
+          "#001304",
+          "#00301C",
+          "#005037",
+          "#1D7155",
+          "#409575",
+          "#6AB798",
+          "#92DBBD",
+          "#BBFFE3"
+        ]
+      },
+      "approved-green-tint": {
+        "role": "status",
+        "displayName": "Approved Green Tint",
+        "canonical": "oklch(94.7% 0.020 164.6)",
+        "tonalRamp": [
+          "#060D09",
+          "#1E2823",
+          "#3A4540",
+          "#58655E",
+          "#78867F",
+          "#9BA9A2",
+          "#BFCDC6",
+          "#E5F2EC"
+        ]
+      },
+      "warm-paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "oklch(97.0% 0.008 91.5)",
+        "tonalRamp": [
+          "#0C0B08",
+          "#262521",
+          "#43423E",
+          "#63615C",
+          "#84827D",
+          "#A7A5A0",
+          "#CBC9C4",
+          "#F0EEE9"
+        ]
+      },
+      "surface-white": {
+        "role": "neutral",
+        "displayName": "Surface White",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "mist-green": {
+        "role": "neutral",
+        "displayName": "Mist Green",
+        "canonical": "oklch(95.7% 0.007 145.5)",
+        "tonalRamp": [
+          "#0A0C0A",
+          "#232623",
+          "#404340",
+          "#5F625F",
+          "#808380",
+          "#A3A6A3",
+          "#C7CAC7",
+          "#ECEFEC"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(24.9% 0.024 -168.8)",
+        "tonalRamp": [
+          "#030E0D",
+          "#1A2827",
+          "#354645",
+          "#536664",
+          "#738786",
+          "#96AAA8",
+          "#BACECC",
+          "#E0F3F2"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Ink Soft",
+        "canonical": "oklch(51.9% 0.022 -175.7)",
+        "tonalRamp": [
+          "#040E0C",
+          "#1B2826",
+          "#374643",
+          "#546562",
+          "#748784",
+          "#97AAA6",
+          "#BCCECA",
+          "#E2F3F0"
+        ]
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Ink Faint",
+        "canonical": "oklch(69.7% 0.016 -178.4)",
+        "tonalRamp": [
+          "#060D0B",
+          "#1E2725",
+          "#3A4542",
+          "#586462",
+          "#788683",
+          "#9BA8A6",
+          "#C0CCCA",
+          "#E5F2EF"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(92.4% 0.008 139.4)",
+        "tonalRamp": [
+          "#0A0C09",
+          "#232623",
+          "#40433F",
+          "#5F625E",
+          "#80837F",
+          "#A3A6A2",
+          "#C7CAC6",
+          "#ECF0EB"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles in the white page header."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles and primary action labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Fields, paragraphs and table content."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Captions, KPI labels and status pill text."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "KPI numbers, end-aligned and tabular."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Plates, internal codes, rule ids and setting keys."
+      },
+      "page-title-phone": {
+        "displayName": "Page title (phone)",
+        "purpose": "Page titles on phone screens built from Phase 4b onward."
+      },
+      "title-phone": {
+        "displayName": "Title (phone)",
+        "purpose": "Card and sheet titles on a phone."
+      },
+      "lead-phone": {
+        "displayName": "Lead (phone)",
+        "purpose": "Job names and lead lines on a phone."
+      },
+      "body-phone": {
+        "displayName": "Body (phone)",
+        "purpose": "Field text, buttons and paragraphs on a phone."
+      },
+      "body-secondary-phone": {
+        "displayName": "Secondary (phone)",
+        "purpose": "Secondary text and hints on a phone."
+      },
+      "label-phone": {
+        "displayName": "Label (phone)",
+        "purpose": "Field labels and small headings on a phone."
+      },
+      "caption-phone": {
+        "displayName": "Caption (phone)",
+        "purpose": "The smallest size allowed on a phone: captions and codes."
+      },
+      "title-desktop": {
+        "displayName": "Title (desktop)",
+        "purpose": "Card and sheet titles on a desktop."
+      },
+      "label-desktop": {
+        "displayName": "Label (desktop)",
+        "purpose": "Field labels, captions and codes on a desktop: the smallest size allowed there."
+      }
+    },
+    "shadows": [
+      {
+        "name": "rest",
+        "value": "0 1px 2px rgba(19,37,36,.06), 0 1px 1px rgba(19,37,36,.04)",
+        "purpose": "Cards, page headers, active nav pill."
+      },
+      {
+        "name": "raised",
+        "value": "0 8px 24px -8px rgba(19,37,36,.18)",
+        "purpose": "Menus and popovers."
+      },
+      {
+        "name": "overlay",
+        "value": "0 20px 48px -12px rgba(19,37,36,.28)",
+        "purpose": "Dialogs and sheets."
+      },
+      {
+        "name": "action-glow",
+        "value": "0 4px 16px -2px rgba(232,165,61,.45)",
+        "purpose": "Primary amber button only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "fade-in-up",
+        "value": "380ms ease-out, 6px rise",
+        "purpose": "Card grids and table rows entering."
+      },
+      {
+        "name": "fade-in",
+        "value": "300ms ease-out",
+        "purpose": "Simple appearance."
+      },
+      {
+        "name": "scale-in",
+        "value": "200ms ease-out, from 97%",
+        "purpose": "Popovers and small surfaces."
+      },
+      {
+        "name": "pulse-soft",
+        "value": "1.6s ease-in-out infinite, opacity 1 to .55",
+        "purpose": "Loading placeholders."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single amber call to action in a region.",
+      "html": "<button class=\"ds-btn-primary\">تسجيل التعبئة</button>",
+      "css": ".ds-btn-primary{font-family:Cairo,sans-serif;height:36px;padding:0 16px;border:0;border-radius:9999px;background:linear-gradient(to left,#E8A53D,#B97A1A);color:#fff;font-size:12.5px;font-weight:700;box-shadow:0 4px 16px -2px rgba(232,165,61,.45);cursor:pointer;transition:all .15s}.ds-btn-primary:hover{filter:brightness(1.05)}.ds-btn-primary:focus-visible{outline:2px solid #E8A53D;outline-offset:2px}.ds-btn-primary:disabled{opacity:.4}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet alternative action on Mist Green.",
+      "html": "<button class=\"ds-btn-secondary\">إلغاء</button>",
+      "css": ".ds-btn-secondary{font-family:Cairo,sans-serif;height:36px;padding:0 16px;border:0;border-radius:9999px;background:#EEF2EE;color:#5B6D6A;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .15s}.ds-btn-secondary:hover{background:#E3EFEC}.ds-btn-secondary:focus-visible{outline:2px solid #E8A53D;outline-offset:2px}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Outlined red pill for irreversible actions and broken-rule responses.",
+      "html": "<button class=\"ds-btn-danger\">إلغاء البطاقة</button>",
+      "css": ".ds-btn-danger{font-family:Cairo,sans-serif;height:36px;padding:0 16px;border:1px solid #C1462D;border-radius:9999px;background:transparent;color:#C1462D;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .15s}.ds-btn-danger:hover{background:#FBE6E0}.ds-btn-danger:focus-visible{outline:2px solid #E8A53D;outline-offset:2px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "52px Mist Green field with a Hairline border and an amber focus ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"رقم اللوحة\" />",
+      "css": ".ds-input{font-family:Cairo,sans-serif;box-sizing:border-box;height:52px;width:100%;padding:0 14px;border:1px solid #E3E7E2;border-radius:10px;background:#EEF2EE;color:#132524;font-size:14px}.ds-input:focus{outline:none;box-shadow:0 0 0 2px #E8A53D}.ds-input::placeholder{color:#93A19E}"
+    },
+    {
+      "name": "Text Field — error",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A refusal shows a red border plus an icon and a sentence under the field, never the border alone.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-label\" for=\"e1\">اسم المستخدم</label><input id=\"e1\" class=\"ds-input ds-input-error\" aria-invalid=\"true\" value=\"a b\" /><p class=\"ds-msg ds-msg-error\" role=\"alert\"><span aria-hidden=\"true\">⚠</span> اسم المستخدم بحروف إنجليزية وأرقام فقط، دون مسافات.</p></div>",
+      "css": ".ds-field{font-family:Cairo,sans-serif;max-width:320px}.ds-label{display:block;margin-bottom:6px;font-size:14px;font-weight:700;color:#132524}.ds-input-error{border-color:#C1462D}.ds-msg{margin:6px 0 0;font-size:14px;line-height:1.6}.ds-msg-error{color:#8F3120;font-weight:500}"
+    },
+    {
+      "name": "Text Field — disabled",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A disabled field is faded and always says why in a line under it.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-label\" for=\"d1\">اسم المستخدم</label><input id=\"d1\" class=\"ds-input ds-input-disabled\" disabled value=\"ahmed.ali\" /><p class=\"ds-msg ds-msg-note\"><span aria-hidden=\"true\">🔒</span> لا يتغيّر بعد إنشاء الحساب.</p></div>",
+      "css": ".ds-input-disabled{cursor:not-allowed;background:rgba(238,242,238,.6);color:#5B6D6A}.ds-msg-note{color:#5B6D6A}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Full-pill sidebar item; the active item is solid Petrol Teal.",
+      "html": "<nav style=\"display:flex;flex-direction:column;gap:2px;width:220px\"><a class=\"ds-nav ds-nav-active\">الرئيسية</a><a class=\"ds-nav\">المركبات<span class=\"ds-badge\">3</span></a></nav>",
+      "css": ".ds-nav{font-family:Cairo,sans-serif;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9999px;color:#5B6D6A;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .15s}.ds-nav:hover{background:#EEF2EE}.ds-nav-active,.ds-nav-active:hover{background:#0D5C52;color:#fff;box-shadow:0 1px 2px rgba(19,37,36,.06),0 1px 1px rgba(19,37,36,.04)}.ds-badge{margin-inline-start:auto;padding:2px 6px;border-radius:9999px;background:#E8A53D;color:#fff;font-size:10px;font-weight:800}"
+    },
+    {
+      "name": "Status Pills",
+      "kind": "chip",
+      "refersTo": "status-pill-ok",
+      "description": "Every status is a pill with a word: ok, pending, neutral, broken rule.",
+      "html": "<span class=\"ds-pill ds-pill-ok\">معتمد</span> <span class=\"ds-pill ds-pill-accent\">بانتظار الاعتماد</span> <span class=\"ds-pill ds-pill-neutral\">غير نشط</span> <span class=\"ds-pill ds-pill-danger\">مخالفة</span>",
+      "css": ".ds-pill{font-family:Cairo,sans-serif;display:inline-block;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:700}.ds-pill-ok{background:#E2F2EA;color:#1F7A5C}.ds-pill-accent{background:#FBEDD4;color:#B97A1A}.ds-pill-neutral{background:#EEF2EE;color:#5B6D6A}.ds-pill-danger{border:1px solid #C1462D;color:#C1462D}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White 16px card floating on paper with a header row and no border.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-h\"><span>آخر التعبئات</span><span class=\"ds-card-sub\">اليوم</span></div><div class=\"ds-card-b\">محتوى البطاقة</div></div>",
+      "css": ".ds-card{font-family:Cairo,sans-serif;overflow:hidden;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(19,37,36,.06),0 1px 1px rgba(19,37,36,.04);color:#132524}.ds-card-h{display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid #EEF2EE;font-size:13px;font-weight:700}.ds-card-sub{font-size:11px;font-weight:400;color:#93A19E}.ds-card-b{padding:16px;font-size:14px}"
+    },
+    {
+      "name": "KPI Card",
+      "kind": "card",
+      "refersTo": "kpi-card-accent",
+      "description": "Rounded stat tile with a mono figure; amber marks the one needing a decision.",
+      "html": "<div style=\"display:flex;gap:12px\"><div class=\"ds-kpi\"><div class=\"ds-kpi-l\">تعبئات اليوم</div><div class=\"ds-kpi-v\">128</div></div><div class=\"ds-kpi ds-kpi-accent\"><div class=\"ds-kpi-l\">بانتظار اعتمادك</div><div class=\"ds-kpi-v\">7</div></div></div>",
+      "css": ".ds-kpi{font-family:Cairo,sans-serif;min-width:130px;padding:16px;border-radius:16px;background:#fff;box-shadow:0 1px 2px rgba(19,37,36,.06),0 1px 1px rgba(19,37,36,.04)}.ds-kpi-l{font-size:11px;font-weight:500;color:#5B6D6A}.ds-kpi-v{margin-top:8px;text-align:end;font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;line-height:1;color:#132524;direction:ltr}.ds-kpi-accent{background:#FBEDD4}.ds-kpi-accent .ds-kpi-l,.ds-kpi-accent .ds-kpi-v{color:#B97A1A}"
+    },
+    {
+      "name": "Unregistered Plate Badge",
+      "kind": "custom",
+      "refersTo": "status-pill-accent",
+      "description": "A typed plate for a vehicle with no record, flagged with an amber badge.",
+      "html": "<span class=\"ds-plate\"><span class=\"ds-plate-code\">5-1000002</span><span class=\"ds-plate-badge\">مركبة غير مسجلة</span></span>",
+      "css": ".ds-plate{display:inline-flex;align-items:center;gap:6px;font-family:Cairo,sans-serif;}.ds-plate-code{direction:ltr;unicode-bidi:isolate;font-family:'JetBrains Mono',monospace;font-size:13px;color:#132524}.ds-plate-badge{padding:2px 6px;border-radius:10px;background:#FBEDD4;color:#B97A1A;font-size:10.5px;font-weight:700}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Gauge Room",
+    "overview": "A calm instrument room for a control system. Warm paper is the floor, petrol teal is the structure and the brand, and a single amber needle marks the one thing to do next. Nothing performs. Every number, status and code sits where an operator expects to find it, and the same screen has to read at a pump in noon sun, at a police desk, and on a supervisor's monitor.\n\nThe system is Arabic and right-to-left first, with one typeface family and soft white cards that float on the paper rather than boxes drawn with rules. Color is a vocabulary with strict meanings: teal is structure and brand, amber is the call to action, green is approved, red is a rule that was broken or an action that cannot be undone. Because a screen is often read in direct sun, color never carries meaning alone. Every status also has a word or an icon.\n\nThe Directorate's real emblem is not part of this system. The product has its own symbol and name, and nothing in the interface imitates an official or state emblem.",
+    "keyCharacteristics": [
+      "Warm paper floor, white floating cards, petrol-teal structure.",
+      "Amber is reserved for the single primary action on a screen.",
+      "Red means a broken rule or an irreversible action, nothing else.",
+      "Pill-shaped controls, 16px cards, 10px fields.",
+      "Cairo for everything; JetBrains Mono only for literal codes and big numbers.",
+      "Every status is a word or icon plus color, never color alone."
+    ],
+    "rules": [
+      {
+        "name": "The Meaning-Fixed Rule",
+        "body": "Each hue carries one meaning: teal is structure and brand, amber is the next action, green is approved, red is broken or irreversible. Never borrow a hue for decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Needle Rule",
+        "body": "There is at most one amber primary action per screen region. If two things are amber, neither is the call to action.",
+        "section": "colors"
+      },
+      {
+        "name": "The Word-Beside-Color Rule",
+        "body": "Never rely on color alone. Every status pill, violation and approval carries its Arabic word or an icon, because the phone is read in direct sun.",
+        "section": "colors"
+      },
+      {
+        "name": "The Readable-in-Sun Rule",
+        "body": "On a phone nothing is set below 13px, body is 16px, and the figures a person must read at a glance (plate, liters, amount) are visibly larger than everything around them.",
+        "section": "typography"
+      },
+      {
+        "name": "The Code-Beside-Meaning Rule",
+        "body": "A literal code is never shown alone; its Arabic meaning sits next to it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Isolated Numerals Rule",
+        "body": "Numbers use Western numerals with tabular figures, wrapped as left-to-right isolated runs inside the right-to-left flow.",
+        "section": "typography"
+      },
+      {
+        "name": "The Float-Don't-Draw Rule",
+        "body": "Separate regions with radius, shadow and background change. Do not stack divider lines to make structure.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** keep every hue to its meaning: teal for structure and brand, amber for the next action, green for approved, red for broken rules and irreversible actions.",
+      "**Do** pair every status with a word or an icon, never color alone.",
+      "**Do** keep one amber primary action per screen region.",
+      "**Do** use Cairo for all text and JetBrains Mono only for literal codes, plates, timestamps and big numbers.",
+      "**Do** put a code next to its Arabic meaning, and wrap numerals as left-to-right isolated runs.",
+      "**Do** use Tailwind logical properties (`ps-*`, `pe-*`, `ms-*`, `me-*`) so a bilingual UI needs no parallel stylesheet.",
+      "**Do** use the 2px Gauge Amber focus ring with a 2px offset on every interactive element.",
+      "**Do** style irreversible actions (cancel a card, deactivate an account) as outlined Violation Red pills so they look as serious as they are.",
+      "**Do** say why a control is disabled and what to do after a refusal, in a sentence beside it; never leave a faded field or a bare error colour unexplained.",
+      "**Do** set the one-time password in large left-to-right type with a copy button and a plain warning that it is shown once."
+    ],
+    "donts": [
+      "**Don't** make the interface read as military or police: no badges, camouflage or uniform-style visuals.",
+      "**Don't** use or imitate the Directorate's official emblem or any state emblem.",
+      "**Don't** use red for routine states such as inactive, empty or optional, and never as a solid fill by default.",
+      "**Don't** introduce a second typeface.",
+      "**Don't** convey a status by color alone.",
+      "**Don't** put two amber primary actions in the same region."
+    ]
+  }
+}

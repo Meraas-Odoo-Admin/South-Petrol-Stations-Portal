@@ -385,6 +385,10 @@ model User {
   mustChangePassword           Boolean                        @default(false)
   failedLoginAttempts          Int                            @default(0)
   lockedUntil                  DateTime?
+  // Registration pivot, phase 4b: set on every successful login
+  // (AuthService.validateCredentials). Null = never logged in. Shown on the
+  // users list; the phase 4c monitoring reports use it too.
+  lastLoginAt                  DateTime?
   roles                        UserRole[]
   directPermissions            UserPermission[]
   permissionsGranted           UserPermission[]               @relation("UserPermissionGrantedBy")

@@ -8,6 +8,7 @@ import type { MunicipalityRef } from '../stations/types';
 import { PrintRegistrationSheetButton } from '../../components/PrintRegistrationSheetButton';
 import { DateField } from '../../components/DateField';
 import { adminErrorMessage } from './adminErrors';
+import { useAuth } from '../auth/AuthProvider';
 
 const STAGE_LABELS = { GRACE: 'سماح', AWARENESS: 'توعية', CARD_REQUIRED: 'البطاقة مطلوبة' } as const;
 
@@ -28,6 +29,13 @@ const inputClass =
 // checks that too, not just this screen.
 export function MunicipalitiesAdminPage() {
   const queryClient = useQueryClient();
+  // Phase 4b: the directorate admin holds only municipalities:set_stage_dates.
+  // They see the stage, the two dates and the A4 sheet button, but none of the
+  // controls for creating, activating or coding a municipality — the API
+  // refuses those for them too.
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('municipalities:manage');
+  const canSetDates = canManage || hasPermission('municipalities:set_stage_dates');
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -212,9 +220,11 @@ export function MunicipalitiesAdminPage() {
           title="البلديات"
           subtitle={data ? `${data.filter((m) => m.status === 'LIVE').length} مفعّلة من ${data.length}` : undefined}
           action={
-            <PillButton size="sm" onClick={() => setShowCreate((s) => !s)}>
-              {showCreate ? 'إلغاء' : 'بلدية جديدة +'}
-            </PillButton>
+            canManage ? (
+              <PillButton size="sm" onClick={() => setShowCreate((s) => !s)}>
+                {showCreate ? 'إلغاء' : 'بلدية جديدة +'}
+              </PillButton>
+            ) : undefined
           }
         />
         {isLoading && <p className="p-4 text-sm text-ink-soft">...جارٍ التحميل</p>}
@@ -238,6 +248,9 @@ export function MunicipalitiesAdminPage() {
                     <td className="px-[18px] py-3 font-bold text-ink">{m.name}</td>
                     <td className="px-[18px] py-3">
                       {/* Card-number prefix: SBH → cards read SBH-7K2M9Q4X. */}
+                      {!canManage ? (
+                        <span dir="ltr" className="font-mono text-ink-soft">{m.code ?? '—'}</span>
+                      ) : (
                       <input
                         defaultValue={m.code ?? ''}
                         placeholder="—"
@@ -250,6 +263,7 @@ export function MunicipalitiesAdminPage() {
                         className={`${inputClass} w-20 font-mono uppercase`}
                         aria-label="رمز البطاقات"
                       />
+                      )}
                     </td>
                     <td className="px-[18px] py-3">
                       <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'}>
@@ -275,6 +289,7 @@ export function MunicipalitiesAdminPage() {
                           </span>
                         </p>
                       )}
+                      {canSetDates && (
                       <button
                         type="button"
                         className="mt-1 block text-[11px] font-bold text-primary underline"
@@ -288,13 +303,14 @@ export function MunicipalitiesAdminPage() {
                       >
                         تواريخ المراحل
                       </button>
+                      )}
                       <PrintRegistrationSheetButton municipalityId={m.id} className="mt-1 block" />
                     </td>
                     <td className="px-[18px] py-3 text-ink-soft">
                       {m.securityAuthority?.name ?? <span className="text-ink-faint">— لا توجد —</span>}
                     </td>
                     <td className="px-[18px] py-3">
-                      {m.status === 'PREPARING' ? (
+                      {!canManage ? null : m.status === 'PREPARING' ? (
                         <PillButton
                           size="sm"
                           disabled={!m.securityAuthority || statusMutation.isPending}

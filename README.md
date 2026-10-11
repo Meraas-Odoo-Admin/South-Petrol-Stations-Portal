@@ -58,6 +58,10 @@ rules Claude Code (or any contributor) follows on this project, see
    - API: http://localhost:3000/api/v1 (health check at `/api/v1/health`, Swagger at `/api/docs`)
    - Web: http://localhost:5173
 
+## After a pull
+
+Run `pnpm install` if dependencies changed, then `pnpm --filter @fuel-tracking/api prisma:deploy` to apply new migrations. Generated code is refreshed for you: `pnpm dev`, `pnpm dev:phone` and the seed first run `pnpm refresh`, which rebuilds the shared packages and regenerates the Prisma client when the schema changed. Run `pnpm refresh` yourself before the API e2e tests (`pnpm test` already rebuilds the shared packages). If it reports that the Prisma engine file is locked, stop the running API and run it again. A test account that was locked out or had its password changed goes back to its seed state with `pnpm reset:test-users` (development only; it refuses to run against any database that is not on this machine).
+
 ## Testing on a real phone (HTTPS tunnel)
 
 The camera and QR scanner only work in a secure context (HTTPS). `pnpm dev:phone` starts the API, the web

@@ -9,14 +9,23 @@
 // THE LINK IS PUBLIC while this runs. Stop it (Ctrl+C) when you are done: that
 // stops every process it started, on Windows too.
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { killTreeCommand, portInUse, resolveBin } from './dev-phone-lib.mjs';
+import { findCloudflared, killTreeCommand, portInUse, resolveBin } from './dev-phone-lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WEB_PORT = 5173;
 
-if (spawnSync('cloudflared', ['--version'], { stdio: 'ignore' }).error) {
+// On Windows winget installs cloudflared without adding it to PATH, so its
+// install folder is checked too.
+const cloudflared = findCloudflared({
+  platform: process.platform,
+  env: process.env,
+  runs: (command) => !spawnSync(command, ['--version'], { stdio: 'ignore' }).error,
+  exists: existsSync,
+});
+if (!cloudflared) {
   console.error(
     'cloudflared is not installed or not on PATH (on Windows, open a new terminal after installing it).\n' +
       'Install it: winget install --id Cloudflare.cloudflared   (macOS: brew install cloudflared)\n' +
@@ -120,7 +129,7 @@ try {
 }
 
 let announced = false;
-run('tunnel', 'cloudflared', ['tunnel', '--url', `http://localhost:${WEB_PORT}`], {
+run('tunnel', cloudflared, ['tunnel', '--url', `http://localhost:${WEB_PORT}`], {
   onLine: (line) => {
     const match = line.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
     if (match && !announced) {

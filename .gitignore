@@ -30,10 +30,17 @@ apps/web/playwright-report/
 apps/web/e2e/.fixtures.json
 apps/web/e2e/.fake-camera.y4m
 
-# Dev-only verification screenshots, working notes, and the client design
-# handoff reference — not app code, no ongoing value once a round is
-# verified and merged.
+# Dev-only verification screenshots and working notes — not app code, no
+# ongoing value once a round is verified and merged.
 docs/screenshots/verify/
 apps/web/docs/screenshots/
 Claude outputs/
-design/design_handoff_fuel_control_system/
+
+# The client design handoff (design/design_handoff_fuel_control_system/) is
+# now tracked: it is the reference archive and holds the vehicle card print
+# spec. The canonical design rulebook is apps/web/DESIGN.md.
+
+# Impeccable's repo-root working folder: critique snapshots, hook cache and
+# local config. Anchored to the root so apps/web/.impeccable/design.json (the
+# design sidecar, which IS committed) is not caught.
+/.impeccable/

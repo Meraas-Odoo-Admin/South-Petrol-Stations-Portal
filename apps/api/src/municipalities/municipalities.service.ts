@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { Municipality } from '@prisma/client';
@@ -81,7 +81,20 @@ export class MunicipalitiesService {
     return municipality;
   }
 
-  async update(id: string, dto: UpdateMunicipalityDto, actorId: string) {
+  async update(
+    id: string,
+    dto: UpdateMunicipalityDto,
+    actorId: string,
+    options: { stageDatesOnly?: boolean } = {},
+  ) {
+    if (options.stageDatesOnly) {
+      // confirmName only accompanies the deadline's typed-name check.
+      const allowed = new Set(['awarenessStartDate', 'cardRequiredFromDate', 'confirmName']);
+      const extra = Object.keys(dto).filter((key) => (dto as Record<string, unknown>)[key] !== undefined && !allowed.has(key));
+      if (extra.length > 0) {
+        throw new ForbiddenException('STAGE_DATES_ONLY');
+      }
+    }
     const before = await this.findRaw(id);
     const stageDates = this.resolveStageDates(before, dto);
 

@@ -305,11 +305,14 @@ describe('User management endpoints (e2e)', () => {
     const accessToken = await loginAsManager();
     const server = app.getHttpServer();
 
+    // Phase 4b: the list is searchable and paged ({ items, total }), so look
+    // the manager up by username rather than assuming they are on page one.
     const listRes = await request(server)
       .get('/api/v1/users')
+      .query({ q: usernameManager })
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
-    expect(listRes.body.map((u: { id: string }) => u.id)).toContain(managerUserId);
+    expect(listRes.body.items.map((u: { id: string }) => u.id)).toContain(managerUserId);
 
     const oneRes = await request(server)
       .get(`/api/v1/users/${managerUserId}`)

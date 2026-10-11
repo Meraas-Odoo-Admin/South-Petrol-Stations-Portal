@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { PERMISSIONS_KEY } from '../../common/decorators/require-permission.decorator';
+import { ANY_PERMISSIONS_KEY } from '../../common/decorators/require-any-permission.decorator';
 import { ALLOW_PENDING_PASSWORD_CHANGE_KEY } from '../../common/decorators/allow-pending-password-change.decorator';
 import { RbacService } from '../rbac.service';
 
@@ -68,6 +69,16 @@ export class PermissionsGuard implements CanActivate {
       if (mustChangePassword) {
         throw new ForbiddenException('Password change is required before this action.');
       }
+    }
+
+    // @RequireAnyPermission: at least one of the listed permissions.
+    const anyOf = this.reflector.getAllAndOverride<string[] | undefined>(ANY_PERMISSIONS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (anyOf && anyOf.length > 0) {
+      const held = await this.rbac.getPermissionsForUser(user.id);
+      return anyOf.some((permission) => held.has(permission));
     }
 
     if (required.length === 0) {
