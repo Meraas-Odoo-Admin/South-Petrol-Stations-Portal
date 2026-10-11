@@ -1,0 +1,50 @@
+{
+  "runId": "bmtqa",
+  "results": [
+    {
+      "name": "directorate admin: municipalities show dates, no create/activate controls",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "set and clear Sabha stage dates",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor1 logs in",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor sees «فريق العمل» in their own menu, not «الإدارة»",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor list shows only their own employees",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor create: only own station and only the employee job are offered",
+      "ok": true,
+      "detail": "1 job (fixed), 1 station offered"
+    },
+    {
+      "name": "supervisor creates an employee for their station",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor opening someone outside their scope is refused",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supervisor: open one of their own people (phone)",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

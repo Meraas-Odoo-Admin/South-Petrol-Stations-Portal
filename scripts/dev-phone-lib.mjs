@@ -42,3 +42,20 @@ export function portInUse(port) {
     });
   return Promise.all([tryHost('127.0.0.1'), tryHost('::1')]).then((results) => results.some(Boolean));
 }
+
+// Where winget puts cloudflared on Windows: it installs under Program Files
+// but does not add the folder to PATH, so a fresh install is invisible to
+// `cloudflared` until the PATH is fixed by hand.
+export function windowsCloudflaredPaths(env) {
+  const folders = [env['ProgramFiles(x86)'], env.ProgramFiles, env.ProgramW6432].filter(Boolean);
+  return [...new Set(folders)].map((folder) => path.join(folder, 'cloudflared', 'cloudflared.exe'));
+}
+
+// The command that starts cloudflared, or null when it is not installed.
+// PATH first; on Windows, then the folders winget installs into. `runs` and
+// `exists` are injected so this can be tested without cloudflared installed.
+export function findCloudflared({ platform, env, runs, exists }) {
+  if (runs('cloudflared')) return 'cloudflared';
+  if (platform !== 'win32') return null;
+  return windowsCloudflaredPaths(env).find((candidate) => exists(candidate)) ?? null;
+}

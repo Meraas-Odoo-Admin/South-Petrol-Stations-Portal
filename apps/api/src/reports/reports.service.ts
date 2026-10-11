@@ -161,6 +161,25 @@ export class ReportsService {
     return { total, rows };
   }
 
+  // How many violations still wait for a decision, limited to what the caller
+  // may see: every station for an all-stations holder, otherwise only the
+  // stations in their scope. For the navigation badge, which has no station
+  // to choose (getViolations demands one for a scoped caller, so using it
+  // there returned a 400 on every page).
+  async countPendingViolations(actorId: string): Promise<{ total: number }> {
+    // Same rule as every other report here: reports:view_all_stations means
+    // every station; anyone else is limited to the stations in their scope.
+    const permissions = await this.rbac.getPermissionsForUser(actorId);
+    const scope = permissions.has(VIEW_ALL_STATIONS_PERMISSION) ? null : await this.rbac.getStationScope(actorId);
+    const total = await this.prisma.exception.count({
+      where: {
+        approvedById: null,
+        ...(scope === null ? {} : { fillUpTransaction: { stationId: { in: scope } } }),
+      },
+    });
+    return { total };
+  }
+
   // Same filter logic as getViolations, minus pagination — used by export.
   // A report used to confirm "nothing was missed" must never silently drop
   // rows: if the filtered set exceeds `limit`, this REJECTS the request

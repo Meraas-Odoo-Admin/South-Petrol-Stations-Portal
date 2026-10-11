@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* iOS Safari zooms the whole page when a focused text field is set under 16px,
+   which shifts the layout sideways and pushes the header out of view. On phone
+   widths every text field is therefore at least 16px, whatever a screen's own
+   class says: !important is deliberate, because it must beat each screen's
+   Tailwind size class (37 files set field sizes between 10px and 14px) and one
+   missed field brings the zoom back. Pinch-zoom stays available: the viewport
+   tag does not disable it. Fields already set larger than 16px do not exist in
+   the app; if one is ever added, give it its own rule here. */
+@media (max-width: 1023px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='image']):not([type='hidden']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 body {
   font-family: 'Cairo', sans-serif;
   background-color: #f7f5ef;

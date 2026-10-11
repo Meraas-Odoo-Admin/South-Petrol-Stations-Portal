@@ -15,6 +15,21 @@ const MESSAGES: Record<string, string> = {
   INVALID_DATE: 'التاريخ غير صالح.',
   AWARENESS_NOT_BEFORE_DEADLINE: 'تاريخ بدء التوعية يجب أن يسبق تاريخ اشتراط البطاقة.',
   DESK_NAME_TAKEN: 'يوجد مكتب بهذا الاسم في مكتب التسجيل هذا.',
+  STAGE_DATES_ONLY: 'يمكنك تعديل تاريخي التوعية واشتراط البطاقة فقط.',
+  // Phase 4b — accounts.
+  USER_OUT_OF_SCOPE: 'هذا الحساب خارج محطاتك أو مكاتبك.',
+  SELF_ACTION: 'لا يمكنك تنفيذ هذا الإجراء على حسابك. لتغيير كلمة المرور استخدم صفحة كلمة المرور.',
+  PRIVILEGED_ACCOUNT: 'هذا الحساب بصلاحيات أعلى من صلاحياتك، ولا يمكنك تعديله.',
+  WORKS_ELSEWHERE: 'يعمل هذا الموظف أيضًا خارج محطاتك أو مكاتبك، فلا يمكنك تعديل حسابه.',
+  ACTION_NOT_ALLOWED: 'لا تملك صلاحية تنفيذ هذا الإجراء.',
+  JOB_NOT_ALLOWED: 'لا يمكنك منح هذه الوظيفة.',
+  JOB_REQUIRED: 'اختر الوظيفة أولًا.',
+  PLACES_REQUIRED: 'اختر مكان عمل واحدًا على الأقل.',
+  PLACES_OUTSIDE_SCOPE: 'اخترت مكانًا خارج محطاتك أو مكاتبك.',
+  PLACES_NOT_FOR_THIS_JOB: 'هذه الوظيفة لا تُحدَّد لها أماكن عمل.',
+  PLACE_NOT_FOUND: 'أحد الأماكن المختارة غير موجود.',
+  ALREADY_INACTIVE: 'هذا الحساب موقوف مسبقًا.',
+  ALREADY_ACTIVE: 'هذا الحساب نشط مسبقًا.',
 };
 
 interface SeparationDetails {
@@ -31,6 +46,8 @@ export function adminErrorMessage(error: unknown, fallback: string): string {
   }
   const code = error.response.data?.message;
   if (typeof code !== 'string') return fallback;
+  // The API's own duplicate-username refusal is English prose, not a code.
+  if (error.response.status === 409 && /username/i.test(code)) return 'اسم المستخدم هذا مستخدم مسبقًا، اختر اسمًا آخر.';
 
   // Registration pivot, phase 2: one person can never work both sides.
   if (code === 'ROLE_SEPARATION_CONFLICT') {

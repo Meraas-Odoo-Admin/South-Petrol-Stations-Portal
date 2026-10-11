@@ -8,6 +8,7 @@ import { APP_NAME } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
 import { OnboardingTour } from './OnboardingTour';
+import { NAV_ACCESS } from '../lib/navAccess';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
 // artboard 2a ("تنقّل الهاتف — نمط مقصود، لا قائمة سطح مكتب ملتفّة"): the
@@ -21,6 +22,9 @@ import { OnboardingTour } from './OnboardingTour';
 interface NavItem {
   to: string;
   label: string;
+  // One short word for the phone bottom bar, which must stay on one line.
+  // The full name stays in the side menu and the phone menu sheet.
+  shortLabel?: string;
   icon: JSX.Element;
   show: boolean;
   badge?: number;
@@ -37,12 +41,10 @@ export function Layout() {
   const canApprove = hasPermission('fillups:approve_exception') || hasPermission('reports:view');
   const violationsBadgeQuery = useQuery({
     queryKey: ['nav', 'violations-pending-count'],
-    queryFn: async () =>
-      (
-        await apiClient.get<{ total: number }>('/reports/violations', {
-          params: { status: 'pending', skip: 0, take: 1 },
-        })
-      ).data.total,
+    // A count limited to what the caller may see, with no station to choose:
+    // the list endpoint demands a station from scoped callers, so asking it
+    // for the badge was a 400 on every page for supervisors.
+    queryFn: async () => (await apiClient.get<{ total: number }>('/reports/violations/pending-count')).data.total,
     enabled: canApprove,
     staleTime: 60_000,
   });
@@ -64,75 +66,64 @@ export function Layout() {
     // Round 19: "why does the home screen only appear once upon login and
     // then you don't have an option to get back to that page" — HomePage
     // ("/") had no persistent nav entry anywhere (sidebar, mobile sheet, or
-    // bottom bar), reachable only immediately post-login before the first
-    // navigation away. Always shown — HomePage itself has no permission
-    // gate (it just filters its own quick-link cards per user), so this
-    // entry shouldn't have one either.
-    {
-      to: '/',
-      label: 'الرئيسية',
-      icon: <Icon d={ICONS.home} />,
-      show: true,
-    },
+    // bottom bar). Always shown. Who sees each destination below comes from
+    // lib/navAccess.ts, the same list the home screen's cards read.
+    { to: '/', label: 'الرئيسية', icon: <Icon d={ICONS.home} />, show: NAV_ACCESS.home() },
     {
       to: '/reports/dashboard',
       label: 'لوحة المتابعة',
+      shortLabel: 'المتابعة',
       icon: <Icon d={ICONS.dashboard} />,
-      show: hasPermission('reports:view_all_stations'),
+      show: NAV_ACCESS.dashboard(hasPermission),
     },
     {
       to: '/fillups/new',
       label: 'تسجيل تعبئة',
+      shortLabel: 'تعبئة',
       icon: <Icon d={ICONS.fillup} />,
-      show: hasPermission('fillups:create'),
+      show: NAV_ACCESS.fillup(hasPermission),
     },
     // Registration pivot, phase 2: the registration employee's workspace.
-    // Registering needs both — vehicles:manage to create, and a
-    // registration station to do it at.
     {
       to: '/registration',
       label: 'تسجيل المركبات',
+      shortLabel: 'تسجيل',
       icon: <Icon d={ICONS.register} />,
-      show: hasPermission('vehicles:manage') && hasPermission('registration_stations:read'),
+      show: NAV_ACCESS.registration(hasPermission),
     },
     {
       to: '/vehicles',
       label: 'المركبات',
+      shortLabel: 'المركبات',
       icon: <Icon d={ICONS.vehicles} />,
-      show: hasPermission('vehicles:read'),
+      show: NAV_ACCESS.vehicles(hasPermission),
     },
     {
       to: '/reports/violations',
       label: 'المخالفات والاستثناءات',
+      shortLabel: 'المخالفات',
       icon: <Icon d={ICONS.violations} />,
-      show: hasPermission('reports:view'),
+      show: NAV_ACCESS.violations(hasPermission),
       badge: violationsBadgeQuery.data,
     },
     {
       to: '/vehicles/change-requests',
       label: 'طلبات تصحيح الهوية',
       icon: <Icon d={ICONS.changeRequests} />,
-      show: canSeeChangeRequests,
+      show: NAV_ACCESS.changeRequests(hasPermission),
       badge: changeRequestsBadgeQuery.data,
     },
     {
       to: '/reports/daily',
       label: 'التقارير',
       icon: <Icon d={ICONS.reports} />,
-      show: hasPermission('reports:view'),
+      show: NAV_ACCESS.dailyReport(hasPermission),
     },
-    {
-      to: '/stations',
-      label: 'المحطات',
-      icon: <Icon d={ICONS.stations} />,
-      show: hasPermission('stations:read'),
-    },
-    {
-      to: '/admin',
-      label: 'الإدارة',
-      icon: <Icon d={ICONS.admin} />,
-      show: hasPermission('users:manage'),
-    },
+    // Phase 4b: a supervisor's own staff — a menu entry of their own, not
+    // under «الإدارة». Admins manage accounts from the admin area instead.
+    { to: '/staff', label: 'فريق العمل', icon: <Icon d={ICONS.people} />, show: NAV_ACCESS.staff(hasPermission) },
+    { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
+    { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
 
   // Bottom bar: the four things done most often, per 2a — capped at 4,
@@ -140,11 +131,33 @@ export function Layout() {
   // vehicles directory (its search box accepts plate, booklet, or chassis
   // — see 5a), matching the earlier decision that search is not its own
   // destination.
-  const bottomBarCandidates: NavItem[] = navItems.filter((i) =>
+  const mostUsed = navItems.filter((i) =>
     ['/fillups/new', '/vehicles', '/reports/violations', '/reports/dashboard'].includes(i.to),
   );
+  // A registration employee has none of the fuel destinations, so their own
+  // workspace takes a tab instead of leaving the bar with one item.
+  const bottomBarCandidates: NavItem[] =
+    mostUsed.length < 3
+      ? navItems.filter((i) => i.to === '/registration' || mostUsed.includes(i))
+      : mostUsed;
   const bottomBarItems = bottomBarCandidates.slice(0, hasPermission('vehicles:read') ? 3 : 4);
   const showSearchTab = hasPermission('vehicles:read');
+
+  // The phone menu sheet: named groups, and anything not in a named group goes
+  // into a last one, so a destination can never be missing from the sheet
+  // («تسجيل المركبات» was).
+  const SHEET_GROUPS: Array<{ title: string; paths: string[] }> = [
+    { title: '', paths: ['/'] },
+    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
+    { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
+    { title: 'الفريق', paths: ['/staff'] },
+    { title: 'الإدارة', paths: ['/admin'] },
+  ];
+  const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));
+  const sheetGroups = [
+    ...SHEET_GROUPS.map((g) => ({ title: g.title, items: navItems.filter((i) => g.paths.includes(i.to)) })),
+    { title: 'أخرى', items: navItems.filter((i) => !grouped.has(i.to)) },
+  ];
 
   function closeSheetAnd(fn?: () => void) {
     setSheetOpen(false);
@@ -267,27 +280,36 @@ export function Layout() {
           (correctly) refused to click through the nav sitting on top of
           it — a real bug, not a flaky test. lg:p-6 (desktop, no fixed
           nav) is unaffected. */}
-      <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-20 lg:min-h-screen lg:flex-1 lg:p-6">
+      <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:min-h-screen lg:flex-1 lg:p-6">
         <Outlet />
       </main>
 
-      {/* Mobile bottom bar — hidden at lg+ */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid border-t border-surface-alt bg-surface shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden" style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, 1fr)` }}>
+      {/* Mobile bottom bar — hidden at lg+. Equal-width items, one-line labels
+          that are always visible, and padding for the iPhone home indicator
+          (env(safe-area-inset-bottom), which needs viewport-fit=cover). */}
+      <nav
+        aria-label="التنقل السريع"
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-surface-alt bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
+        style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, minmax(0, 1fr))` }}
+      >
         {bottomBarItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/vehicles'}
+            // The bar shows one short word, but the link keeps its full name for
+            // screen readers and voice control (the visible word is part of it).
+            aria-label={item.shortLabel ? item.label : undefined}
             className={({ isActive }) =>
-              `relative flex flex-col items-center gap-0.5 py-2 text-[10.5px] font-bold ${
-                isActive ? 'text-primary' : 'text-ink-faint'
+              `relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[13px] font-bold leading-tight ${
+                isActive ? 'text-primary' : 'text-ink-soft'
               }`
             }
           >
             {item.icon}
-            {item.label}
+            <span className="max-w-full whitespace-nowrap">{item.shortLabel ?? item.label}</span>
             {!!item.badge && (
-              <span className="absolute end-[22%] top-1 rounded-full bg-accent px-1 text-[9px] font-extrabold text-white">
+              <span className="absolute end-[18%] top-1 rounded-full bg-accent px-1.5 text-[11px] font-extrabold text-white">
                 {item.badge}
               </span>
             )}
@@ -297,10 +319,10 @@ export function Layout() {
           <button
             type="button"
             onClick={() => navigate('/vehicles')}
-            className="flex flex-col items-center gap-0.5 py-2 text-[10.5px] font-bold text-ink-faint"
+            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[13px] font-bold leading-tight text-ink-soft"
           >
             <Icon d={ICONS.search} />
-            بحث
+            <span className="whitespace-nowrap">بحث</span>
           </button>
         )}
       </nav>
@@ -335,10 +357,9 @@ export function Layout() {
               </button>
             </div>
 
-            <NavGroup title="" items={navItems.filter((i) => i.to === '/')} onNavigate={setSheetOpen} />
-            <NavGroup title="التسجيل والمتابعة" items={navItems.filter((i) => ['/fillups/new', '/reports/daily', '/reports/violations', '/reports/dashboard'].includes(i.to))} onNavigate={setSheetOpen} />
-            <NavGroup title="السجلات" items={navItems.filter((i) => ['/vehicles', '/stations', '/vehicles/change-requests'].includes(i.to))} onNavigate={setSheetOpen} />
-            <NavGroup title="الإدارة" items={navItems.filter((i) => i.to === '/admin')} onNavigate={setSheetOpen} />
+            {sheetGroups.map((group) => (
+              <NavGroup key={group.title || 'home'} title={group.title} items={group.items} onNavigate={setSheetOpen} />
+            ))}
 
             <div className="mt-3 grid grid-cols-2 gap-2 border-t border-surface-alt pt-3">
               <NavLink

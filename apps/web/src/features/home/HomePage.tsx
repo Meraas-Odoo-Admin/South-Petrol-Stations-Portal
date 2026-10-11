@@ -5,24 +5,29 @@ import { Card } from '../../components/design/Card';
 import { roleLabel } from '../../lib/labels';
 import { Icon, ICONS } from '../../components/icons';
 import { replayOnboardingTour } from '../../components/OnboardingTour';
+import { NAV_ACCESS, type HasPermission } from '../../lib/navAccess';
 
 interface QuickLink {
   to: string;
   label: string;
   hint: string;
-  permission: string;
+  // From lib/navAccess.ts — the same rule the side menu and the phone menu
+  // use, so a card appears for exactly the people whose menu shows it.
+  show: (has: HasPermission) => boolean;
   icon: keyof typeof ICONS;
 }
 
 const QUICK_LINKS: QuickLink[] = [
-  { to: '/fillups/new', label: 'تسجيل تعبئة', hint: 'تسجيل عملية تعبئة جديدة لمركبة', permission: 'fillups:create', icon: 'fillup' },
-  { to: '/registration', label: 'تسجيل المركبات', hint: 'تسجيل مالك ومركبة في مكتب التسجيل', permission: 'vehicles:manage', icon: 'register' },
-  { to: '/vehicles', label: 'المركبات', hint: 'البحث عن مركبة وعرض سجلها', permission: 'vehicles:read', icon: 'vehicles' },
-  { to: '/reports/violations', label: 'المخالفات', hint: 'الحالات التي تحتاج قرارك', permission: 'reports:view', icon: 'violations' },
-  { to: '/reports/daily', label: 'التقرير اليومي', hint: 'ملخص تعبئات اليوم', permission: 'reports:view', icon: 'reports' },
-  { to: '/reports/dashboard', label: 'لوحة المتابعة', hint: 'نظرة عامة على المحطات', permission: 'reports:view_all_stations', icon: 'dashboard' },
-  { to: '/vehicles/change-requests', label: 'طلبات التعديل', hint: 'طلبات تغيير هوية المركبات', permission: 'vehicles:approve_change', icon: 'changeRequests' },
-  { to: '/stations', label: 'المحطات', hint: 'قائمة محطات المديرية', permission: 'stations:read', icon: 'stations' },
+  { to: '/fillups/new', label: 'تسجيل تعبئة', hint: 'تسجيل عملية تعبئة جديدة لمركبة', show: NAV_ACCESS.fillup, icon: 'fillup' },
+  { to: '/registration', label: 'تسجيل المركبات', hint: 'تسجيل مالك ومركبة في مكتب التسجيل', show: NAV_ACCESS.registration, icon: 'register' },
+  { to: '/vehicles', label: 'المركبات', hint: 'البحث عن مركبة وعرض سجلها', show: NAV_ACCESS.vehicles, icon: 'vehicles' },
+  { to: '/reports/violations', label: 'المخالفات', hint: 'الحالات التي تحتاج قرارك', show: NAV_ACCESS.violations, icon: 'violations' },
+  { to: '/reports/daily', label: 'التقرير اليومي', hint: 'ملخص تعبئات اليوم', show: NAV_ACCESS.dailyReport, icon: 'reports' },
+  { to: '/reports/dashboard', label: 'لوحة المتابعة', hint: 'نظرة عامة على المحطات', show: NAV_ACCESS.dashboard, icon: 'dashboard' },
+  { to: '/vehicles/change-requests', label: 'طلبات التعديل', hint: 'طلبات تغيير هوية المركبات', show: NAV_ACCESS.changeRequests, icon: 'changeRequests' },
+  { to: '/stations', label: 'المحطات', hint: 'قائمة محطات المديرية', show: NAV_ACCESS.stations, icon: 'stations' },
+  { to: '/staff', label: 'فريق العمل', hint: 'موظفو محطتك أو مكتبك: إضافة وإيقاف وإعادة تعيين كلمة المرور', show: NAV_ACCESS.staff, icon: 'people' },
+  { to: '/admin', label: 'الإدارة', hint: 'الحسابات والإعدادات وسجل التغييرات', show: NAV_ACCESS.admin, icon: 'admin' },
 ];
 
 // Round 16: a first-name-only, time-of-day greeting reads as a system that
@@ -38,7 +43,7 @@ function timeGreeting(): string {
 // can actually reach.
 export function HomePage() {
   const { user, hasPermission } = useAuth();
-  const links = QUICK_LINKS.filter((link) => hasPermission(link.permission));
+  const links = QUICK_LINKS.filter((link) => link.show(hasPermission));
   // Petrol stations and/or registration stations the user is scoped to;
   // "كل المحطات" only for the directorate-wide roles that genuinely see all.
   const scopeNames = [

@@ -42,4 +42,14 @@ export const ICONS = {
   logout: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3',
   fuel: 'M4 21V8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v13M2 21h14m3-13 2.5 2.5a1.5 1.5 0 0 1 .5 1.1V18a1.5 1.5 0 0 1-3 0v-3.5M8 8V4M4 12h8',
   building: 'M4 21V8l8-5 8 5v13M9 21v-6h6v6M4 21h16',
+  // Phase 4b — accounts screens.
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  copy: 'M9 9h10v11H9V9Zm-4 6V4h10',
+  plus: 'M12 5v14M5 12h14',
+  people:
+    'M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm9 8v-1a4 4 0 0 0-3-3.9M15 4.3a3.5 3.5 0 0 1 0 6.4',
+  // Points to the reading-start side (right in RTL): "back".
+  arrowBack: 'M5 12h14M13 6l6 6-6 6',
+  chevronDown: 'M6 9l6 6 6-6',
+  filter: 'M4 5h16l-6 8v6l-4-2v-4L4 5Z',
 } as const;

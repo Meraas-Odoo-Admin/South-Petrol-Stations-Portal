@@ -7,15 +7,17 @@
   },
   "packageManager": "pnpm@11.22.0",
   "scripts": {
-    "dev": "pnpm --parallel --filter ./apps/* run dev",
-    "dev:phone": "node scripts/dev-phone.mjs",
+    "refresh": "node scripts/refresh.mjs",
+    "dev": "pnpm refresh && pnpm --parallel --filter ./apps/* run dev",
+    "dev:phone": "node scripts/refresh.mjs && node scripts/dev-phone.mjs",
+    "reset:test-users": "pnpm --filter @fuel-tracking/api run dev:reset-test-users",
     "build:packages": "pnpm --filter @fuel-tracking/shared-types run build",
     "build": "pnpm --recursive run build",
     "lint": "pnpm run build:packages && pnpm --recursive run lint",
     "typecheck": "pnpm run build:packages && pnpm --recursive run typecheck",
     "test": "pnpm run build:packages && pnpm --recursive run test && pnpm run test:scripts",
     "prepare": "husky",
-    "test:scripts": "node --test scripts/dev-phone.test.mjs"
+    "test:scripts": "node --test scripts/*.test.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",

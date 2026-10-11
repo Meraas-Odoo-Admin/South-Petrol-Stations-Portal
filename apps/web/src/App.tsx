@@ -15,7 +15,9 @@ import { StationsListPage } from './features/stations/StationsListPage';
 import { RecordFillUpPage } from './features/fillups/RecordFillUpPage';
 import { RegistrationPage } from './features/registration/RegistrationPage';
 import { AdminLayout } from './features/admin/AdminLayout';
-import { UsersAdminPage } from './features/admin/UsersAdminPage';
+import { UsersListPage } from './features/users/UsersListPage';
+import { UserDetailPage } from './features/users/UserDetailPage';
+import { UserCreatePage } from './features/users/UserCreatePage';
 import { SettingsAdminPage } from './features/admin/SettingsAdminPage';
 import { ExceptionTypesAdminPage } from './features/admin/ExceptionTypesAdminPage';
 import { VehicleTypesAdminPage } from './features/admin/VehicleTypesAdminPage';
@@ -23,6 +25,7 @@ import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
 import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPage';
 import { SecurityAuthoritiesAdminPage } from './features/admin/SecurityAuthoritiesAdminPage';
 import { RegistrationStationsAdminPage } from './features/admin/RegistrationStationsAdminPage';
+import { useAuth } from './features/auth/AuthProvider';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
 // §9. /fillups/new is the recording screen (create only — the exceptions
@@ -41,6 +44,14 @@ import { RegistrationStationsAdminPage } from './features/admin/RegistrationStat
 // each AdminLayout tab and its target page individually checks the
 // specific permission it needs (see AdminLayout.tsx), same pattern as
 // every other nav-gated route in this file.
+// A supervisor's own staff screens live outside the admin area (they reach
+// them from their own menu entry). The API enforces who may do what; this
+// only keeps people without the permission off a page that would be empty.
+function StaffArea({ children }: { children: JSX.Element }) {
+  const { hasPermission } = useAuth();
+  return hasPermission('users:manage_staff') ? children : <Navigate to="/" replace />;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -68,9 +79,14 @@ function App() {
               <Route path="/vehicles" element={<VehiclesListPage />} />
               <Route path="/vehicles/:vehicleId" element={<VehicleDetailPage />} />
               <Route path="/vehicles/change-requests" element={<ChangeRequestsQueuePage />} />
+              <Route path="/staff" element={<StaffArea><UsersListPage basePath="/staff" standalone /></StaffArea>} />
+              <Route path="/staff/new" element={<StaffArea><UserCreatePage basePath="/staff" standalone /></StaffArea>} />
+              <Route path="/staff/:userId" element={<StaffArea><UserDetailPage basePath="/staff" /></StaffArea>} />
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<Navigate to="/admin/users" replace />} />
-                <Route path="users" element={<UsersAdminPage />} />
+                <Route path="users" element={<UsersListPage basePath="/admin/users" />} />
+                <Route path="users/new" element={<UserCreatePage basePath="/admin/users" />} />
+                <Route path="users/:userId" element={<UserDetailPage basePath="/admin/users" />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
                 <Route path="exception-types" element={<ExceptionTypesAdminPage />} />
                 <Route path="vehicle-types" element={<VehicleTypesAdminPage />} />

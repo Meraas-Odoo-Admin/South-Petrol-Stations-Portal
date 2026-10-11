@@ -14,6 +14,9 @@ const VARIANTS = {
 const SIZES = {
   sm: 'h-8 px-3.5 text-[11.5px]',
   md: 'h-9 px-4 text-[12.5px]',
+  // Phase 4b screens: 48px and 16px text on a phone (thumb and sunlight),
+  // 40px and 14px on a desktop.
+  field: 'h-12 px-5 text-[16px] lg:h-10 lg:px-4 lg:text-[14px]',
 } as const;
 
 interface PillButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

@@ -1,10 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { RoleKind } from '@prisma/client';
-import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { PERM_MANAGE_PRIVILEGED } from './user-access';
 
 const USER_INCLUDE = {
   roles: { include: { role: true } },
@@ -25,42 +24,6 @@ export class UsersService {
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
   ) {}
-
-  async create(dto: CreateUserDto, actorId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { username: dto.username } });
-    if (existing) {
-      throw new ConflictException('Username is already taken.');
-    }
-
-    const passwordHash = await argon2.hash(dto.password);
-
-    const user = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          username: dto.username,
-          passwordHash,
-          fullName: dto.fullName,
-          phone: dto.phone,
-          mustChangePassword: true,
-        },
-      });
-
-      await this.audit.log(
-        {
-          userId: actorId,
-          action: 'CREATE',
-          entityType: 'User',
-          entityId: created.id,
-          newValue: { username: created.username, fullName: created.fullName },
-        },
-        tx,
-      );
-
-      return created;
-    });
-
-    return toSafeUser(user);
-  }
 
   async findAll() {
     const users = await this.prisma.user.findMany({
@@ -83,10 +46,17 @@ export class UsersService {
 
   async assignRole(userId: string, roleId: string, actorId: string) {
     await this.ensureUserExists(userId);
-    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: { permissions: { include: { permission: true } } },
+    });
     if (!role) {
       throw new NotFoundException('Role not found.');
     }
+    await this.assertMayEdit(actorId, userId, {
+      raising: true,
+      grants: role.permissions.map((p) => p.permission.key),
+    });
     if (role.kind) {
       await this.assertSeparation(userId, role.kind);
     }
@@ -116,6 +86,7 @@ export class UsersService {
 
   async removeRole(userId: string, roleId: string, actorId: string) {
     await this.ensureUserExists(userId);
+    await this.assertMayEdit(actorId, userId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userRole.deleteMany({ where: { userId, roleId } });
@@ -138,6 +109,7 @@ export class UsersService {
 
   async addStationScope(userId: string, stationId: string, actorId: string) {
     await this.ensureUserExists(userId);
+    await this.assertMayEdit(actorId, userId);
     const station = await this.prisma.station.findUnique({ where: { id: stationId } });
     if (!station) {
       throw new NotFoundException('Station not found.');
@@ -176,6 +148,7 @@ export class UsersService {
     if (!permission) {
       throw new NotFoundException('Permission not found.');
     }
+    await this.assertMayEdit(actorId, userId, { raising: true, grants: [permission.key] });
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userPermission.upsert({
@@ -202,6 +175,7 @@ export class UsersService {
 
   async revokePermission(userId: string, permissionId: string, actorId: string) {
     await this.ensureUserExists(userId);
+    await this.assertMayEdit(actorId, userId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userPermission.deleteMany({ where: { userId, permissionId } });
@@ -224,6 +198,7 @@ export class UsersService {
 
   async removeStationScope(userId: string, stationId: string, actorId: string) {
     await this.ensureUserExists(userId);
+    await this.assertMayEdit(actorId, userId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userStationScope.deleteMany({ where: { userId, stationId } });
@@ -245,6 +220,7 @@ export class UsersService {
 
   async addRegistrationStationScope(userId: string, registrationStationId: string, actorId: string) {
     await this.ensureUserExists(userId);
+    await this.assertMayEdit(actorId, userId);
     const station = await this.prisma.registrationStation.findUnique({ where: { id: registrationStationId } });
     if (!station) {
       throw new NotFoundException('Registration station not found.');
@@ -274,6 +250,7 @@ export class UsersService {
 
   async removeRegistrationStationScope(userId: string, registrationStationId: string, actorId: string) {
     await this.ensureUserExists(userId);
+    await this.assertMayEdit(actorId, userId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userRegistrationStationScope.deleteMany({ where: { userId, registrationStationId } });
@@ -318,6 +295,42 @@ export class UsersService {
         message: 'ROLE_SEPARATION_CONFLICT',
         details: { existingSide: other, requestedSide: adding, conflictingRole },
       });
+    }
+  }
+
+  // Phase 4b — no privilege escalation, whichever endpoint is used:
+  //  - nobody raises their OWN role or permissions (raising: true);
+  //  - an account, role or permission that carries users:manage_system_admins
+  //    is touched only by someone who holds it too, so a directorate admin
+  //    cannot make or edit a system admin. Decided from permissions, never
+  //    from a role name (CLAUDE.md rule 2).
+  private async assertMayEdit(
+    actorId: string,
+    targetId: string,
+    options: { raising?: boolean; grants?: string[] } = {},
+  ) {
+    if (options.raising && actorId === targetId) {
+      throw new ForbiddenException('SELF_ACTION');
+    }
+    const actorPermissions = await this.rbac.getPermissionsForUser(actorId);
+    if (actorPermissions.has(PERM_MANAGE_PRIVILEGED)) return;
+
+    if (options.grants?.includes(PERM_MANAGE_PRIVILEGED)) {
+      throw new ForbiddenException('PRIVILEGED_ACCOUNT');
+    }
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: {
+        roles: { select: { role: { select: { permissions: { select: { permission: { select: { key: true } } } } } } } },
+        directPermissions: { select: { permission: { select: { key: true } } } },
+      },
+    });
+    const targetKeys = [
+      ...(target?.roles.flatMap((r) => r.role.permissions.map((p) => p.permission.key)) ?? []),
+      ...(target?.directPermissions.map((p) => p.permission.key) ?? []),
+    ];
+    if (targetKeys.includes(PERM_MANAGE_PRIVILEGED)) {
+      throw new ForbiddenException('PRIVILEGED_ACCOUNT');
     }
   }
 
