@@ -45,6 +45,7 @@ describe('Municipality foundation (e2e)', () => {
   let stationOutOfScope: { id: string };
   const vehicleIds: string[] = [];
   let exceptionTypeId: string;
+  const createdMunicipalityIds: string[] = [];
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -128,6 +129,7 @@ describe('Municipality foundation (e2e)', () => {
     await grant(adminRole.id, [
       'stations:read',
       'stations:manage',
+      'stations:create',
       'stations:view_preparing',
       'municipalities:read',
       'municipalities:manage',
@@ -166,7 +168,7 @@ describe('Municipality foundation (e2e)', () => {
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.station.deleteMany({ where: { companyId: company.id } });
     await prisma.company.delete({ where: { id: company.id } });
-    await deleteMunicipalities(prisma, [muniA.id, muniB.id, muniC.id, muniPreparing.id]);
+    await deleteMunicipalities(prisma, [muniA.id, muniB.id, muniC.id, muniPreparing.id, ...createdMunicipalityIds]);
     await app.close();
   });
 
@@ -360,53 +362,60 @@ describe('Municipality foundation (e2e)', () => {
   // ── Security authority per municipality, and going LIVE ──────────────
 
   describe('security authorities and municipality status', () => {
-    it('requires a municipality when creating an authority', async () => {
+    // Phase 5A: a municipality's directorate is created WITH it, never picked
+    // or forgotten later.
+    it('creates the municipality\'s security directorate automatically, named after it', async () => {
+      const token = await login(usernameAdmin);
+      const name = `E2E MF Created ${runId}`;
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/municipalities')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name })
+        .expect(201);
+      createdMunicipalityIds.push(res.body.id);
+      expect(res.body.status).toBe('PREPARING');
+      expect(res.body.securityAuthority.name).toBe(`مديرية أمن ${name}`);
+
+      const stored = await prisma.securityAuthority.findUnique({ where: { municipalityId: res.body.id } });
+      expect(stored?.name).toBe(`مديرية أمن ${name}`);
+    });
+
+    it('has no separate create for authorities any more', async () => {
       const token = await login(usernameAdmin);
       await request(app.getHttpServer())
         .post('/api/v1/security-authorities')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: `E2E MF No Municipality ${runId}` })
-        .expect(400);
+        .send({ name: `E2E MF Manual ${runId}`, municipalityId: muniPreparing.id })
+        .expect(404);
     });
 
-    it('refuses to switch a municipality to LIVE before its authority exists, then allows it', async () => {
+    it('lets the super admin rename the directorate, through its municipality', async () => {
       const token = await login(usernameAdmin);
-      const server = app.getHttpServer();
-
-      await request(server)
-        .patch(`/api/v1/municipalities/${muniPreparing.id}`)
+      const id = createdMunicipalityIds[0]!;
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/municipalities/${id}`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ status: 'LIVE' })
-        .expect(409);
+        .send({ securityAuthorityName: `E2E MF Renamed ${runId}` })
+        .expect(200);
+      expect(res.body.securityAuthority.name).toBe(`E2E MF Renamed ${runId}`);
+    });
 
-      const authority = await request(server)
-        .post('/api/v1/security-authorities')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: `E2E MF Authority P ${runId}`, municipalityId: muniPreparing.id })
-        .expect(201);
-      expect(authority.body.municipality.id).toBe(muniPreparing.id);
+    it('a municipality created before that rule gets its directorate at the moment it goes LIVE', async () => {
+      const token = await login(usernameAdmin);
+      expect(await prisma.securityAuthority.findUnique({ where: { municipalityId: muniPreparing.id } })).toBeNull();
 
-      const live = await request(server)
+      const live = await request(app.getHttpServer())
         .patch(`/api/v1/municipalities/${muniPreparing.id}`)
         .set('Authorization', `Bearer ${token}`)
         .send({ status: 'LIVE' })
         .expect(200);
       expect(live.body.status).toBe('LIVE');
-      expect(live.body.securityAuthority.id).toBe(authority.body.id);
+      expect(live.body.securityAuthority.name).toBe(`مديرية أمن E2E MF Preparing ${runId}`);
 
       const audit = await prisma.auditLog.findFirst({
         where: { entityType: 'Municipality', entityId: muniPreparing.id, userId: adminUserId },
       });
       expect(audit).not.toBeNull();
-    });
-
-    it('allows only one authority per municipality', async () => {
-      const token = await login(usernameAdmin);
-      await request(app.getHttpServer())
-        .post('/api/v1/security-authorities')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ name: `E2E MF Second Authority ${runId}`, municipalityId: muniPreparing.id })
-        .expect(409);
     });
 
     it('a station in a municipality that has just gone LIVE can take fill-ups', async () => {

@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { apiClient } from '../../lib/apiClient';
 import type { StationBasicInfo } from '../stations/types';
 import type { PlaceOption } from './PlacePicker';
-import type { ActivityItem, CreatedUser, JobKind, UserDetail, UserListResponse, UsersOptions } from './types';
+import type { ActivityItem, CreatedUser, PlaceKind, UserDetail, UserListResponse, UsersOptions } from './types';
 
 export interface UserListFilters {
   q: string;
@@ -10,6 +10,8 @@ export interface UserListFilters {
   roleId: string;
   placeId: string;
   status: string;
+  sort?: string;
+  dir?: string;
   skip: number;
 }
 
@@ -20,7 +22,7 @@ export function useUserList(filters: UserListFilters) {
     queryKey: ['users', 'list', filters],
     queryFn: async () => {
       const params: Record<string, string | number> = { skip: filters.skip, take: USERS_PAGE_SIZE };
-      for (const key of ['q', 'side', 'roleId', 'placeId', 'status'] as const) {
+      for (const key of ['q', 'side', 'roleId', 'placeId', 'status', 'sort', 'dir'] as const) {
         if (filters[key]) params[key] = filters[key];
       }
       return (await apiClient.get<UserListResponse>('/users', { params })).data;
@@ -102,9 +104,10 @@ interface RegistrationStationLite {
 // GET /stations and registration offices from GET /registration-stations,
 // and both are already narrowed server-side to what the caller may see, so a
 // supervisor is only ever offered their own.
-export function usePlaceOptions(kind: JobKind | 'ALL') {
+export function usePlaceOptions(kind: PlaceKind | 'ALL') {
   const wantStations = kind === 'PETROL_STATION' || kind === 'ALL';
   const wantOffices = kind === 'REGISTRATION' || kind === 'ALL';
+  const wantMunicipalities = kind === 'MUNICIPALITY';
   const stations = useQuery({
     queryKey: ['stations'],
     enabled: wantStations,
@@ -115,7 +118,16 @@ export function usePlaceOptions(kind: JobKind | 'ALL') {
     enabled: wantOffices,
     queryFn: async () => (await apiClient.get<RegistrationStationLite[]>('/registration-stations')).data,
   });
+  const municipalities = useQuery({
+    queryKey: ['municipalities', 'options'],
+    enabled: wantMunicipalities,
+    queryFn: async () =>
+      (await apiClient.get<{ id: string; name: string; code: string | null }[]>('/municipalities')).data,
+  });
   const options: PlaceOption[] = [
+    ...(wantMunicipalities
+      ? (municipalities.data ?? []).map((m) => ({ id: m.id, name: m.name, code: m.code ?? '', group: 'بلدية' }))
+      : []),
     ...(wantStations
       ? (stations.data ?? []).map((s) => ({
           id: s.id,
@@ -135,7 +147,9 @@ export function usePlaceOptions(kind: JobKind | 'ALL') {
   ];
   return {
     options,
-    isLoading: (wantStations && stations.isLoading) || (wantOffices && offices.isLoading),
-    isError: (wantStations && stations.isError) || (wantOffices && offices.isError),
+    isLoading:
+      (wantStations && stations.isLoading) || (wantOffices && offices.isLoading) || (wantMunicipalities && municipalities.isLoading),
+    isError:
+      (wantStations && stations.isError) || (wantOffices && offices.isError) || (wantMunicipalities && municipalities.isError),
   };
 }

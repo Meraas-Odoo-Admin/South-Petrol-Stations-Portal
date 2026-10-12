@@ -127,7 +127,7 @@ export class ReportsController {
   // instructions call for a route-level guard here instead.
   @RequirePermission('reports:view_all_stations')
   @Get('dashboard')
-  getDashboard(@Query() query: DashboardQueryDto) {
-    return this.reports.getDashboard(query);
+  getDashboard(@Query() query: DashboardQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.reports.getDashboard(query, actor.id);
   }
 }

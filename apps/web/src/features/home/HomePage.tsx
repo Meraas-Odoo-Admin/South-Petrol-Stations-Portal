@@ -29,8 +29,10 @@ const QUICK_LINKS: QuickLink[] = [
   { to: '/reports/readiness', label: 'الجاهزية للموعد النهائي', hint: 'التعبئات بالبطاقة وبدونها، وتقدير الأيام المتبقية', show: NAV_ACCESS.readiness, icon: 'dashboard' },
   { to: '/vehicles/change-requests', label: 'طلبات التعديل', hint: 'طلبات تغيير هوية المركبات', show: NAV_ACCESS.changeRequests, icon: 'changeRequests' },
   { to: '/stations', label: 'المحطات', hint: 'قائمة محطات المديرية', show: NAV_ACCESS.stations, icon: 'stations' },
-  { to: '/staff', label: 'فريق العمل', hint: 'موظفو محطتك أو مكتبك: إضافة وإيقاف وإعادة تعيين كلمة المرور', show: NAV_ACCESS.staff, icon: 'people' },
-  { to: '/admin', label: 'الإدارة', hint: 'الحسابات والإعدادات وسجل التغييرات', show: NAV_ACCESS.admin, icon: 'admin' },
+  { to: '/manage', label: 'إدارة المحطات', hint: 'محطات الوقود ومكاتب التسجيل في بلديتك وأشخاصها', show: NAV_ACCESS.manage, icon: 'stations' },
+  { to: '/my-station', label: 'محطتي', hint: 'موظفو محطتك والوقود الذي تبيعه والنشاط', show: NAV_ACCESS.myStation, icon: 'stations' },
+  { to: '/my-office', label: 'مكتبي', hint: 'موظفو مكتبك والمكاتب والطابعات والمخزون', show: NAV_ACCESS.myOffice, icon: 'register' },
+  { to: '/admin', label: 'الإدارة', hint: 'البلديات والإعدادات وقواعد التعبئة وسجل التغييرات', show: NAV_ACCESS.admin, icon: 'admin' },
 ];
 
 // Round 16: a first-name-only, time-of-day greeting reads as a system that

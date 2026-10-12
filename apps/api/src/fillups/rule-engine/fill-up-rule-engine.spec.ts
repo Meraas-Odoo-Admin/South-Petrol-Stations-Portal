@@ -79,6 +79,14 @@ const DEFAULT_SETTINGS = {
   'fillup.max_liters_per_week_per_owner': '1000', // high enough to stay out of the way of unrelated tests
   'fillup.week_window_mode': 'rolling',
   'fillup.week_start_day': '6',
+  // Phase 5A: every rule switched ON here (the real default for owner liters is
+  // off - rule-switches.spec.ts covers that), so the tests in this file keep
+  // exercising each rule.
+  'fillup.rule.vehicle_gap.enabled': 'true',
+  'fillup.rule.vehicle_weekly.enabled': 'true',
+  'fillup.rule.owner_gap.enabled': 'true',
+  'fillup.rule.owner_weekly.enabled': 'true',
+  'fillup.rule.owner_liters.enabled': 'true',
 };
 
 function daysAgo(reference: Date, days: number): Date {

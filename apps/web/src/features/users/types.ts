@@ -2,13 +2,18 @@
 // decides what the caller may do; the screen only reflects `capabilities`.
 
 export type JobKind = 'PETROL_STATION' | 'REGISTRATION' | null;
-export type AccountStatus = 'active' | 'deactivated' | 'locked' | 'must_change';
+// Where a job works: petrol stations, registration offices, a municipality
+// (a municipality manager), or nowhere (the super admin).
+export type PlaceKind = JobKind | 'MUNICIPALITY';
+export type AccountStatus = 'active' | 'deactivated' | 'locked' | 'must_change' | 'archived';
 
 export interface JobOption {
   id: string;
   name: string;
   description: string | null;
   kind: JobKind;
+  municipalityScoped?: boolean;
+  placeKind?: PlaceKind;
   unrestrictedStationAccess: boolean;
 }
 
@@ -18,10 +23,11 @@ export interface UserListItem {
   fullName: string;
   status: AccountStatus;
   lastLoginAt: string | null;
+  archivedAt?: string | null;
   job: { roleId: string; name: string; kind: JobKind } | null;
   jobCount: number;
-  sees: 'ALL' | 'PLACES';
-  placeKind: JobKind;
+  sees: 'ALL' | 'MUNICIPALITY' | 'PLACES';
+  placeKind: PlaceKind;
   placeNames: string[];
   placeCount: number;
   canManage: boolean;
@@ -48,7 +54,7 @@ export interface Capabilities {
 
 export interface Place {
   id: string;
-  internalCode: string;
+  internalCode: string | null;
   name: string;
 }
 
@@ -58,16 +64,17 @@ export interface UserDetail {
   fullName: string;
   phone: string | null;
   isActive: boolean;
+  archivedAt?: string | null;
   mustChangePassword: boolean;
   lockedUntil: string | null;
   lastLoginAt: string | null;
   createdAt: string;
   status: AccountStatus;
-  roles: Array<{ roleId: string; role: { id: string; name: string; description: string | null; kind: JobKind; unrestrictedStationAccess: boolean } }>;
+  roles: Array<{ roleId: string; role: { id: string; name: string; description: string | null; kind: JobKind; municipalityScoped?: boolean; unrestrictedStationAccess: boolean } }>;
   directPermissions: Array<{ permissionId: string; permission: { id: string; key: string; description: string | null } }>;
-  placeKind: JobKind;
+  placeKind: PlaceKind;
   places: Place[];
-  sees: 'ALL' | 'PLACES';
+  sees: 'ALL' | 'MUNICIPALITY' | 'PLACES';
   capabilities: Capabilities;
   assignableJobs: JobOption[];
 }

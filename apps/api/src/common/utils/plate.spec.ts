@@ -55,7 +55,7 @@ describe('normalizePlate (shared by the API and the web app)', () => {
   });
 
   it('exposes the two parts', () => {
-    expect(splitPlate('08 / ٠٠١٢٣')).toEqual({ city: '8', serial: '123' });
+    expect(splitPlate('08 / ٠٠١٢٣')).toEqual({ city: '8', serial: '123', suffix: '' });
     expect(splitPlate('812')).toBeNull();
   });
 });
@@ -76,5 +76,42 @@ describe('plateSearchTerm', () => {
 describe('toWesternDigits', () => {
   it('converts both Arabic digit blocks and leaves the rest', () => {
     expect(toWesternDigits('٠١٢٣٤٥٦٧٨٩ ۰۱۲۳۴۵۶۷۸۹ a-1')).toBe('0123456789 0123456789 a-1');
+  });
+});
+
+describe('normalizePlate — the optional trailing N (phase 5A)', () => {
+  it('keeps the N as part of the plate identity', () => {
+    expect(normalizePlate('5-1234567N')).toBe('5-1234567N');
+    expect(normalizePlate('5-123456N')).not.toBe(normalizePlate('5-123456'));
+    expect(platesMatch('5-123456N', '5-123456')).toBe(false);
+  });
+
+  it('reads every typing of the N as one plate', () => {
+    for (const typed of ['5-1234567N', '5-1234567n', '5 1234567 N', '5-1234567-N', '٥-١٢٣٤٥٦٧N', '5-1234567 n']) {
+      expect(normalizePlate(typed)).toBe('5-1234567N');
+    }
+  });
+
+  it('refuses any other letter, a second N, or an N with no serial', () => {
+    expect(normalizePlate('5-1234567A')).toBeNull();
+    expect(normalizePlate('5-1234567NN')).toBeNull();
+    expect(normalizePlate('5-N')).toBeNull();
+    expect(normalizePlate('N-1234567')).toBeNull();
+  });
+
+  it('still enforces the serial length with the N present', () => {
+    expect(normalizePlate('5-12345678N')).toBeNull();
+    expect(normalizePlate('5-1234567N')).not.toBeNull();
+  });
+
+  it('keeps a trailing N in a search term', () => {
+    expect(plateSearchTerm('5-12N')).toBe('5-12N');
+    expect(plateSearchTerm('5 12 n')).toBe('5-12N');
+    expect(plateSearchTerm('5-12')).toBe('5-12');
+  });
+
+  it('splits into city, serial and suffix', () => {
+    expect(splitPlate('15-7N')).toEqual({ city: '15', serial: '7', suffix: 'N' });
+    expect(splitPlate('15-7')).toEqual({ city: '15', serial: '7', suffix: '' });
   });
 });

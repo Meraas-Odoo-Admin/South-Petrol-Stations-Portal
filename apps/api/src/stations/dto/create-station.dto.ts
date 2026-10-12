@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsOptionalLibyanMobile } from '../../common/validators/shared-field-checks';
+import { normalizePhoneValue } from '../../common/validators/phone-transform';
 import { FuelType, StationOwnershipType, StationStatus } from '@prisma/client';
 
 export class CreateStationDto {
@@ -40,6 +43,13 @@ export class CreateStationDto {
   @IsString()
   routeId?: string;
 
+  // Phase 5A: the area or neighbourhood inside the municipality (list filter).
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  locality?: string;
+
   // No securityAuthorityId: a station's security authority is its
   // municipality's (one per municipality — OPEN_ITEMS.md #4, answered),
   // never chosen per station. With forbidNonWhitelisted, sending it is
@@ -71,7 +81,9 @@ export class CreateStationDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Transform(normalizePhoneValue)
   @IsString()
+  @IsOptionalLibyanMobile()
   supervisorPhone?: string;
 
   // When true, StationsService.create ignores operatorName/operatorPhone
@@ -90,7 +102,9 @@ export class CreateStationDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Transform(normalizePhoneValue)
   @IsString()
+  @IsOptionalLibyanMobile()
   operatorPhone?: string;
 
   // station-card-field-spec item 10 — a station can offer more than one,

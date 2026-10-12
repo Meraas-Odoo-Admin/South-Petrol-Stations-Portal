@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { nationalIdTail, randomDigits, vehicleBody } from './support/registration-fixtures';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
@@ -34,8 +35,8 @@ describe('Owners/Vehicles (e2e)', () => {
   // earlier run of this same suite within one dev session (there are no
   // DELETE endpoints, so old fixture rows never go away). A random digit
   // string has no periodicity to collide on.
-  const randomDigits = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
-  const numericId11 = randomDigits(11); // fills identityNumber's 11 digits after the type prefix
+  
+  const numericId11 = nationalIdTail(); // the 11 digits after the type prefix: a 19xx birth year, then a random part
   const plateSeqA = randomDigits(7);
   const plateSeqB = randomDigits(7);
   const plateSeqOther = randomDigits(7);
@@ -239,7 +240,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const server = app.getHttpServer();
     await request(server).post('/api/v1/owners').send({}).expect(401);
     await request(server).get('/api/v1/owners').expect(401);
-    await request(server).post('/api/v1/vehicles').send({}).expect(401);
+    await request(server).post('/api/v1/vehicles').send(vehicleBody({})).expect(401);
     await request(server).get('/api/v1/vehicles').expect(401);
   });
 
@@ -252,10 +253,10 @@ describe('Owners/Vehicles (e2e)', () => {
 
     await auth(request(server).post('/api/v1/owners')).send({ fullName: 'Nope' }).expect(403);
     await auth(request(server).get('/api/v1/owners')).expect(403);
-    await auth(request(server).post('/api/v1/vehicles')).send({ registrationStationId,
+    await auth(request(server).post('/api/v1/vehicles')).send(vehicleBody({ registrationStationId,
       internalCode: `should-not-exist-${runId}`,
       currentPlate: `should-not-exist-${runId}`,
-    }).expect(403);
+    })).expect(403);
     await auth(request(server).get('/api/v1/vehicles')).expect(403);
   });
 
@@ -269,7 +270,7 @@ describe('Owners/Vehicles (e2e)', () => {
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ registrationStationId,
-        fullName: 'E2E DOV Owner One',
+        fullName: 'مالك تجريبي أول',
         identityType: 'NATIONAL_ID',
         identityNumber: `1${numericId11}`,
         phone: '0920000000',
@@ -303,7 +304,7 @@ describe('Owners/Vehicles (e2e)', () => {
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ registrationStationId,
-        fullName: 'Duplicate Attempt',
+        fullName: 'مالك تجريبي مكرر',
         identityType: 'NATIONAL_ID',
         identityNumber: `1${numericId11}`, // same pair as the owner created above
         phone: '0930000000',
@@ -332,7 +333,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
 
     await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
-      .send({ identityType: 'NATIONAL_ID', identityNumber: `1${randomDigits(11)}`, reason: 'x', proofReference: 'y' })
+      .send({ identityType: 'NATIONAL_ID', identityNumber: `1${nationalIdTail()}`, reason: 'x', proofReference: 'y' })
       .expect(403);
     await auth(request(server).get('/api/v1/owners/change-requests')).expect(403);
   });
@@ -341,7 +342,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const accessToken = await loginAsManager();
     const server = app.getHttpServer();
     const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
-    const newIdentityNumber = `1${randomDigits(11)}`;
+    const newIdentityNumber = `1${nationalIdTail()}`;
 
     const requestRes = await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
       .send({
@@ -359,7 +360,7 @@ describe('Owners/Vehicles (e2e)', () => {
     await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
       .send({
         identityType: 'NATIONAL_ID',
-        identityNumber: `1${randomDigits(11)}`,
+        identityNumber: `1${nationalIdTail()}`,
         reason: 'Another attempt',
         proofReference: 'ref-002',
       })
@@ -386,9 +387,9 @@ describe('Owners/Vehicles (e2e)', () => {
 
     const conflictOwnerRes = await auth(request(server).post('/api/v1/owners'))
       .send({ registrationStationId,
-        fullName: 'E2E DOV Owner Conflict Target',
+        fullName: 'مالك تجريبي هدف التعارض',
         identityType: 'NATIONAL_ID',
-        identityNumber: `2${randomDigits(11)}`,
+        identityNumber: `2${nationalIdTail()}`,
         phone: '0940000000',
       })
       .expect(201);
@@ -412,7 +413,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const requestRes = await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
       .send({
         identityType: 'ADMINISTRATIVE_ID',
-        identityNumber: `9${randomDigits(11)}`,
+        identityNumber: `9${nationalIdTail()}`,
         reason: 'Second correction attempt',
         proofReference: 'ref-004',
       })
@@ -434,12 +435,12 @@ describe('Owners/Vehicles (e2e)', () => {
     const createRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ registrationStationId,
+      .send(vehicleBody({ registrationStationId,
         internalCode: `VEH-${runId}`,
         currentPlate: `5-${plateSeqA}`,
         chassisNumber: chassis17,
         ownerId,
-      })
+      }))
       .expect(201);
     vehicleId = createRes.body.id;
     expect(createRes.body.currentPlate).toBe(`5-${plateSeqA}`);
@@ -447,13 +448,13 @@ describe('Owners/Vehicles (e2e)', () => {
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ registrationStationId, internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}`, ownerId })
+      .send(vehicleBody({ registrationStationId, internalCode: `VEH-${runId}`, currentPlate: `8-${plateSeqB}`, ownerId }))
       .expect(409);
 
     await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ registrationStationId, internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}`, ownerId })
+      .send(vehicleBody({ registrationStationId, internalCode: `VEH-${runId}-DIFFERENT`, currentPlate: `5-${plateSeqA}`, ownerId }))
       .expect(409);
   });
 
@@ -467,7 +468,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const res = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ registrationStationId, currentPlate: `12-${randomDigits(7)}`, ownerId })
+      .send(vehicleBody({ registrationStationId, currentPlate: `12-${randomDigits(7)}`, ownerId }))
       .expect(201);
 
     expect(res.body.internalCode).toMatch(/^V-\d{6}$/);
@@ -477,7 +478,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const secondRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ registrationStationId, currentPlate: `12-${randomDigits(7)}`, ownerId })
+      .send(vehicleBody({ registrationStationId, currentPlate: `12-${randomDigits(7)}`, ownerId }))
       .expect(201);
     expect(secondRes.body.internalCode).toMatch(/^V-\d{6}$/);
     expect(secondRes.body.internalCode).not.toBe(res.body.internalCode);
@@ -527,7 +528,7 @@ describe('Owners/Vehicles (e2e)', () => {
       .post('/api/v1/owners')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ registrationStationId,
-        fullName: 'E2E DOV Owner Two',
+        fullName: 'مالك تجريبي ثان',
         identityType: 'NATIONAL_ID',
         identityNumber: `2${numericId11}`,
         phone: '0940000000',
@@ -654,7 +655,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const otherVehicleRes = await request(server)
       .post('/api/v1/vehicles')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ registrationStationId, internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}`, ownerId })
+      .send(vehicleBody({ registrationStationId, internalCode: `VEH-${runId}-OTHER`, currentPlate: `15-${plateSeqOther}`, ownerId }))
       .expect(201);
     const otherVehicleId = otherVehicleRes.body.id;
 

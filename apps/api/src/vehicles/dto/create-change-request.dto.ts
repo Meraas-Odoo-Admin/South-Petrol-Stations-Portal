@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { VehicleChangeType } from '@prisma/client';
 import { IsValidVehicleChangeValue } from '../../common/validators/vehicle-change-value.validator';
@@ -24,6 +24,13 @@ export class CreateVehicleChangeRequestDto {
   @IsString()
   @IsValidVehicleChangeValue()
   requestedValue!: string;
+
+  // Ticked when the new chassis number is not the usual 17 characters (6-20
+  // allowed) - the same tick as at registration. Only read for CHASSIS_CHANGE.
+  @ApiProperty({ required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  chassisNonStandard?: boolean;
 
   @ApiProperty()
   @IsString()

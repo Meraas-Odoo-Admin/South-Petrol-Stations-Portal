@@ -9,6 +9,7 @@ const VARIANT: Record<AccountStatus, 'ok' | 'neutral' | 'warn'> = {
   deactivated: 'neutral',
   locked: 'warn',
   must_change: 'warn',
+  archived: 'neutral',
 };
 
 export function AccountStatusPill({ status }: { status: AccountStatus }) {

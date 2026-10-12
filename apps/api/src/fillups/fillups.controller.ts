@@ -116,6 +116,7 @@ export class FillUpsController {
     @Query('cardNumber') cardNumber: string | undefined,
     @Query('plate') plate: string | undefined,
     @Query('emergencyOverride') emergencyOverride: string | undefined,
+    @Query('fuelType') fuelType: string | undefined,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     if (!vehicleId && !cardNumber && !plate) {
@@ -132,6 +133,8 @@ export class FillUpsController {
         cardNumber: cardNumber || undefined,
         plate: plate || undefined,
         emergencyOverride: emergencyOverride === 'true',
+        fuelType:
+          fuelType === 'PETROL_95' || fuelType === 'DIESEL' || fuelType === 'KEROSENE' ? fuelType : undefined,
       },
       stationId,
       actor.id,

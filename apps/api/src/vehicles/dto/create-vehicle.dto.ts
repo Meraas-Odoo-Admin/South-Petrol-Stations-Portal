@@ -1,13 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { VehicleUsageType } from '@prisma/client';
-import {
-  CHASSIS_NUMBER_REGEX,
-  REGISTRATION_BOOKLET_REGEX,
-} from '../../common/validators/libyan-formats';
+import { normalizeBooklet, normalizeChassis, VEHICLE_FUEL_TYPES } from '@fuel-tracking/shared-types';
 import { IsLibyanPlate } from '../../common/validators/libyan-plate.validator';
+import {
+  IsBookletNumber,
+  IsChassisNumber,
+  IsMakeOrModel,
+  IsManufactureYearValue,
+  IsVehicleColor,
+} from '../../common/validators/shared-field-checks';
 
+// Phase 5A: every vehicle carries plate, chassis number, booklet number, make,
+// model, colour, manufacturing year and fuel type - all required, all checked
+// with the shared rules (packages/shared-types/validation.ts), the same ones
+// the registration form runs.
 export class CreateVehicleDto {
   // Round 5 feedback: no auto-generation existed anywhere for this — it
   // was a plain required text field, which the client flagged as
@@ -23,51 +31,70 @@ export class CreateVehicleDto {
   @MinLength(1)
   internalCode?: string;
 
-  @ApiProperty({ description: 'City code (1-2 digits) + a separator + serial number (1-7 digits). A plate with no separator is refused.' })
+  @ApiProperty({
+    description:
+      'City code (1-2 digits) + a separator + serial number (1-7 digits), with an optional trailing N that is part of the plate. A plate with no separator is refused.',
+  })
   @IsString()
   @IsLibyanPlate()
   currentPlate!: string;
 
-  // Chassis numbers are case-insensitive on input but stored/compared
-  // uppercase (ISO 3779) — normalize before @Matches runs.
-  @ApiProperty({ required: false, description: '17-character VIN (ISO 3779), excludes I/O/Q.' })
-  @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  // Upper-cased and stripped of spaces before the check runs.
+  @ApiProperty({ description: '17 characters (ISO 3779); 6-20 only with chassisNonStandard.' })
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeChassis(value) : value))
   @IsString()
-  @Matches(CHASSIS_NUMBER_REGEX, { message: 'chassisNumber must be exactly 17 characters (A-H, J-N, P, R-Z, 0-9).' })
-  chassisNumber?: string;
+  @IsChassisNumber('chassisNonStandard')
+  chassisNumber!: string;
+
+  // Ticked when the booklet's chassis number is not the usual 17 characters.
+  // Recorded and shown on the vehicle.
+  @ApiProperty({ required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  chassisNonStandard?: boolean;
 
   // A first-time set — this is creation, there's no existing value to
   // displace — so no VehicleChangeRequest approval is needed here. Only
   // changing an ALREADY-SET registrationBooklet on an existing vehicle
   // goes through POST /vehicles/:id/change-requests.
-  @ApiProperty({ required: false, description: '6-12 alphanumeric characters.' })
-  @IsOptional()
+  @ApiProperty({ description: '6-12 letters and digits.' })
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeBooklet(value) : value))
   @IsString()
-  @Matches(REGISTRATION_BOOKLET_REGEX, {
-    message: 'registrationBooklet must be 6-12 alphanumeric characters.',
-  })
-  registrationBooklet?: string;
+  @IsBookletNumber()
+  registrationBooklet!: string;
 
   @ApiProperty({ required: false, description: 'VehicleType lookup row id — see GET /vehicle-types.' })
   @IsOptional()
   @IsString()
   vehicleTypeId?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  // Free text, typed exactly as written in the booklet. No lists.
+  @ApiProperty({ description: 'The make (الصانع), as written in the booklet.' })
   @IsString()
-  model?: string;
+  @IsMakeOrModel('الصانع')
+  make!: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ description: 'The model (الطراز), as written in the booklet.' })
   @IsString()
-  color?: string;
+  @IsMakeOrModel('الطراز')
+  model!: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsInt()
-  manufactureYear?: number;
+  // A colour from the list, or free text for «أخرى».
+  @ApiProperty()
+  @IsString()
+  @IsVehicleColor()
+  color!: string;
+
+  @ApiProperty({ description: '4 digits, from 1950 to next year.' })
+  @Transform(({ value }) => (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value))
+  @IsManufactureYearValue()
+  manufactureYear!: number;
+
+  // The fuel the vehicle runs on. A pump choice that does not match is
+  // warned about and recorded, never blocked.
+  @ApiProperty({ enum: VEHICLE_FUEL_TYPES })
+  @IsIn(VEHICLE_FUEL_TYPES, { message: 'نوع وقود المركبة مطلوب: بنزين أو ديزل.' })
+  fuelType!: (typeof VEHICLE_FUEL_TYPES)[number];
 
   @ApiProperty({ enum: VehicleUsageType, required: false })
   @IsOptional()

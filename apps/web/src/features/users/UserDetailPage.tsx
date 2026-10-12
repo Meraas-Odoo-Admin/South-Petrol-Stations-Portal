@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { CodeText } from '../../components/design/CodeText';
 import { PillButton } from '../../components/design/PillButton';
@@ -38,7 +38,7 @@ function BackLink({ basePath }: { basePath: string }) {
       className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 lg:text-[14px]"
     >
       <Icon d={ICONS.arrowBack} size={18} />
-      العودة إلى القائمة
+      العودة
     </Link>
   );
 }
@@ -48,6 +48,9 @@ function BackLink({ basePath }: { basePath: string }) {
 // control follows the server's `capabilities`; nothing here decides access.
 export function UserDetailPage({ basePath }: { basePath: string }) {
   const { userId } = useParams();
+  const [searchParams] = useSearchParams();
+  // Where the person came from (their station, office or municipality page).
+  const backPath = searchParams.get('back') || basePath;
   const { hasPermission } = useAuth();
   const detail = useUserDetail(userId);
 
@@ -63,7 +66,7 @@ export function UserDetailPage({ basePath }: { basePath: string }) {
   if (detail.isError || !detail.data) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
-        <BackLink basePath={basePath} />
+        <BackLink basePath={backPath} />
         <div className="rounded-md bg-surface p-6 text-center shadow-sm">
           <p className="text-[18px] font-extrabold text-ink lg:text-[15px]">لا يمكن فتح هذا الحساب</p>
           <p className="mx-auto mt-1 max-w-md text-[16px] text-ink-soft lg:text-[14px]">
@@ -85,7 +88,7 @@ export function UserDetailPage({ basePath }: { basePath: string }) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <BackLink basePath={basePath} />
+      <BackLink basePath={backPath} />
 
       <header className="rounded-md bg-surface p-4 shadow-sm lg:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -114,7 +117,8 @@ export function UserDetailPage({ basePath }: { basePath: string }) {
       <IdentityCard user={user} readOnlyNote={note} />
       <JobAndPlaceCard user={user} />
       <AccountCard user={user} readOnlyNote={note} />
-      {user.capabilities.canManageAdvanced && hasPermission('roles:manage') && <AdvancedCard user={user} />}
+      {user.capabilities.canManageAdvanced &&
+        (hasPermission('roles:manage') || hasPermission('users:manage_municipality_staff')) && <AdvancedCard user={user} />}
       <ActivityCard userId={user.id} />
     </div>
   );

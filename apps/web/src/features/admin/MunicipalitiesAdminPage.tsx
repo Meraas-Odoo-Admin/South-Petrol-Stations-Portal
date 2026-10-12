@@ -1,345 +1,277 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
-import { Card, CardHeader } from '../../components/design/Card';
+import { Card } from '../../components/design/Card';
+import { Dialog } from '../../components/design/Dialog';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
-import type { MunicipalityRef } from '../stations/types';
-import { PrintRegistrationSheetButton } from '../../components/PrintRegistrationSheetButton';
-import { DateField } from '../../components/DateField';
+import { TextField } from '../../components/design/TextField';
+import { Icon, ICONS } from '../../components/icons';
+import { Notice } from '../users/parts';
+import { STAGE_LABELS } from '../places/StageCard';
+import { useMunicipalityList } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
-import { useAuth } from '../auth/AuthProvider';
 
-const STAGE_LABELS = { GRACE: 'سماح', AWARENESS: 'توعية', CARD_REQUIRED: 'البطاقة مطلوبة' } as const;
+const SELECT_CLASS =
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
-// Today as an Africa/Tripoli calendar day (YYYY-MM-DD) — the server decides
-// the stage; this is only used to know when to ask for the typed name.
-function tripoliToday(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
-}
-
-const inputClass =
-  'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
-
-// Registration pivot, phase 2 — the admin screen Phase 1 left API-only.
-// A municipality is PREPARING (admin-only, no fill-ups) or LIVE. Going
-// live needs its security authority first (the API enforces it). Going
-// back from LIVE to PREPARING instantly stops every fill-up there, so it
-// demands the admin type the municipality's exact name — and the API
-// checks that too, not just this screen.
+// «إدارة البلديات» — the super admin's list of municipalities, with search,
+// filters and sortable columns. Opening one shows everything about it. The
+// super admin only creates municipalities (each with its security directorate,
+// made automatically) and their managers; everything inside a municipality is
+// run by its own managers.
 export function MunicipalitiesAdminPage() {
-  const queryClient = useQueryClient();
-  // Phase 4b: the directorate admin holds only municipalities:set_stage_dates.
-  // They see the stage, the two dates and the A4 sheet button, but none of the
-  // controls for creating, activating or coding a municipality — the API
-  // refuses those for them too.
-  const { hasPermission } = useAuth();
-  const canManage = hasPermission('municipalities:manage');
-  const canSetDates = canManage || hasPermission('municipalities:set_stage_dates');
-  const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [confirming, setConfirming] = useState<MunicipalityRef | null>(null);
-  const [typedName, setTypedName] = useState('');
-  const [editingDates, setEditingDates] = useState<MunicipalityRef | null>(null);
-  const [awarenessDraft, setAwarenessDraft] = useState('');
-  const [deadlineDraft, setDeadlineDraft] = useState('');
-  const [datesTypedName, setDatesTypedName] = useState('');
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
+  const [status, setStatus] = useState('');
+  const [archived, setArchived] = useState('');
+  const [sort, setSort] = useState('name');
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc');
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['admin', 'municipalities'],
-    queryFn: async () => (await apiClient.get<MunicipalityRef[]>('/municipalities')).data,
-  });
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'municipalities'] });
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [q]);
 
-  const createMutation = useMutation({
-    mutationFn: () => apiClient.post('/municipalities', { name: newName.trim() }),
-    onSuccess: () => {
-      setError(null);
-      setShowCreate(false);
-      setNewName('');
-      invalidate();
-    },
-    onError: (err) => setError(adminErrorMessage(err, 'تعذر إضافة البلدية.')),
+  const list = useMunicipalityList({
+    ...(debouncedQ ? { q: debouncedQ } : {}),
+    ...(status ? { status } : {}),
+    ...(archived ? { archived } : {}),
+    sort,
+    dir,
   });
 
-  const statusMutation = useMutation({
-    mutationFn: (payload: { id: string; status: 'LIVE' | 'PREPARING'; confirmName?: string }) =>
-      apiClient.patch(`/municipalities/${payload.id}`, { status: payload.status, confirmName: payload.confirmName }),
-    onSuccess: () => {
-      setError(null);
-      setConfirming(null);
-      setTypedName('');
-      invalidate();
-      // Station lists show preparing/live, and non-admins' lists change.
-      queryClient.invalidateQueries({ queryKey: ['stations'] });
+  const create = useMutation({
+    mutationFn: async () =>
+      (await apiClient.post<{ id: string }>('/municipalities', { name: name.trim(), ...(code.trim() ? { code: code.trim().toUpperCase() } : {}) })).data,
+    onSuccess: (created) => {
+      setCreating(false);
+      setName('');
+      setCode('');
+      navigate(`/admin/municipalities/${created.id}?created=1`);
     },
-    onError: (err) => setError(adminErrorMessage(err, 'تعذر تغيير حالة البلدية.')),
+    onError: (err) => setProblem(adminErrorMessage(err, 'تعذّر إضافة البلدية.')),
   });
 
-  const needsDeadlineConfirm = !!deadlineDraft && deadlineDraft <= tripoliToday();
-  const datesMutation = useMutation({
-    mutationFn: (payload: { id: string; awarenessStartDate: string | null; cardRequiredFromDate: string | null; confirmName?: string }) =>
-      apiClient.patch(`/municipalities/${payload.id}`, {
-        awarenessStartDate: payload.awarenessStartDate,
-        cardRequiredFromDate: payload.cardRequiredFromDate,
-        confirmName: payload.confirmName,
-      }),
-    onSuccess: () => {
-      setError(null);
-      setEditingDates(null);
-      setDatesTypedName('');
-      invalidate();
-    },
-    onError: (err) => setError(adminErrorMessage(err, 'تعذر حفظ تواريخ المراحل.')),
-  });
+  function submit() {
+    if (name.trim().length < 2) {
+      setProblem('اكتب اسم البلدية.');
+      return;
+    }
+    if (code.trim() && !/^[A-Za-z]{2,5}$/.test(code.trim())) {
+      setProblem('رمز البطاقات من 2 إلى 5 أحرف إنجليزية.');
+      return;
+    }
+    setProblem(null);
+    create.mutate();
+  }
 
-  const codeMutation = useMutation({
-    mutationFn: (payload: { id: string; code: string }) => apiClient.patch(`/municipalities/${payload.id}`, { code: payload.code }),
-    onSuccess: () => {
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => {
-      setError(adminErrorMessage(err, 'رمز البلدية يجب أن يكون من 2 إلى 5 أحرف إنجليزية كبيرة.'));
-      invalidate();
-    },
-  });
+  const rows = list.data ?? [];
+  const sortHeader = (key: string, label: string) => (
+    <th
+      scope="col"
+      aria-sort={sort === key ? (dir === 'desc' ? 'descending' : 'ascending') : 'none'}
+      className="px-[18px] py-2.5 text-start"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (sort === key) setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+          else {
+            setSort(key);
+            setDir('asc');
+          }
+        }}
+        className="font-bold hover:text-primary"
+      >
+        {label} {sort === key && (dir === 'desc' ? '▼' : '▲')}
+      </button>
+    </th>
+  );
 
   return (
     <div className="space-y-4">
-      {showCreate && (
-        <Card className="p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <label className="mb-1 block text-[11.5px] text-ink-soft">اسم البلدية</label>
-              <input value={newName} onChange={(e) => setNewName(e.target.value)} className={`${inputClass} w-56`} />
-            </div>
-            <PillButton disabled={!newName.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
-              إضافة
-            </PillButton>
-          </div>
-          <p className="mt-2 text-[11px] text-ink-faint">تبدأ البلدية الجديدة «قيد الإعداد» — لا تظهر محطاتها إلا للإدارة.</p>
-        </Card>
-      )}
-
-      {confirming && (
-        <Card className="border-t-4 border-danger p-4" data-testid="municipality-deactivate-confirm">
-          <p className="text-[13px] font-bold text-danger">إعادة «{confirming.name}» إلى قيد الإعداد</p>
-          <p className="mt-1.5 text-[12px] leading-[1.8] text-ink-soft">
-            سيتوقف تسجيل أي تعبئة في كل محطات هذه البلدية فورًا، وتختفي محطاتها عن غير الإدارة. للتأكيد اكتب اسم البلدية
-            كما هو:
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[22px] font-extrabold text-ink lg:text-[18px]">إدارة البلديات</h2>
+          <p className="mt-1 text-[15px] text-ink-soft lg:text-[13px]">
+            أنشئ البلدية ومديرها، وكل ما بداخلها يديره مديرها.
           </p>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <input
-              value={typedName}
-              onChange={(e) => setTypedName(e.target.value)}
-              placeholder={confirming.name}
-              className={`${inputClass} w-56`}
-              data-testid="municipality-confirm-name"
-            />
-            <PillButton
-              variant="danger"
-              disabled={typedName.trim() !== confirming.name || statusMutation.isPending}
-              onClick={() =>
-                statusMutation.mutate({ id: confirming.id, status: 'PREPARING', confirmName: typedName.trim() })
-              }
-            >
-              إعادة إلى قيد الإعداد
-            </PillButton>
-            <PillButton
-              variant="ghost"
-              onClick={() => {
-                setConfirming(null);
-                setTypedName('');
-              }}
-            >
-              إلغاء
-            </PillButton>
-          </div>
-        </Card>
-      )}
-
-      {editingDates && (
-        <Card className="p-4" data-testid="municipality-dates-editor">
-          <p className="text-[13px] font-bold text-ink">مراحل «{editingDates.name}»</p>
-          <p className="mt-1.5 text-[12px] leading-[1.8] text-ink-soft">
-            التواريخ بتوقيت طرابلس، وتبدأ المرحلة عند منتصف الليل. اترك التاريخ فارغًا لعدم تحديده؛ بلا موعد نهائي تبقى
-            البلدية في مرحلة السماح.
-          </p>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div>
-              <label className="mb-1 block text-[11.5px] text-ink-soft">بدء التوعية</label>
-              <DateField value={awarenessDraft} onChange={setAwarenessDraft} inputClassName="h-9 text-[12.5px]" />
-            </div>
-            <div>
-              <label className="mb-1 block text-[11.5px] text-ink-soft">البطاقة مطلوبة ابتداءً من</label>
-              <DateField value={deadlineDraft} onChange={setDeadlineDraft} inputClassName="h-9 text-[12.5px]" />
-            </div>
-          </div>
-          {needsDeadlineConfirm && (
-            <div className="mt-3" data-testid="municipality-dates-confirm">
-              <p className="text-[12px] font-bold text-danger">
-                هذا الموعد اليوم أو قبله، فسيُرفض فورًا كل تعبئة بدون بطاقة فعّالة. للتأكيد اكتب اسم البلدية كما هو:
-              </p>
-              <input
-                value={datesTypedName}
-                onChange={(e) => setDatesTypedName(e.target.value)}
-                placeholder={editingDates.name}
-                className={`${inputClass} mt-2 w-56`}
-                data-testid="municipality-dates-confirm-name"
-              />
-            </div>
-          )}
-          <div className="mt-3 flex gap-3">
-            <PillButton
-              variant={needsDeadlineConfirm ? 'danger' : undefined}
-              disabled={datesMutation.isPending || (needsDeadlineConfirm && datesTypedName.trim() !== editingDates.name)}
-              onClick={() =>
-                datesMutation.mutate({
-                  id: editingDates.id,
-                  awarenessStartDate: awarenessDraft || null,
-                  cardRequiredFromDate: deadlineDraft || null,
-                  confirmName: needsDeadlineConfirm ? datesTypedName.trim() : undefined,
-                })
-              }
-            >
-              حفظ
-            </PillButton>
-            <PillButton variant="ghost" onClick={() => setEditingDates(null)}>
-              إلغاء
-            </PillButton>
-          </div>
-        </Card>
-      )}
-
-      {error && <p className="text-sm text-danger">{error}</p>}
+        </div>
+        <PillButton size="field" onClick={() => setCreating(true)}>
+          <span className="inline-flex items-center gap-2">
+            <Icon d={ICONS.plus} size={18} />
+            بلدية جديدة
+          </span>
+        </PillButton>
+      </div>
 
       <Card>
-        <CardHeader
-          title="البلديات"
-          subtitle={data ? `${data.filter((m) => m.status === 'LIVE').length} مفعّلة من ${data.length}` : undefined}
-          action={
-            canManage ? (
-              <PillButton size="sm" onClick={() => setShowCreate((s) => !s)}>
-                {showCreate ? 'إلغاء' : 'بلدية جديدة +'}
-              </PillButton>
-            ) : undefined
-          }
-        />
-        {isLoading && <p className="p-4 text-sm text-ink-soft">...جارٍ التحميل</p>}
-        {isError && <p className="p-4 text-sm text-danger">تعذر تحميل البلديات.</p>}
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-[12.5px]">
-              <thead>
-                <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
-                  <th className="px-[18px] py-2.5 text-start">البلدية</th>
-                  <th className="px-[18px] py-2.5 text-start">رمز البطاقات</th>
-                  <th className="px-[18px] py-2.5 text-start">الحالة</th>
-                  <th className="px-[18px] py-2.5 text-start">المرحلة</th>
-                  <th className="px-[18px] py-2.5 text-start">الجهة الأمنية</th>
-                  <th className="px-[18px] py-2.5 text-start"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((m) => (
-                  <tr key={m.id} className="border-b border-surface-alt last:border-0">
-                    <td className="px-[18px] py-3 font-bold text-ink">{m.name}</td>
-                    <td className="px-[18px] py-3">
-                      {/* Card-number prefix: SBH → cards read SBH-7K2M9Q4X. */}
-                      {!canManage ? (
-                        <span dir="ltr" className="font-mono text-ink-soft">{m.code ?? '—'}</span>
-                      ) : (
-                      <input
-                        defaultValue={m.code ?? ''}
-                        placeholder="—"
-                        dir="ltr"
-                        maxLength={5}
-                        onBlur={(e) => {
-                          const code = e.target.value.trim().toUpperCase();
-                          if (code && code !== (m.code ?? '')) codeMutation.mutate({ id: m.id, code });
-                        }}
-                        className={`${inputClass} w-20 font-mono uppercase`}
-                        aria-label="رمز البطاقات"
-                      />
-                      )}
-                    </td>
-                    <td className="px-[18px] py-3">
-                      <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'}>
-                        {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}
-                      </StatusPill>
-                    </td>
-                    <td className="px-[18px] py-3" data-testid={`municipality-stage-${m.id}`}>
-                      <StatusPill variant={m.stage === 'CARD_REQUIRED' ? 'ok' : 'neutral'}>
-                        {STAGE_LABELS[m.stage ?? 'GRACE']}
-                      </StatusPill>
-                      {/* Persistent: grace is running (LIVE, or awareness already
-                          started) and nothing says when it ends, so cars without a
-                          card are accepted indefinitely. */}
-                      {(m.status === 'LIVE' || m.awarenessStartDate) && !m.cardRequiredFromDate && (
-                        <p
-                          role="alert"
-                          className="mt-1.5 rounded-sm border border-accent bg-accent-100 px-2 py-1.5 text-[11px] font-extrabold text-ink"
-                          data-testid={`municipality-no-deadline-warning-${m.id}`}
-                        >
-                          ⚠ فترة السماح فعّالة — لم يُحدَّد موعد نهائي
-                          <span className="block text-[10.5px] font-bold text-ink-soft">
-                            تُقبل التعبئة بدون بطاقة بلا حدّ زمني حتى تحدد الموعد.
-                          </span>
-                        </p>
-                      )}
-                      {canSetDates && (
-                      <button
-                        type="button"
-                        className="mt-1 block text-[11px] font-bold text-primary underline"
-                        onClick={() => {
-                          setError(null);
-                          setAwarenessDraft(m.awarenessStartDate ?? '');
-                          setDeadlineDraft(m.cardRequiredFromDate ?? '');
-                          setDatesTypedName('');
-                          setEditingDates(m);
-                        }}
-                      >
-                        تواريخ المراحل
-                      </button>
-                      )}
-                      <PrintRegistrationSheetButton municipalityId={m.id} className="mt-1 block" />
-                    </td>
-                    <td className="px-[18px] py-3 text-ink-soft">
-                      {m.securityAuthority?.name ?? <span className="text-ink-faint">— لا توجد —</span>}
-                    </td>
-                    <td className="px-[18px] py-3">
-                      {!canManage ? null : m.status === 'PREPARING' ? (
-                        <PillButton
-                          size="sm"
-                          disabled={!m.securityAuthority || statusMutation.isPending}
-                          title={m.securityAuthority ? undefined : 'أضف الجهة الأمنية أولًا'}
-                          onClick={() => statusMutation.mutate({ id: m.id, status: 'LIVE' })}
-                        >
-                          تفعيل
-                        </PillButton>
-                      ) : (
-                        <PillButton
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setError(null);
-                            setTypedName('');
-                            setConfirming(m);
-                          }}
-                        >
-                          إعادة إلى قيد الإعداد
-                        </PillButton>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="space-y-3 p-4 lg:p-[18px]">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="relative sm:col-span-2">
+              <label htmlFor="mu-search" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">بحث بالاسم أو الرمز</label>
+              <span className="pointer-events-none absolute bottom-0 start-3.5 flex h-[52px] items-center text-ink-faint lg:h-11">
+                <Icon d={ICONS.search} size={18} />
+              </span>
+              <input
+                id="mu-search"
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className={`${SELECT_CLASS} ps-11`}
+              />
+            </div>
+            <div>
+              <label htmlFor="mu-status" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">الحالة</label>
+              <select id="mu-status" value={status} onChange={(e) => setStatus(e.target.value)} className={SELECT_CLASS}>
+                <option value="">كل الحالات</option>
+                <option value="LIVE">مفعّلة</option>
+                <option value="PREPARING">قيد الإعداد</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="mu-archived" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">الأرشيف</label>
+              <select id="mu-archived" value={archived} onChange={(e) => setArchived(e.target.value)} className={SELECT_CLASS}>
+                <option value="">العاملة فقط</option>
+                <option value="only">المؤرشفة فقط</option>
+                <option value="include">العاملة والمؤرشفة</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {list.isError && (
+          <div className="m-4">
+            <Notice kind="error">تعذّر تحميل البلديات. تأكد من الاتصال ثم أعد المحاولة.</Notice>
           </div>
         )}
+        {list.isLoading && <p className="p-4 text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+        {list.data && rows.length === 0 && (
+          <div className="px-4 py-10 text-center">
+            <p className="text-[18px] font-extrabold text-ink lg:text-[15px]">
+              {q || status || archived ? 'لا توجد بلديات تطابق بحثك' : 'لا توجد بلديات بعد'}
+            </p>
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <>
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="w-full text-[14px]">
+                <caption className="sr-only">البلديات</caption>
+                <thead>
+                  <tr className="bg-surface-alt text-[12px] font-bold text-ink-soft">
+                    {sortHeader('name', 'البلدية')}
+                    <th scope="col" className="px-[18px] py-2.5 text-start">رمز البطاقات</th>
+                    {sortHeader('status', 'الحالة')}
+                    <th scope="col" className="px-[18px] py-2.5 text-start">المرحلة</th>
+                    {sortHeader('stations', 'المحطات')}
+                    {sortHeader('offices', 'مكاتب التسجيل')}
+                    <th scope="col" className="px-[18px] py-2.5 text-start">الجهة الأمنية</th>
+                    <th scope="col" className="px-[18px] py-2.5 text-start">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((m) => (
+                    <tr key={m.id} className="border-b border-surface-alt last:border-0 hover:bg-surface-alt/60" data-testid={`municipality-row-${m.id}`}>
+                      <td className="px-[18px] py-3 font-bold text-ink">
+                        <Link to={`/admin/municipalities/${m.id}`} className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                          {m.name}
+                        </Link>
+                      </td>
+                      <td className="px-[18px] py-3"><span dir="ltr" className="font-mono text-ink-soft">{m.code ?? '—'}</span></td>
+                      <td className="px-[18px] py-3">
+                        {m.archivedAt ? (
+                          <StatusPill variant="neutral" size="md">مؤرشفة</StatusPill>
+                        ) : (
+                          <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'} size="md">
+                            {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}
+                          </StatusPill>
+                        )}
+                      </td>
+                      <td className="px-[18px] py-3" data-testid={`municipality-stage-${m.id}`}>
+                        <StatusPill variant={m.stage === 'CARD_REQUIRED' ? 'ok' : 'neutral'} size="md">
+                          {STAGE_LABELS[m.stage ?? 'GRACE']}
+                        </StatusPill>
+                      </td>
+                      <td className="px-[18px] py-3 text-ink">{m.stationCount ?? 0}</td>
+                      <td className="px-[18px] py-3 text-ink">{m.officeCount ?? 0}</td>
+                      <td className="px-[18px] py-3 text-ink-soft">{m.securityAuthority?.name ?? '—'}</td>
+                      <td className="px-[18px] py-3">
+                        <Link to={`/admin/municipalities/${m.id}`} className="rounded-full bg-surface-alt px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:text-primary">
+                          فتح
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ul className="divide-y divide-surface-alt lg:hidden">
+              {rows.map((m) => (
+                <li key={m.id}>
+                  <Link to={`/admin/municipalities/${m.id}`} className="block min-h-[88px] px-4 py-4 hover:bg-surface-alt/60">
+                    <p className="text-[18px] font-extrabold text-ink">{m.name}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {m.archivedAt ? (
+                        <StatusPill variant="neutral" size="md">مؤرشفة</StatusPill>
+                      ) : (
+                        <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'} size="md">
+                          {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}
+                        </StatusPill>
+                      )}
+                      <StatusPill variant="neutral" size="md">{STAGE_LABELS[m.stage ?? 'GRACE']}</StatusPill>
+                    </div>
+                    <p className="mt-1 text-[15px] text-ink-soft">
+                      {m.stationCount ?? 0} محطة · {m.officeCount ?? 0} مكتب تسجيل
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </Card>
+
+      <Dialog
+        open={creating}
+        title="بلدية جديدة"
+        busy={create.isPending}
+        onClose={() => !create.isPending && setCreating(false)}
+        footer={
+          <>
+            <PillButton size="field" variant="secondary" disabled={create.isPending} onClick={() => setCreating(false)}>
+              رجوع
+            </PillButton>
+            <PillButton size="field" disabled={create.isPending} onClick={submit} data-testid="municipality-create-save">
+              {create.isPending ? 'جارٍ الإنشاء…' : 'إنشاء البلدية'}
+            </PillButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <TextField label="اسم البلدية" value={name} onChange={(e) => setName(e.target.value)} data-testid="municipality-create-name" />
+          <TextField
+            label="رمز البطاقات (اختياري)"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            hint="2 إلى 5 أحرف إنجليزية، مثل SBH؛ تبدأ به أرقام بطاقات هذه البلدية."
+            ltr
+            maxLength={5}
+          />
+          <Notice kind="info">
+            تُنشأ الجهة الأمنية للبلدية تلقائيًا باسم «مديرية أمن ‹اسم البلدية›» ويمكنك تعديل اسمها بعد ذلك. تبدأ البلدية «قيد الإعداد».
+          </Notice>
+          {problem && <Notice kind="error">{problem}</Notice>}
+        </div>
+      </Dialog>
     </div>
   );
 }

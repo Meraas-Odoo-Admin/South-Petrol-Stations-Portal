@@ -1,7 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Body } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SecurityAuthoritiesService } from './security-authorities.service';
-import { CreateSecurityAuthorityDto } from './dto/create-security-authority.dto';
 import { UpdateSecurityAuthorityDto } from './dto/update-security-authority.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -12,11 +11,8 @@ import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 export class SecurityAuthoritiesController {
   constructor(private readonly authorities: SecurityAuthoritiesService) {}
 
-  @RequirePermission('security_authorities:manage')
-  @Post()
-  create(@Body() dto: CreateSecurityAuthorityDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.authorities.create(dto, actor.id);
-  }
+  // Phase 5A: there is no create - a municipality gets its directorate
+  // automatically when it is created (MunicipalitiesService.create).
 
   @RequirePermission('security_authorities:read')
   @Get()

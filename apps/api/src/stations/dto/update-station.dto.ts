@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsOptionalLibyanMobile } from '../../common/validators/shared-field-checks';
+import { normalizePhoneValue } from '../../common/validators/phone-transform';
 import { FuelType, StationOwnershipType, StationStatus } from '@prisma/client';
 
 export class UpdateStationDto {
@@ -18,6 +21,13 @@ export class UpdateStationDto {
   @IsOptional()
   @IsString()
   routeId?: string;
+
+  // Phase 5A: the area or neighbourhood inside the municipality (list filter).
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  locality?: string;
 
   // No securityAuthorityId: a station's security authority is its
   // municipality's (one per municipality — OPEN_ITEMS.md #4, answered),
@@ -46,7 +56,9 @@ export class UpdateStationDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Transform(normalizePhoneValue)
   @IsString()
+  @IsOptionalLibyanMobile()
   supervisorPhone?: string;
 
   @ApiProperty({ required: false })
@@ -61,7 +73,9 @@ export class UpdateStationDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Transform(normalizePhoneValue)
   @IsString()
+  @IsOptionalLibyanMobile()
   operatorPhone?: string;
 
   // A full replace when supplied — StationsService.update deletes any

@@ -9,12 +9,24 @@ export function registrationErrorMessage(error: unknown): string {
     return 'تعذر الاتصال بالخادم. حاول مرة أخرى.';
   }
   const { status, data } = error.response;
+  // Field-level refusals from the shared rules come back as Arabic sentences
+  // (the same text the form shows live) - show them as they are.
+  if (status === 400 && Array.isArray(data?.message)) {
+    const arabic = data.message.filter((m) => typeof m === 'string' && /[؀-ۿ]/.test(m));
+    if (arabic.length > 0) return arabic.join(' ');
+  }
   const code = typeof data?.message === 'string' ? data.message : '';
   switch (code) {
     case 'REGISTRATION_STATION_NOT_ACTIVE':
       return 'مكتب التسجيل هذا مغلق حاليًا، ولا يمكن التسجيل فيه.';
     case 'MUNICIPALITY_NOT_LIVE':
       return 'بلدية مكتب التسجيل هذا لم تُفعَّل في المنظومة بعد، ولا يمكن التسجيل فيه.';
+    case 'INSTITUTION_DUPLICATE':
+      return 'هذه الجهة مسجّلة مسبقًا باسم مطابق — اخترها من القائمة بدل إنشائها من جديد.';
+    case 'REGISTRATION_STATION_ARCHIVED':
+      return 'مكتب التسجيل هذا مؤرشف، ولا يمكن التسجيل فيه.';
+    case 'MUNICIPALITY_ARCHIVED':
+      return 'بلدية هذا المكتب مؤرشفة، ولا يمكن التسجيل فيه.';
     case 'VEHICLE_DUPLICATE':
       return 'بعض بيانات المركبة مسجّلة مسبقًا لمركبة أخرى — راجع التنبيهات أسفل الحقول.';
   }

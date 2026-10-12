@@ -1,9 +1,11 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { CreateRegistrationStationDto } from './dto/create-registration-station.dto';
 import { UpdateRegistrationStationDto } from './dto/update-registration-station.dto';
+import { ListRegistrationStationsQueryDto } from './dto/list-registration-stations-query.dto';
 
 // Registration pivot, phase 2: police-station registration desks — the
 // only places a vehicle or owner is registered. Scope is enforced HERE, in
@@ -44,15 +46,24 @@ export class RegistrationStationsService {
     throw new Error('Could not generate a unique registration station internal code after 20 attempts.');
   }
 
-  private async assertMunicipalityExists(municipalityId: string) {
+  // Phase 5A: an office is created inside a municipality the caller is
+  // confined to (the super admin: any non-archived one).
+  private async assertMunicipalityExists(municipalityId: string, actorId: string) {
+    const scope = await this.rbac.getMunicipalityScope(actorId);
+    if (scope !== null && !scope.includes(municipalityId)) {
+      throw new ForbiddenException('You do not have access to this municipality.');
+    }
     const municipality = await this.prisma.municipality.findUnique({ where: { id: municipalityId } });
     if (!municipality) {
       throw new NotFoundException('Municipality not found.');
     }
+    if (municipality.archivedAt) {
+      throw new ConflictException('MUNICIPALITY_ARCHIVED');
+    }
   }
 
   async create(dto: CreateRegistrationStationDto, actorId: string) {
-    await this.assertMunicipalityExists(dto.municipalityId);
+    await this.assertMunicipalityExists(dto.municipalityId, actorId);
     const internalCode = await this.generateInternalCode();
 
     return this.prisma.$transaction(async (tx) => {
@@ -80,12 +91,41 @@ export class RegistrationStationsService {
     });
   }
 
-  async findAll(userId: string) {
+  // Phase 5A: archived offices leave the daily lists; a holder of
+  // registration_stations:manage reaches them under the "archived" filter.
+  async findAll(userId: string, query: ListRegistrationStationsQueryDto = {}) {
     const scope = await this.rbac.getRegistrationStationScope(userId);
+    const permissions = await this.rbac.getPermissionsForUser(userId);
+    const archived = permissions.has('registration_stations:manage') ? query.archived : undefined;
+    const and: Prisma.RegistrationStationWhereInput[] = [];
+    if (scope !== null) and.push({ id: { in: scope } });
+    and.push({ archivedAt: archived === 'only' ? { not: null } : archived === 'include' ? undefined : null });
+    if (query.municipalityId) and.push({ municipalityId: query.municipalityId });
+    if (query.status) and.push({ status: query.status });
+    if (query.locality?.trim()) and.push({ locality: { contains: query.locality.trim(), mode: 'insensitive' } });
+    if (query.q?.trim()) {
+      const q = query.q.trim();
+      and.push({
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { internalCode: { contains: q, mode: 'insensitive' } },
+          { address: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    const dir = query.dir ?? 'asc';
+    const orderBy: Prisma.RegistrationStationOrderByWithRelationInput[] =
+      query.sort === 'name'
+        ? [{ name: dir }, { internalCode: 'asc' }]
+        : query.sort === 'status'
+          ? [{ status: dir }, { internalCode: 'asc' }]
+          : query.sort === 'municipality'
+            ? [{ municipality: { name: dir } }, { internalCode: 'asc' }]
+            : [{ internalCode: dir }];
     return this.prisma.registrationStation.findMany({
-      where: scope !== null ? { id: { in: scope } } : undefined,
+      where: { AND: and },
       include: this.include,
-      orderBy: { internalCode: 'asc' },
+      orderBy,
     });
   }
 
@@ -103,8 +143,11 @@ export class RegistrationStationsService {
 
   async update(id: string, dto: UpdateRegistrationStationDto, actorId: string) {
     const before = await this.findOne(id, actorId);
+    if (before.archivedAt) {
+      throw new ConflictException('REGISTRATION_STATION_ARCHIVED');
+    }
     if (dto.municipalityId && dto.municipalityId !== before.municipalityId) {
-      await this.assertMunicipalityExists(dto.municipalityId);
+      await this.assertMunicipalityExists(dto.municipalityId, actorId);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -124,13 +167,95 @@ export class RegistrationStationsService {
     });
   }
 
+  // The office's own page: audit entries about it, and its recent output.
+  async activity(id: string, userId: string) {
+    await this.findOne(id, userId);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [rows, vehicles, cards] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { entityType: 'RegistrationStation', entityId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        include: { user: { select: { fullName: true } } },
+      }),
+      this.prisma.vehicle.count({ where: { registeredAtRegistrationStationId: id, createdAt: { gte: since } } }),
+      this.prisma.vehicleCard.count({ where: { registrationStationId: id, issuedAt: { gte: since } } }),
+    ]);
+    return {
+      vehiclesLast30Days: vehicles,
+      cardsLast30Days: cards,
+      items: rows.map((r) => ({
+        id: r.id,
+        action: r.action,
+        createdAt: r.createdAt,
+        actorName: r.user?.fullName ?? null,
+        reason: typeof (r.newValue as { reason?: unknown } | null)?.reason === 'string' ? (r.newValue as { reason: string }).reason : null,
+      })),
+    };
+  }
+
+  // "Delete" means archive: the office leaves the daily screens and takes no
+  // new registrations, while every vehicle, card and audit row stays.
+  async archive(id: string, reason: string, actorId: string) {
+    const before = await this.findOne(id, actorId);
+    if (before.archivedAt) {
+      throw new ConflictException('ALREADY_ARCHIVED');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.registrationStation.update({
+        where: { id },
+        data: { archivedAt: new Date(), archivedById: actorId },
+        include: this.include,
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'ARCHIVE',
+          entityType: 'RegistrationStation',
+          entityId: id,
+          newValue: { internalCode: station.internalCode, reason },
+        },
+        tx,
+      );
+      return station;
+    });
+  }
+
+  async restore(id: string, reason: string, actorId: string) {
+    const before = await this.findOne(id, actorId);
+    if (!before.archivedAt) {
+      throw new ConflictException('NOT_ARCHIVED');
+    }
+    if (before.municipality && (await this.prisma.municipality.findUnique({ where: { id: before.municipalityId } }))?.archivedAt) {
+      throw new ConflictException('MUNICIPALITY_ARCHIVED');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.registrationStation.update({
+        where: { id },
+        data: { archivedAt: null, archivedById: null },
+        include: this.include,
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'RESTORE',
+          entityType: 'RegistrationStation',
+          entityId: id,
+          newValue: { internalCode: station.internalCode, reason },
+        },
+        tx,
+      );
+      return station;
+    });
+  }
+
   // The registration stations a driver can actually go to right now, in one
   // municipality: status ACTIVE, in a LIVE municipality. Used by the pump's
   // refusal and awareness messages and by the posted A4 sheet, always read
   // live — a station that opens or closes is right on the next call.
   async listActiveForMunicipality(municipalityId: string) {
     return this.prisma.registrationStation.findMany({
-      where: { municipalityId, status: 'ACTIVE', municipality: { status: 'LIVE' } },
+      where: { municipalityId, status: 'ACTIVE', archivedAt: null, municipality: { status: 'LIVE', archivedAt: null } },
       select: { id: true, name: true, address: true, workingHours: true, contactPhone: true },
       orderBy: { name: 'asc' },
     });
@@ -150,10 +275,16 @@ export class RegistrationStationsService {
     }
     const station = await this.prisma.registrationStation.findUnique({
       where: { id: registrationStationId },
-      select: { id: true, status: true, municipality: { select: { status: true } } },
+      select: { id: true, status: true, archivedAt: true, municipality: { select: { status: true, archivedAt: true } } },
     });
     if (!station) {
       throw new NotFoundException('Registration station not found.');
+    }
+    if (station.archivedAt) {
+      throw new ConflictException('REGISTRATION_STATION_ARCHIVED');
+    }
+    if (station.municipality.archivedAt) {
+      throw new ConflictException('MUNICIPALITY_ARCHIVED');
     }
     if (station.status !== 'ACTIVE') {
       throw new ConflictException('REGISTRATION_STATION_NOT_ACTIVE');

@@ -19,8 +19,12 @@ type Tx = Prisma.TransactionClient;
 // The card's "make, model, colour" line, from the vehicle as it is now.
 // Stored on the card as printedVehicleLine; a card whose line (or plate)
 // no longer matches its vehicle "needs reissue".
-export function vehicleLineOf(vehicle: { model: string | null; color: string | null }): string {
-  return [vehicle.model?.trim(), vehicle.color?.trim()].filter(Boolean).join(' — ');
+export function vehicleLineOf(vehicle: { make?: string | null; model: string | null; color: string | null }): string {
+  // Phase 5A: "make model — colour". Vehicles registered before the make/model
+  // split carry the manufacturer in `make` and no model, so their line reads
+  // exactly as it was printed.
+  const name = [vehicle.make?.trim(), vehicle.model?.trim()].filter(Boolean).join(' ');
+  return [name, vehicle.color?.trim()].filter(Boolean).join(' — ');
 }
 
 // The card's issue date as printed: the calendar day in Libya.
@@ -47,7 +51,9 @@ const CARD_INCLUDE = {
   cancelledBy: { select: { id: true, fullName: true } },
 } as const;
 
-type CardWithVehicle = VehicleCard & { vehicle: { currentPlate: string; model: string | null; color: string | null } };
+type CardWithVehicle = VehicleCard & {
+  vehicle: { currentPlate: string; make: string | null; model: string | null; color: string | null };
+};
 
 // Registration pivot, phase 3 (plan §6): the printed vehicle card.
 //  - Only registration roles, at a registration station they're scoped to
@@ -86,7 +92,7 @@ export class CardsService {
     }
     const cards = await this.prisma.vehicleCard.findMany({
       where: { vehicleId },
-      include: { ...CARD_INCLUDE, vehicle: { select: { currentPlate: true, model: true, color: true } } },
+      include: { ...CARD_INCLUDE, vehicle: { select: { currentPlate: true, make: true, model: true, color: true } } },
       orderBy: { issuedAt: 'desc' },
     });
     return cards.map((card) => this.present(card));
@@ -95,7 +101,7 @@ export class CardsService {
   private async findCard(id: string) {
     const card = await this.prisma.vehicleCard.findUnique({
       where: { id },
-      include: { ...CARD_INCLUDE, vehicle: { select: { currentPlate: true, model: true, color: true } } },
+      include: { ...CARD_INCLUDE, vehicle: { select: { currentPlate: true, make: true, model: true, color: true } } },
     });
     if (!card) {
       throw new NotFoundException('Card not found.');
@@ -436,8 +442,10 @@ export class CardsService {
             id: true,
             internalCode: true,
             currentPlate: true,
+            make: true,
             model: true,
             color: true,
+            fuelType: true,
             vehicleType: { select: { name: true } },
           },
         },

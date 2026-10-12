@@ -56,7 +56,9 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
   test.setTimeout(240_000);
-  const adminToken = await apiLogin(fixtures.adminUsername, fixtures.adminPassword);
+  // Phase 5A: a municipality manager makes supervisors and office managers, never
+  // employees - so the fixture people are made by the super admin.
+  const adminToken = await apiLogin('sysadmin1', fixtures.sysadminPassword);
   const headers = { Authorization: `Bearer ${adminToken}` };
   const jobs = await api.get<Array<{ id: string; name: string }>>(`${API_BASE}/roles`, { headers });
   const employeeJob = jobs.data.find((j) => j.name === 'station_employee');
@@ -91,15 +93,15 @@ test.beforeAll(async () => {
       password: fixtures.supervisorPassword,
       routes: ['/fillups/new', '/vehicles', '/stations'],
       mustSee: ['/fillups/new', '/vehicles'],
-      mustNotSee: ['/admin', '/staff', '/registration', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
+      mustNotSee: ['/admin', '/manage', '/my-station', '/registration', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
     },
     {
       key: 'station supervisor',
       username: fixtures.supervisorUsername,
       password: fixtures.supervisorPassword,
-      routes: ['/reports/violations', '/reports/daily', '/reports/readiness', '/staff', '/staff/new', '/fillups/new', '/vehicles'],
-      mustSee: ['/staff', '/reports/violations', '/reports/readiness'],
-      mustNotSee: ['/admin', '/registration', '/reports/card-stock', '/reports/registration'],
+      routes: ['/reports/violations', '/reports/daily', '/reports/readiness', '/my-station', '/people/new', '/fillups/new', '/vehicles'],
+      mustSee: ['/my-station', '/reports/violations', '/reports/readiness'],
+      mustNotSee: ['/admin', '/manage', '/registration', '/reports/card-stock', '/reports/registration'],
     },
     {
       key: 'registration employee',
@@ -107,7 +109,7 @@ test.beforeAll(async () => {
       password: fixtures.registrarPassword,
       routes: ['/registration', '/vehicles'],
       mustSee: ['/registration', '/vehicles'],
-      mustNotSee: ['/admin', '/staff', '/fillups/new', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
+      mustNotSee: ['/admin', '/manage', '/my-station', '/fillups/new', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
     },
     {
       key: 'directorate admin',
@@ -120,17 +122,12 @@ test.beforeAll(async () => {
         '/reports/card-stock',
         '/reports/readiness',
         '/vehicles/change-requests',
-        '/admin/users',
-        '/admin/users/new',
-        '/admin/municipalities',
-        '/admin/settings',
-        '/admin/registration-stations',
-        '/admin/security-authorities',
-        '/admin/audit-log',
-        '/stations',
+        '/manage',
+        '/manage/stations/new',
+        '/manage/offices/new',
       ],
-      mustSee: ['/admin', '/reports/dashboard', '/reports/registration', '/reports/card-stock', '/reports/readiness'],
-      mustNotSee: ['/staff'],
+      mustSee: ['/manage', '/reports/dashboard', '/reports/registration', '/reports/card-stock', '/reports/readiness'],
+      mustNotSee: ['/admin', '/my-station'],
     },
   ];
 });
@@ -281,11 +278,12 @@ test('for every kind of user: one-line equal-width bottom bar, menu = home cards
 test('the one-time temporary password stays on one line at every phone width', async ({ browser }) => {
   test.setTimeout(240_000);
   const { context, page } = await phonePage(browser, 390);
-  await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
-  await navigateInApp(page, '/admin/users/new');
+  // Phase 5A: a station supervisor makes their own employees (the one job
+  // they can give is fixed, so it is not asked).
+  await loginAs(page, fixtures.supervisorUsername, fixtures.supervisorPassword);
+  await navigateInApp(page, '/people/new');
   await page.getByLabel('الاسم الكامل').fill('موظف الهاتف');
   await page.getByLabel('اسم المستخدم').fill(`pw_phone_${fixtures.runId}`);
-  await page.locator('label', { hasText: 'موظف محطة' }).first().click();
   await page.getByRole('searchbox').last().fill(fixtures.stationInternalCode);
   await page.locator('button[aria-pressed]').first().click();
   await page.getByRole('button', { name: 'إنشاء الحساب' }).click();

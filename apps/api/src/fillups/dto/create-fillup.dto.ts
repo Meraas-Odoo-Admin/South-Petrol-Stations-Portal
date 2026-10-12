@@ -12,6 +12,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { FuelType } from '@prisma/client';
+import { MAX_FILLUP_LITERS } from '@fuel-tracking/shared-types';
 
 export class CreateFillUpDto {
   // Phase 4a: how the vehicle is identified. At least one of vehicleId,
@@ -45,10 +46,12 @@ export class CreateFillUpDto {
 
   // Sanity ceiling, not a client-specified limit — adjust freely if a real
   // tank/dispense volume ever plausibly exceeds this.
+  // Positive, and below the ceiling no real tank reaches (MAX_FILLUP_LITERS
+  // in the shared rules - the pump form checks the same number).
   @ApiProperty()
   @IsNumber()
-  @IsPositive()
-  @Max(1000)
+  @IsPositive({ message: 'الكمية يجب أن تكون رقمًا أكبر من صفر.' })
+  @Max(MAX_FILLUP_LITERS, { message: `الكمية كبيرة جدًا — الحد الأقصى ${MAX_FILLUP_LITERS} لترًا في التعبئة الواحدة.` })
   quantityLiters!: number;
 
   // Defaults to server "now" if omitted — see the M3 report for reasoning.

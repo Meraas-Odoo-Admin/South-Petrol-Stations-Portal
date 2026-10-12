@@ -1,3 +1,4 @@
+import { normalizeBooklet, normalizeChassis } from '@fuel-tracking/shared-types';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsString, MinLength } from 'class-validator';
@@ -14,13 +15,14 @@ export class DuplicateCheckQueryDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeChassis(value) : value))
   @IsString()
   @MinLength(1)
   chassisNumber?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeBooklet(value) : value))
   @IsString()
   @MinLength(1)
   registrationBooklet?: string;

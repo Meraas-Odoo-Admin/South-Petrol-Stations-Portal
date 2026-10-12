@@ -11,7 +11,6 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 // that shortcut deliberately rather than just inherit it.
 export enum OwnerIdentityStatusFilter {
   VERIFIED = 'VERIFIED', // owner set, identityType is NATIONAL_ID or ADMINISTRATIVE_ID
-  PROVISIONAL = 'PROVISIONAL', // owner set, identityType is DRIVERS_LICENSE (round 11 item 1)
   MISSING = 'MISSING', // no owner at all — only possible on vehicles created before item 1's ownerId requirement
 }
 
@@ -60,7 +59,7 @@ export class FindVehiclesQueryDto extends PaginationQueryDto {
   @IsEnum(VehicleUsageType)
   usageType?: VehicleUsageType;
 
-  @ApiProperty({ required: false, description: 'Exact match on Vehicle.model — the brand/manufacturer field.' })
+  @ApiProperty({ required: false, description: 'Exact match on Vehicle.make — the manufacturer field.' })
   @IsOptional()
   @IsString()
   brand?: string;

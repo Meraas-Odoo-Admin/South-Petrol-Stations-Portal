@@ -1,83 +1,80 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { checkArabicPersonName, checkInstitutionName, checkLibyanMobile } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
-import { restrictToPhoneNumber, LIBYAN_MOBILE_REGEX } from '../../lib/libyanFormats';
+import { TextField } from '../../components/design/TextField';
+import { restrictToPhoneNumber } from '../../lib/libyanFormats';
 
 interface OwnerEditFormProps {
   ownerId: string;
   fullName: string;
   phone: string | null;
+  isInstitution?: boolean;
   onDone: () => void;
 }
 
 // Round 20: fullName/phone are typo-fix territory, not quota/fill-status
-// data — UpdateOwnerDto already accepts them with no approval gate
-// (identityType/identityNumber are the ones deliberately excluded from it,
-// see that DTO's own comment — OwnerIdentityChangeRequestForm is the
-// approval-gated side-channel for those). Mirrors VehicleEditForm.tsx's
-// save-immediately pattern for the vehicle's own non-rule-affecting fields.
-export function OwnerEditForm({ ownerId, fullName, phone, onDone }: OwnerEditFormProps) {
+// data — UpdateOwnerDto accepts them with no approval gate
+// (identityType/identityNumber are the ones deliberately excluded, see
+// OwnerIdentityChangeRequestForm for the approval-gated side-channel).
+// Phase 5A: the name and the phone follow the same shared rules as at
+// registration - an Arabic person name (or an institution's name) and a
+// Libyan mobile number.
+export function OwnerEditForm({ ownerId, fullName, phone, isInstitution = false, onDone }: OwnerEditFormProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(fullName);
   const [phoneValue, setPhoneValue] = useState(phone ?? '');
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
+  const [failed, setFailed] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      apiClient.patch(`/owners/${ownerId}`, {
+    mutationFn: () => {
+      const checked = checkLibyanMobile(phoneValue);
+      return apiClient.patch(`/owners/${ownerId}`, {
         fullName: name.trim(),
-        phone: phoneValue.trim() || undefined,
-      }),
+        phone: checked.ok && checked.value ? checked.value : undefined,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       onDone();
     },
-    onError: () => setError('تعذر حفظ التعديلات.'),
+    onError: () => setFailed(true),
   });
 
-  const inputClass =
-    'h-10 w-56 rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+  function save() {
+    setFailed(false);
+    const found: { name?: string; phone?: string } = {};
+    const n = isInstitution ? checkInstitutionName(name) : checkArabicPersonName(name, 'اسم المالك');
+    if (!n.ok) found.name = n.message;
+    const p = checkLibyanMobile(phoneValue);
+    if (!p.ok) found.phone = p.message;
+    setErrors(found);
+    if (!found.name && !found.phone) mutation.mutate();
+  }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">اسم المالك</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">رقم الهاتف</label>
-        <input
-          value={phoneValue}
-          onChange={(e) => setPhoneValue(restrictToPhoneNumber(e.target.value))}
-          dir="ltr"
-          placeholder="0912345678"
-          className={inputClass}
-        />
-      </div>
-      <p className="text-[11px] text-ink-faint">
+    <div className="space-y-4">
+      <TextField label={isInstitution ? 'اسم الجهة' : 'اسم المالك'} value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
+      <TextField
+        label="رقم الهاتف"
+        value={phoneValue}
+        onChange={(e) => setPhoneValue(restrictToPhoneNumber(e.target.value))}
+        error={errors.phone}
+        placeholder="0912345678"
+        inputMode="tel"
+        ltr
+      />
+      <p className="text-[14px] text-ink-soft lg:text-[12px]">
         لتصحيح رقم الهوية أو نوعها، استخدم زر «طلب تصحيح الهوية» أدناه — يتطلب اعتمادًا.
       </p>
-      {error && <p className="text-[12px] text-danger">{error}</p>}
+      {failed && <p role="alert" className="text-[14px] font-medium text-danger-dark lg:text-[12px]">تعذر حفظ التعديلات. حاول مرة أخرى.</p>}
       <div className="flex gap-2 pt-1">
-        <PillButton
-          onClick={() => {
-            setError(null);
-            if (!name.trim()) {
-              setError('اسم المالك مطلوب.');
-              return;
-            }
-            if (phoneValue.trim() && !LIBYAN_MOBILE_REGEX.test(phoneValue.trim())) {
-              setError('رقم الهاتف غير صحيح (مثال: 0912345678).');
-              return;
-            }
-            mutation.mutate();
-          }}
-          disabled={mutation.isPending}
-        >
-          {mutation.isPending ? '...جارٍ الحفظ' : 'حفظ'}
+        <PillButton size="field" onClick={save} disabled={mutation.isPending}>
+          {mutation.isPending ? 'جارٍ الحفظ…' : 'حفظ'}
         </PillButton>
-        <PillButton variant="ghost" onClick={onDone}>
+        <PillButton size="field" variant="ghost" onClick={onDone}>
           إلغاء
         </PillButton>
       </div>

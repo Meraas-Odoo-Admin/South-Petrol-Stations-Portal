@@ -18,13 +18,13 @@ export class RegistrationDesksController {
     return this.desks.list(id, user.id);
   }
 
-  @RequirePermission('registration_stations:manage')
+  @RequirePermission('registration_desks:manage')
   @Post('registration-stations/:id/desks')
   create(@Param('id') id: string, @Body() dto: CreateRegistrationDeskDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.desks.create(id, dto, actor.id);
   }
 
-  @RequirePermission('registration_stations:manage')
+  @RequirePermission('registration_desks:manage')
   @Patch('registration-desks/:id')
   update(@Param('id') id: string, @Body() dto: UpdateRegistrationDeskDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.desks.update(id, dto, actor.id);

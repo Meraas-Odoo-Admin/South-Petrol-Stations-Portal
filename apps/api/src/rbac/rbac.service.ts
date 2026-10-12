@@ -4,6 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 interface CacheEntry {
   permissions: Set<string>;
   unrestrictedStationAccess: boolean;
+  // Phase 5A: at least one of the user's roles is confined to the
+  // municipalities in UserMunicipalityScope.
+  municipalityScoped: boolean;
   isActive: boolean;
   mustChangePassword: boolean;
   expiresAt: number;
@@ -53,10 +56,14 @@ export class RbacService {
 
     const permissions = new Set<string>();
     let unrestrictedStationAccess = false;
+    let municipalityScoped = false;
     if (user) {
       for (const userRole of user.roles) {
         if (userRole.role.unrestrictedStationAccess) {
           unrestrictedStationAccess = true;
+        }
+        if (userRole.role.municipalityScoped) {
+          municipalityScoped = true;
         }
         for (const rolePermission of userRole.role.permissions) {
           permissions.add(rolePermission.permission.key);
@@ -72,6 +79,7 @@ export class RbacService {
     const entry: CacheEntry = {
       permissions,
       unrestrictedStationAccess,
+      municipalityScoped,
       isActive: user?.isActive ?? false,
       mustChangePassword: user?.mustChangePassword ?? true,
       expiresAt: Date.now() + CACHE_TTL_MS,
@@ -105,12 +113,37 @@ export class RbacService {
     this.cache.delete(userId);
   }
 
+  // The municipalities this user is confined to (UserMunicipalityScope), for
+  // a role marked municipalityScoped. null = unrestricted (the super admin);
+  // [] = none, never "all" - a municipality manager with no municipality
+  // assigned sees and changes nothing.
+  async getMunicipalityScope(userId: string): Promise<string[] | null> {
+    const info = await this.loadUserRbacInfo(userId);
+    if (info.unrestrictedStationAccess) {
+      return null;
+    }
+    if (!info.municipalityScoped) {
+      return [];
+    }
+    const rows = await this.prisma.userMunicipalityScope.findMany({
+      where: { userId },
+      select: { municipalityId: true },
+    });
+    return rows.map((r) => r.municipalityId);
+  }
+
   // "Sees every station" is an explicit, admin-managed flag on Role
-  // (unrestrictedStationAccess) — NEVER inferred from an empty
+  // (unrestrictedStationAccess) - NEVER inferred from an empty
   // UserStationScope list. A scoped role with zero assigned stations must
   // see NOTHING, not everything: returns [] (not null) in that case.
   // Returns null only when the user holds a role with
   // unrestrictedStationAccess: true.
+  //
+  // Phase 5A: a municipality manager's scope is every station in their
+  // municipality (plus any explicit rows), expanded here - so every service
+  // that already intersects its queries with this list is municipality-bound
+  // without knowing municipalities exist. Archived stations stay in the list
+  // (a manager restores them); recording at one is refused elsewhere.
   async getStationScope(userId: string): Promise<string[] | null> {
     const info = await this.loadUserRbacInfo(userId);
     if (info.unrestrictedStationAccess) {
@@ -121,14 +154,20 @@ export class RbacService {
       where: { userId },
       select: { stationId: true },
     });
-    return scopes.map((s) => s.stationId);
+    const ids = new Set(scopes.map((s) => s.stationId));
+    if (info.municipalityScoped) {
+      const inMunicipalities = await this.prisma.station.findMany({
+        where: { municipality: { userScopes: { some: { userId } } } },
+        select: { id: true },
+      });
+      for (const station of inMunicipalities) ids.add(station.id);
+    }
+    return [...ids];
   }
 
   // Registration pivot, phase 2: the same contract as getStationScope, for
-  // registration stations (UserRegistrationStationScope). The same
-  // unrestrictedStationAccess flag covers both — the admin roles that see
-  // every petrol station also see every registration station. [] means
-  // none, never all.
+  // registration stations (UserRegistrationStationScope). Phase 5A: expanded
+  // by the municipality scope the same way. [] means none, never all.
   async getRegistrationStationScope(userId: string): Promise<string[] | null> {
     const info = await this.loadUserRbacInfo(userId);
     if (info.unrestrictedStationAccess) {
@@ -139,6 +178,39 @@ export class RbacService {
       where: { userId },
       select: { registrationStationId: true },
     });
-    return scopes.map((s) => s.registrationStationId);
+    const ids = new Set(scopes.map((s) => s.registrationStationId));
+    if (info.municipalityScoped) {
+      const inMunicipalities = await this.prisma.registrationStation.findMany({
+        where: { municipality: { userScopes: { some: { userId } } } },
+        select: { id: true },
+      });
+      for (const station of inMunicipalities) ids.add(station.id);
+    }
+    return [...ids];
+  }
+
+  // The municipalities this user may READ: their municipality scope plus the
+  // municipalities of the stations and offices they work at. null = all.
+  async getVisibleMunicipalityIds(userId: string): Promise<string[] | null> {
+    const info = await this.loadUserRbacInfo(userId);
+    if (info.unrestrictedStationAccess) {
+      return null;
+    }
+    const [own, stations, offices] = await Promise.all([
+      this.prisma.userMunicipalityScope.findMany({ where: { userId }, select: { municipalityId: true } }),
+      this.prisma.station.findMany({
+        where: { userScopes: { some: { userId } }, municipalityId: { not: null } },
+        select: { municipalityId: true },
+      }),
+      this.prisma.registrationStation.findMany({
+        where: { userScopes: { some: { userId } } },
+        select: { municipalityId: true },
+      }),
+    ]);
+    const ids = new Set<string>();
+    if (info.municipalityScoped) for (const row of own) ids.add(row.municipalityId);
+    for (const row of stations) if (row.municipalityId) ids.add(row.municipalityId);
+    for (const row of offices) ids.add(row.municipalityId);
+    return [...ids];
   }
 }

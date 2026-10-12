@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { VEHICLE_FUEL_TYPES } from '@fuel-tracking/shared-types';
+import { IsMakeOrModel, IsManufactureYearValue, IsVehicleColor } from '../../common/validators/shared-field-checks';
 
 // internalCode, currentPlate, chassisNumber, and registrationBooklet are
 // deliberately absent — internalCode is the permanent identity (never
@@ -18,8 +21,9 @@ import { IsInt, IsOptional, IsString } from 'class-validator';
 // isn't wired into the engine yet. Both now go through
 // POST /vehicles/:id/change-requests (VehicleChangeType.OWNER_CHANGE /
 // USAGE_TYPE_CHANGE) instead of this direct-PATCH path. Everything left
-// here (vehicleTypeId, model, color, manufactureYear) is cosmetic — it
-// doesn't feed the rule engine at all, so it saves immediately.
+// here (make, model, colour, manufacturing year, fuel type) is cosmetic —
+// it doesn't feed the rule engine at all, so it saves immediately. The
+// same shared rules as at registration apply.
 export class UpdateVehicleDto {
   @ApiProperty({ required: false, description: 'VehicleType lookup row id — see GET /vehicle-types.' })
   @IsOptional()
@@ -29,15 +33,29 @@ export class UpdateVehicleDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @IsMakeOrModel('الصانع')
+  make?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @IsMakeOrModel('الطراز')
   model?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @IsVehicleColor()
   color?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsInt()
+  @Transform(({ value }) => (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value))
+  @IsManufactureYearValue()
   manufactureYear?: number;
+
+  @ApiProperty({ required: false, enum: VEHICLE_FUEL_TYPES })
+  @IsOptional()
+  @IsIn(VEHICLE_FUEL_TYPES, { message: 'نوع وقود المركبة: بنزين أو ديزل.' })
+  fuelType?: (typeof VEHICLE_FUEL_TYPES)[number];
 }

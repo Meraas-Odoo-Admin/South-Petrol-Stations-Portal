@@ -94,7 +94,7 @@ describe('Vehicle cards (e2e)', () => {
     const registrarRole = await role('e2e_vc_registrar', 'REGISTRATION', ['cards:read', 'cards:issue', 'registration_stations:read']);
     const supervisorRole = await role('e2e_vc_supervisor', 'REGISTRATION', ['cards:read', 'cards:issue', 'cards:cancel', 'registration_stations:read']);
     const pumpRole = await role('e2e_vc_pump', 'PETROL_STATION', ['cards:scan', 'fillups:create']);
-    const adminRole = await role('e2e_vc_admin', null, ['registration_stations:read', 'registration_stations:manage'], true);
+    const adminRole = await role('e2e_vc_admin', null, ['registration_stations:read', 'registration_stations:manage', 'registration_desks:manage'], true);
 
     const user = async (key: keyof typeof usernames, roleId: string) => {
       const u = await prisma.user.create({

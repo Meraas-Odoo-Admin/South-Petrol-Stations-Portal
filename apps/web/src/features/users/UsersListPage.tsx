@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../lib/apiClient';
+import { adminErrorMessage } from '../admin/adminErrors';
+import { TextAreaField } from '../../components/design/TextField';
 import { useAuth } from '../auth/AuthProvider';
 import { Card, CardHeader } from '../../components/design/Card';
 import { PageHeader } from '../../components/design/PageHeader';
@@ -26,13 +30,15 @@ const STATUS_OPTIONS = [
   { value: 'deactivated', label: 'موقوف' },
   { value: 'locked', label: 'مقفل' },
   { value: 'must_change', label: 'يجب تغيير كلمة المرور' },
+  { value: 'archived', label: 'مؤرشف' },
 ];
+
 
 const SELECT_CLASS =
   'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 function whereText(item: UserListItem): string {
-  if (item.sees === 'ALL') return 'كل المحطات والمكاتب';
+  if (item.sees === 'ALL') return 'كل البلديات والمحطات والمكاتب';
   if (item.placeCount === 0) return 'لم يُحدَّد مكان عمل';
   const extra = item.placeCount - item.placeNames.length;
   return item.placeNames.join('، ') + (extra > 0 ? ` +${extra}` : '');
@@ -41,18 +47,55 @@ function whereText(item: UserListItem): string {
 // The accounts list. The same screen serves admins (at /admin/users) and
 // supervisors (at /staff); what each sees and may do is decided by the
 // server, so a supervisor's list simply holds their own employees.
-export function UsersListPage({ basePath, standalone = false }: { basePath: string; standalone?: boolean }) {
+//
+// Phase 5A: the list lives INSIDE a station, an office or a municipality:
+// `fixedPlaceId` narrows it to that place (and hides the place filters), and
+// `createParams` carry the presets of the create page (job kind, the place).
+export function UsersListPage({
+  basePath,
+  standalone = false,
+  fixedPlaceId,
+  createParams,
+  title = 'الحسابات',
+  emptyText,
+}: {
+  basePath: string;
+  standalone?: boolean;
+  fixedPlaceId?: string;
+  createParams?: Record<string, string>;
+  title?: string;
+  emptyText?: string;
+}) {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const isAdminView = hasPermission('users:manage');
+  const isAdminView = hasPermission('users:manage') && !fixedPlaceId;
+  const here = `${location.pathname}${location.search}`;
+  const [rowAction, setRowAction] = useState<{ user: UserListItem; kind: 'archive' | 'restore' } | null>(null);
+  const [rowReason, setRowReason] = useState('');
+  const [rowError, setRowError] = useState<string | null>(null);
+  const rowMutation = useMutation({
+    mutationFn: async () =>
+      apiClient.post(`/users/${rowAction!.user.id}/${rowAction!.kind}`, { reason: rowReason.trim() }),
+    onSuccess: () => {
+      setRowAction(null);
+      setRowReason('');
+      setRowError(null);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (e) => setRowError(adminErrorMessage(e, 'تعذّر تنفيذ الإجراء. حاول مجددًا.')),
+  });
 
   const filters = {
     q: params.get('q') ?? '',
     side: params.get('side') ?? '',
     roleId: params.get('roleId') ?? '',
-    placeId: params.get('placeId') ?? '',
+    placeId: fixedPlaceId ?? params.get('placeId') ?? '',
     status: params.get('status') ?? '',
+    sort: params.get('sort') ?? '',
+    dir: params.get('dir') ?? '',
     skip: Number(params.get('skip') ?? '0') || 0,
   };
 
@@ -64,7 +107,7 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
     return () => clearTimeout(timer);
   }, [search]);
 
-  function update(change: Partial<Record<'q' | 'side' | 'roleId' | 'placeId' | 'status' | 'skip', string>>) {
+  function update(change: Partial<Record<'q' | 'side' | 'roleId' | 'placeId' | 'status' | 'sort' | 'dir' | 'skip', string>>) {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(change)) {
       if (value) next.set(key, value);
@@ -81,13 +124,19 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
   const places = usePlaceOptions(isAdminView && (placeDialog || filters.placeId) ? 'ALL' : null);
   const placeName = places.options.find((o) => o.id === filters.placeId)?.name;
 
-  const activeFilterCount = [filters.side, filters.roleId, filters.placeId, filters.status].filter(Boolean).length;
+  const activeFilterCount = [filters.side, filters.roleId, fixedPlaceId ? '' : filters.placeId, filters.status].filter(Boolean).length;
+  function sortBy(key: string) {
+    if (filters.sort === key) update({ sort: key, dir: filters.dir === 'desc' ? 'asc' : 'desc' });
+    else update({ sort: key, dir: 'asc' });
+  }
   const anyFilter = activeFilterCount > 0 || filters.q !== '';
   const jobOptions = useMemo(() => options.data?.jobs ?? [], [options.data]);
 
   const items = list.data?.items ?? [];
   const total = list.data?.total ?? 0;
-  const createPath = `${basePath}/new`;
+  const createQuery = new URLSearchParams({ ...(createParams ?? {}), back: here });
+  const createPath = `${basePath}/new?${createQuery.toString()}`;
+  const personLink = (id: string) => `${basePath}/${id}?back=${encodeURIComponent(here)}`;
 
   const createButton = (
     <PillButton size="field" onClick={() => navigate(createPath)}>
@@ -226,7 +275,7 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
       {!list.isLoading && !list.isError && items.length === 0 && (
         <div className="px-4 py-10 text-center lg:px-[18px]">
           <p className="text-[18px] font-extrabold text-ink lg:text-[15px]">
-            {anyFilter ? 'لا توجد حسابات تطابق بحثك' : isAdminView ? 'لا توجد حسابات بعد' : 'لا يوجد موظفون في محطتك أو مكتبك بعد'}
+            {anyFilter ? 'لا توجد حسابات تطابق بحثك' : (emptyText ?? (isAdminView ? 'لا توجد حسابات بعد' : 'لا يوجد أشخاص هنا بعد'))}
           </p>
           <p className="mx-auto mt-1 max-w-sm text-[15px] text-ink-soft lg:text-[13px]">
             {anyFilter ? 'غيّر كلمات البحث أو امسح التصفية.' : 'أنشئ أول حساب وسيظهر هنا.'}
@@ -258,22 +307,31 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
               <caption className="sr-only">قائمة الحسابات</caption>
               <thead>
                 <tr className="bg-surface-alt text-[12px] font-bold text-ink-soft">
-                  <th scope="col" className="px-[18px] py-2.5 text-start">الاسم</th>
+                  <th scope="col" aria-sort={filters.sort === 'name' || !filters.sort ? (filters.dir === 'desc' ? 'descending' : 'ascending') : 'none'} className="px-[18px] py-2.5 text-start">
+                    <button type="button" onClick={() => sortBy('name')} className="font-bold hover:text-primary">
+                      الاسم {(filters.sort === 'name' || !filters.sort) && (filters.dir === 'desc' ? '▼' : '▲')}
+                    </button>
+                  </th>
                   <th scope="col" className="px-[18px] py-2.5 text-start">الوظيفة</th>
                   <th scope="col" className="px-[18px] py-2.5 text-start">مكان العمل</th>
                   <th scope="col" className="px-[18px] py-2.5 text-start">الحالة</th>
-                  <th scope="col" className="px-[18px] py-2.5 text-start">آخر دخول</th>
+                  <th scope="col" aria-sort={filters.sort === 'lastLogin' ? (filters.dir === 'desc' ? 'descending' : 'ascending') : 'none'} className="px-[18px] py-2.5 text-start">
+                    <button type="button" onClick={() => sortBy('lastLogin')} className="font-bold hover:text-primary">
+                      آخر دخول {filters.sort === 'lastLogin' && (filters.dir === 'desc' ? '▼' : '▲')}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-[18px] py-2.5 text-start">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((u) => (
                   <tr
                     key={u.id}
-                    onClick={() => navigate(`${basePath}/${u.id}`)}
+                    onClick={() => navigate(personLink(u.id))}
                     className="cursor-pointer border-b border-surface-alt align-middle last:border-0 hover:bg-surface-alt/60"
                   >
                     <td className="px-[18px] py-3">
-                      <Link to={`${basePath}/${u.id}`} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                      <Link to={personLink(u.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                         {u.fullName}
                       </Link>
                       <div>
@@ -291,6 +349,22 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
                     <td className="px-[18px] py-3 text-ink-soft">
                       {u.lastLoginAt ? <span dir="ltr">{formatWhen(u.lastLoginAt)}</span> : 'لم يسجّل الدخول بعد'}
                     </td>
+                    <td className="px-[18px] py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        <Link to={personLink(u.id)} className="rounded-full bg-surface-alt px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:text-primary">
+                          فتح
+                        </Link>
+                        {u.canManage && (
+                          <button
+                            type="button"
+                            onClick={() => setRowAction({ user: u, kind: u.archivedAt || u.status === 'archived' ? 'restore' : 'archive' })}
+                            className="rounded-full border border-line px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:border-danger hover:text-danger"
+                          >
+                            {u.archivedAt || u.status === 'archived' ? 'استعادة' : 'أرشفة'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -302,7 +376,7 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
             {items.map((u) => (
               <li key={u.id}>
                 <Link
-                  to={`${basePath}/${u.id}`}
+                  to={personLink(u.id)}
                   className="block min-h-[88px] px-4 py-4 hover:bg-surface-alt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
                 >
                   <p className="break-words text-[18px] font-extrabold leading-snug text-ink">{u.fullName}</p>
@@ -361,10 +435,51 @@ export function UsersListPage({ basePath, standalone = false }: { basePath: stri
       )}
       <Card>
         {!standalone && (
-          <CardHeader title="الحسابات" subtitle={list.data ? `${total} حساب` : undefined} action={createButton} />
+          <CardHeader title={title} subtitle={list.data ? `${total} حساب` : undefined} action={createButton} />
         )}
         {body}
       </Card>
+
+      <Dialog
+        open={rowAction !== null}
+        title={rowAction?.kind === 'archive' ? 'أرشفة الحساب' : 'استعادة الحساب'}
+        busy={rowMutation.isPending}
+        onClose={() => {
+          if (!rowMutation.isPending) {
+            setRowAction(null);
+            setRowReason('');
+            setRowError(null);
+          }
+        }}
+        footer={
+          <>
+            <PillButton size="field" variant="secondary" disabled={rowMutation.isPending} onClick={() => setRowAction(null)}>
+              رجوع
+            </PillButton>
+            <PillButton
+              size="field"
+              variant={rowAction?.kind === 'archive' ? 'danger' : 'primary'}
+              disabled={rowMutation.isPending}
+              onClick={() => {
+                if (rowReason.trim().length < 3) {
+                  setRowError('اكتب سببًا واضحًا (ثلاثة أحرف على الأقل).');
+                  return;
+                }
+                rowMutation.mutate();
+              }}
+            >
+              {rowAction?.kind === 'archive' ? 'أرشفة الحساب' : 'استعادة الحساب'}
+            </PillButton>
+          </>
+        }
+      >
+        <p className="mb-3 leading-[1.8]">
+          {rowAction?.kind === 'archive'
+            ? `سيختفي حساب ${rowAction.user.fullName} من القوائم اليومية ولن يستطيع الدخول، ويبقى سجله محفوظًا ويمكن استعادته.`
+            : `سيعود حساب ${rowAction?.user.fullName ?? ''} فعّالًا.`}
+        </p>
+        <TextAreaField label="السبب (مطلوب)" value={rowReason} onChange={(e) => setRowReason(e.target.value)} error={rowError} />
+      </Dialog>
 
       <Dialog
         open={placeDialog}

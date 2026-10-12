@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AuthProvider } from './features/auth/AuthProvider';
 import { RequireAuth } from './components/RequireAuth';
 import { Layout } from './components/Layout';
@@ -15,7 +15,6 @@ import { StationsListPage } from './features/stations/StationsListPage';
 import { RecordFillUpPage } from './features/fillups/RecordFillUpPage';
 import { RegistrationPage } from './features/registration/RegistrationPage';
 import { AdminLayout } from './features/admin/AdminLayout';
-import { UsersListPage } from './features/users/UsersListPage';
 import { UserDetailPage } from './features/users/UserDetailPage';
 import { UserCreatePage } from './features/users/UserCreatePage';
 import { SettingsAdminPage } from './features/admin/SettingsAdminPage';
@@ -23,14 +22,18 @@ import { ExceptionTypesAdminPage } from './features/admin/ExceptionTypesAdminPag
 import { VehicleTypesAdminPage } from './features/admin/VehicleTypesAdminPage';
 import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
 import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPage';
-import { SecurityAuthoritiesAdminPage } from './features/admin/SecurityAuthoritiesAdminPage';
-import { RegistrationStationsAdminPage } from './features/admin/RegistrationStationsAdminPage';
+import { MunicipalityDetailPage } from './features/admin/MunicipalityDetailPage';
+import { ManagePlacesPage } from './features/places/ManagePlacesPage';
+import { StationCreatePage, StationManagePage } from './features/places/StationManagePage';
+import { OfficeCreatePage, OfficeManagePage } from './features/places/OfficeManagePage';
+import { MyOfficePage, MyStationPage } from './features/places/MyPlacePages';
 import { RegistrationReportPage } from './features/regreports/RegistrationReportPage';
 import { OfficeEmployeesPage } from './features/regreports/OfficeEmployeesPage';
 import { EmployeeActivityPage } from './features/regreports/EmployeeActivityPage';
 import { CardStockPage } from './features/regreports/CardStockPage';
 import { ReadinessPage } from './features/regreports/ReadinessPage';
 import { useAuth } from './features/auth/AuthProvider';
+import { NAV_ACCESS } from './lib/navAccess';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
 // §9. /fillups/new is the recording screen (create only — the exceptions
@@ -49,12 +52,29 @@ import { useAuth } from './features/auth/AuthProvider';
 // each AdminLayout tab and its target page individually checks the
 // specific permission it needs (see AdminLayout.tsx), same pattern as
 // every other nav-gated route in this file.
-// A supervisor's own staff screens live outside the admin area (they reach
-// them from their own menu entry). The API enforces who may do what; this
-// only keeps people without the permission off a page that would be empty.
-function StaffArea({ children }: { children: JSX.Element }) {
+// Phase 5A: people are managed from inside the place they belong to - a
+// municipality (super admin), a station or office (municipality manager), your
+// own station or office (supervisor, office manager). There is no free-floating
+// users list; the old /staff and /admin/users addresses lead to the right place
+// for whoever opens them. The API enforces who may do what; this only keeps
+// people without the permission off a page that would be empty.
+function Gate({ allow, children }: { allow: (has: (p: string) => boolean) => boolean; children: JSX.Element }) {
   const { hasPermission } = useAuth();
-  return hasPermission('users:manage_staff') ? children : <Navigate to="/" replace />;
+  return allow(hasPermission) ? children : <Navigate to="/" replace />;
+}
+
+function PeopleHomeRedirect() {
+  const { hasPermission } = useAuth();
+  if (hasPermission('municipalities:manage')) return <Navigate to="/admin/municipalities" replace />;
+  if (NAV_ACCESS.manage(hasPermission)) return <Navigate to="/manage" replace />;
+  if (NAV_ACCESS.myStation(hasPermission)) return <Navigate to="/my-station" replace />;
+  if (NAV_ACCESS.myOffice(hasPermission)) return <Navigate to="/my-office" replace />;
+  return <Navigate to="/" replace />;
+}
+
+function StaffRedirect() {
+  const { userId } = useParams();
+  return <Navigate to={userId ? `/people/${userId}` : '/people'} replace />;
 }
 
 function App() {
@@ -89,26 +109,39 @@ function App() {
               <Route path="/vehicles" element={<VehiclesListPage />} />
               <Route path="/vehicles/:vehicleId" element={<VehicleDetailPage />} />
               <Route path="/vehicles/change-requests" element={<ChangeRequestsQueuePage />} />
-              <Route path="/staff" element={<StaffArea><UsersListPage basePath="/staff" standalone /></StaffArea>} />
-              <Route path="/staff/new" element={<StaffArea><UserCreatePage basePath="/staff" standalone /></StaffArea>} />
-              <Route path="/staff/:userId" element={<StaffArea><UserDetailPage basePath="/staff" /></StaffArea>} />
+              {/* People, from inside their place. */}
+              <Route path="/people" element={<PeopleHomeRedirect />} />
+              <Route path="/people/new" element={<UserCreatePage basePath="/people" standalone />} />
+              <Route path="/people/:userId" element={<UserDetailPage basePath="/people" />} />
+              <Route path="/staff" element={<PeopleHomeRedirect />} />
+              <Route path="/staff/new" element={<Navigate to="/people/new" replace />} />
+              <Route path="/staff/:userId" element={<StaffRedirect />} />
+
+              {/* The municipality manager's stations and offices. */}
+              <Route path="/manage" element={<Gate allow={NAV_ACCESS.manage}><ManagePlacesPage /></Gate>} />
+              <Route path="/manage/stations/new" element={<Gate allow={(h) => h('stations:create')}><StationCreatePage /></Gate>} />
+              <Route path="/manage/stations/:stationId" element={<Gate allow={NAV_ACCESS.manage}><StationManagePage /></Gate>} />
+              <Route path="/manage/offices/new" element={<Gate allow={(h) => h('registration_stations:manage')}><OfficeCreatePage /></Gate>} />
+              <Route path="/manage/offices/:officeId" element={<Gate allow={NAV_ACCESS.manage}><OfficeManagePage /></Gate>} />
+              {/* A supervisor's own station, an office manager's own office. */}
+              <Route path="/my-station" element={<Gate allow={NAV_ACCESS.myStation}><MyStationPage /></Gate>} />
+              <Route path="/my-office" element={<Gate allow={NAV_ACCESS.myOffice}><MyOfficePage /></Gate>} />
+
               <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<Navigate to="/admin/users" replace />} />
-                <Route path="users" element={<UsersListPage basePath="/admin/users" />} />
-                <Route path="users/new" element={<UserCreatePage basePath="/admin/users" />} />
-                <Route path="users/:userId" element={<UserDetailPage basePath="/admin/users" />} />
+                <Route index element={<PeopleHomeRedirect />} />
+                <Route path="users" element={<PeopleHomeRedirect />} />
+                <Route path="users/new" element={<Navigate to="/people/new" replace />} />
+                <Route path="users/:userId" element={<StaffRedirect />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
                 <Route path="exception-types" element={<ExceptionTypesAdminPage />} />
                 <Route path="vehicle-types" element={<VehicleTypesAdminPage />} />
-                <Route path="registration-stations" element={<RegistrationStationsAdminPage />} />
                 <Route path="municipalities" element={<MunicipalitiesAdminPage />} />
-                <Route path="security-authorities" element={<SecurityAuthoritiesAdminPage />} />
-                {/* Round 19: station create/edit moved onto /stations
-                    itself (StationsListPage, gated on stations:manage) —
-                    "much more logical" than a separate admin surface, per
-                    the client's own framing. Redirect, not a 404, for
-                    anyone with the old URL bookmarked. */}
-                <Route path="stations" element={<Navigate to="/stations" replace />} />
+                <Route path="municipalities/:municipalityId" element={<MunicipalityDetailPage />} />
+                {/* The security-authorities section is gone: each municipality's
+                    directorate is created with it and renamed from its page. */}
+                <Route path="security-authorities" element={<Navigate to="/admin/municipalities" replace />} />
+                <Route path="registration-stations" element={<Navigate to="/manage" replace />} />
+                <Route path="stations" element={<Navigate to="/manage" replace />} />
                 <Route path="audit-log" element={<AuditLogAdminPage />} />
               </Route>
             </Route>

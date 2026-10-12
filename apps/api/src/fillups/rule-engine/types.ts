@@ -29,8 +29,41 @@ export interface RuleTrigger {
 //    owner, so the three owner-level rules cannot apply, and no standing
 //    exception can cover anything (those are granted to a vehicle/owner).
 export type RuleSubject =
-  | { kind: 'vehicle'; vehicleId: string; ownerId: string | null }
+  | {
+      kind: 'vehicle';
+      vehicleId: string;
+      ownerId: string | null;
+      // Phase 5A: an INSTITUTION owner's vehicles are never lumped together
+      // by the owner-level rules (a bank with 20 cars would hit the owner
+      // weekly limit at once) - only the vehicle-level rules apply to them.
+      ownerKind?: 'INDIVIDUAL' | 'INSTITUTION';
+    }
   | { kind: 'plate'; normalizedPlate: string };
+
+// Why the owner-level rules were left out of an evaluation, so the screen
+// says so instead of silently skipping them.
+export type SkippedBecause = 'UNREGISTERED_PLATE' | 'INSTITUTION_OWNER';
+
+// Phase 5A: every rule can be switched on or off by the super admin. The
+// switch lives in SystemSetting (never a constant), keyed per rule.
+export const RULE_SWITCH_KEYS: Record<RuleFailureReason, string> = {
+  VEHICLE_GAP_TOO_SHORT: 'fillup.rule.vehicle_gap.enabled',
+  VEHICLE_WEEKLY_CAP_REACHED: 'fillup.rule.vehicle_weekly.enabled',
+  OWNER_GAP_TOO_SHORT: 'fillup.rule.owner_gap.enabled',
+  OWNER_WEEKLY_CAP_REACHED: 'fillup.rule.owner_weekly.enabled',
+  LITERS_PER_PERSON_CAP_REACHED: 'fillup.rule.owner_liters.enabled',
+};
+
+// What a switch means when its row is missing (a database that has not had
+// the phase 5A migration yet): all on, except owner liters. The seed and the
+// migration insert the same defaults; an admin's value is never overwritten.
+export const RULE_SWITCH_DEFAULTS: Record<RuleFailureReason, boolean> = {
+  VEHICLE_GAP_TOO_SHORT: true,
+  VEHICLE_WEEKLY_CAP_REACHED: true,
+  OWNER_GAP_TOO_SHORT: true,
+  OWNER_WEEKLY_CAP_REACHED: true,
+  LITERS_PER_PERSON_CAP_REACHED: false,
+};
 
 // The rules that can't be evaluated for a plate-only subject. Surfaced in
 // the rule result so the screen says so instead of silently skipping them.

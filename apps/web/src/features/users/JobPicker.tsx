@@ -1,11 +1,14 @@
 import { roleDescription, roleLabel } from '../../lib/labels';
-import type { JobKind, JobOption } from './types';
+import type { JobOption, PlaceKind } from './types';
 
-const GROUPS: Array<{ kind: JobKind; title: string }> = [
+const GROUPS: Array<{ kind: PlaceKind; title: string }> = [
+  { kind: 'MUNICIPALITY', title: 'البلدية' },
   { kind: 'PETROL_STATION', title: 'محطات الوقود' },
   { kind: 'REGISTRATION', title: 'مكاتب التسجيل' },
   { kind: null, title: 'الإدارة' },
 ];
+
+const placeKindOf = (job: JobOption): PlaceKind => job.placeKind ?? (job.municipalityScoped ? 'MUNICIPALITY' : job.kind);
 
 // One job per person, picked from a short list grouped by side — never a set
 // of checkboxes. Each job carries one plain sentence on what it does.
@@ -25,7 +28,7 @@ export function JobPicker({
   return (
     <div className="space-y-5">
       {GROUPS.map((group) => {
-        const inGroup = jobs.filter((j) => j.kind === group.kind);
+        const inGroup = jobs.filter((j) => placeKindOf(j) === group.kind);
         if (inGroup.length === 0) return null;
         return (
           <fieldset key={group.title} disabled={disabled} className="min-w-0">

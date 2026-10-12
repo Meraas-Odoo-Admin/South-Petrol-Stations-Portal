@@ -3,11 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { OwnerSearchSelect } from '../../components/OwnerSearchSelect';
-import {
-  blockChassisForbiddenKeys,
-  restrictToChassisNumber,
-  restrictToLicensePlate,
-} from '../../lib/libyanFormats';
+import { checkBooklet, checkChassis, normalizePlate } from '@fuel-tracking/shared-types';
+import { restrictToChassisNumber, restrictToLicensePlate, restrictToRegistrationBooklet } from '../../lib/libyanFormats';
 
 interface VehicleTypeOption {
   id: string;
@@ -44,6 +41,7 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
   const [requestedValue, setRequestedValue] = useState('');
   const [ownerLabel, setOwnerLabel] = useState('');
   const [reason, setReason] = useState('');
+  const [chassisNonStandard, setChassisNonStandard] = useState(false);
   const [proofReference, setProofReference] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState<{ requiresApproval: boolean } | null>(null);
@@ -59,6 +57,7 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
       apiClient.post<{ requiresApproval: boolean }>(`/vehicles/${vehicleId}/change-requests`, {
         changeType,
         requestedValue,
+        ...(changeType === 'CHASSIS_CHANGE' ? { chassisNonStandard } : {}),
         reason,
         proofReference,
       }),
@@ -124,14 +123,25 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
             value={requestedValue}
             onChange={(e) =>
               setRequestedValue(
-                changeType === 'CHASSIS_CHANGE' ? restrictToChassisNumber(e.target.value) : e.target.value,
+                changeType === 'CHASSIS_CHANGE'
+                  ? restrictToChassisNumber(e.target.value)
+                  : restrictToRegistrationBooklet(e.target.value),
               )
             }
-            onKeyDown={changeType === 'CHASSIS_CHANGE' ? blockChassisForbiddenKeys : undefined}
             dir="ltr"
-            maxLength={changeType === 'CHASSIS_CHANGE' ? 17 : 12}
+            maxLength={changeType === 'CHASSIS_CHANGE' ? 20 : 12}
             className={`${inputClass} text-end font-mono`}
           />
+        )}
+        {changeType === 'CHASSIS_CHANGE' && (
+          <label className="mt-2 flex items-center gap-2 text-[12px] text-ink">
+            <input
+              type="checkbox"
+              checked={chassisNonStandard}
+              onChange={(e) => setChassisNonStandard(e.target.checked)}
+            />
+            رقم هيكل غير قياسي (ليس 17 خانة)
+          </label>
         )}
       </div>
       <div>
@@ -156,6 +166,19 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
             setError(null);
             if (!requestedValue || !reason.trim() || !proofReference.trim()) {
               setError('كل الحقول مطلوبة.');
+              return;
+            }
+            // The same rules the API applies (packages/shared-types).
+            const checked =
+              changeType === 'CHASSIS_CHANGE'
+                ? checkChassis(requestedValue, chassisNonStandard)
+                : changeType === 'BOOKLET_CHANGE'
+                  ? checkBooklet(requestedValue)
+                  : changeType === 'PLATE_CHANGE' && !normalizePlate(requestedValue)
+                    ? { ok: false as const, message: 'رقم اللوحة غير صالح: رمز المدينة ثم رقم اللوحة يفصل بينهما فاصل، ويجوز حرف N في آخره.' }
+                    : { ok: true as const };
+            if (!checked.ok) {
+              setError(checked.message);
               return;
             }
             mutation.mutate();

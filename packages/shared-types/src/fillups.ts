@@ -158,6 +158,15 @@ export interface RulePreviewResponse {
   // Owner-level rules that cannot be evaluated for an unregistered plate
   // (there is no owner yet). Empty for a registered vehicle.
   skippedRules: RuleFailureReason[];
+  // Why they were left out: no registered vehicle (so no owner), or the owner
+  // is an institution (only the vehicle-level rules apply to its vehicles).
+  skippedReason?: 'UNREGISTERED_PLATE' | 'INSTITUTION_OWNER' | null;
+  // Rules the super admin has switched off - not applied at all.
+  disabledRules?: RuleFailureReason[];
+  // The vehicle's own fuel type, and whether the fuel asked about (the
+  // `fuelType` query) differs from it - a warning, never a block.
+  vehicleFuelType?: 'PETROL' | 'DIESEL' | null;
+  fuelMismatch?: boolean;
   identifiedBy: FillUpIdentification;
   registered: boolean;
   stage: MunicipalityStage;

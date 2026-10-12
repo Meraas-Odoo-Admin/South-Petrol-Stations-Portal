@@ -1,7 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { CreateSecurityAuthorityDto } from './dto/create-security-authority.dto';
 import { UpdateSecurityAuthorityDto } from './dto/update-security-authority.dto';
 
 // 409s carry machine-checkable markers (MUNICIPALITY_HAS_AUTHORITY,
@@ -37,29 +36,6 @@ export class SecurityAuthoritiesService {
     if (municipality.securityAuthority && municipality.securityAuthority.id !== exceptAuthorityId) {
       throw new ConflictException('MUNICIPALITY_HAS_AUTHORITY');
     }
-  }
-
-  async create(dto: CreateSecurityAuthorityDto, actorId: string) {
-    const existing = await this.prisma.securityAuthority.findUnique({ where: { name: dto.name } });
-    if (existing) {
-      throw new ConflictException('SECURITY_AUTHORITY_NAME_TAKEN');
-    }
-    await this.assertMunicipalityFree(dto.municipalityId);
-
-    const authority = await this.prisma.securityAuthority.create({
-      data: { name: dto.name, municipalityId: dto.municipalityId },
-      include: this.include,
-    });
-
-    await this.audit.log({
-      userId: actorId,
-      action: 'CREATE',
-      entityType: 'SecurityAuthority',
-      entityId: authority.id,
-      newValue: { name: authority.name, municipalityId: authority.municipalityId },
-    });
-
-    return authority;
   }
 
   findAll() {

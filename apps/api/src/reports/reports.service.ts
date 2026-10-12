@@ -41,27 +41,30 @@ export class ReportsService {
   //  - Caller does NOT hold it: stationId is REQUIRED (400 if omitted),
   //    and must be inside the caller's UserStationScope (403 otherwise) —
   //    same rbac.getStationScope check used by FillUpsService.create.
+  //
+  // Phase 5A: holding reports:view_all_stations means "no station has to be
+  // named", NOT "every station": the caller's own scope still bounds every
+  // report. A municipality manager's all-stations report is the stations of
+  // their municipality; only the unrestricted super admin sees them all.
   private async resolveSingleStationFilter(
     actorId: string,
     requestedStationId: string | undefined,
-  ): Promise<string | undefined> {
+  ): Promise<string | { in: string[] } | undefined> {
     const permissions = await this.rbac.getPermissionsForUser(actorId);
     const hasAllStations = permissions.has(VIEW_ALL_STATIONS_PERMISSION);
+    const scope = await this.rbac.getStationScope(actorId);
 
     if (!requestedStationId) {
       if (hasAllStations) {
-        return undefined;
+        return scope === null ? undefined : { in: scope };
       }
       throw new BadRequestException(
         'stationId is required unless you hold reports:view_all_stations.',
       );
     }
 
-    if (!hasAllStations) {
-      const scope = await this.rbac.getStationScope(actorId);
-      if (scope !== null && !scope.includes(requestedStationId)) {
-        throw new ForbiddenException('You do not have access to this station.');
-      }
+    if (scope !== null && !scope.includes(requestedStationId)) {
+      throw new ForbiddenException('You do not have access to this station.');
     }
 
     return requestedStationId;
@@ -73,10 +76,6 @@ export class ReportsService {
   // undefined (no filter) for an unrestricted/all-stations caller, or the
   // exact (possibly empty) list of station IDs to filter to otherwise.
   private async resolveHistoryStationFilter(actorId: string): Promise<string[] | undefined> {
-    const permissions = await this.rbac.getPermissionsForUser(actorId);
-    if (permissions.has(VIEW_ALL_STATIONS_PERMISSION)) {
-      return undefined;
-    }
     const scope = await this.rbac.getStationScope(actorId);
     return scope ?? undefined;
   }
@@ -107,6 +106,10 @@ export class ReportsService {
       ...(query.fuelType ? { fuelType: query.fuelType } : {}),
     };
 
+    // Phase 5A: fill-ups where the fuel poured was not the vehicle's own fuel
+    // type (a pump warning, never a block) - supervisors see how many.
+    const fuelMismatchCount = await this.prisma.fillUpTransaction.count({ where: { ...where, fuelMismatch: true } });
+
     const [aggregate, exceptionsPending, exceptionsApproved, totalBeforeFilters, rows] = await Promise.all([
       this.prisma.fillUpTransaction.aggregate({
         where,
@@ -129,12 +132,13 @@ export class ReportsService {
     ]);
 
     return {
-      stationId: stationId ?? null,
+      stationId: typeof stationId === 'string' ? stationId : null,
       date: start.toISOString().slice(0, 10),
       ownerId: query.ownerId ?? null,
       fuelType: query.fuelType ?? null,
       totalFillUps: aggregate._count._all,
       totalLiters: aggregate._sum.quantityLiters?.toNumber() ?? 0,
+      fuelMismatchCount,
       exceptionsPending,
       exceptionsApproved,
       totalBeforeFilters,
@@ -169,8 +173,7 @@ export class ReportsService {
   async countPendingViolations(actorId: string): Promise<{ total: number }> {
     // Same rule as every other report here: reports:view_all_stations means
     // every station; anyone else is limited to the stations in their scope.
-    const permissions = await this.rbac.getPermissionsForUser(actorId);
-    const scope = permissions.has(VIEW_ALL_STATIONS_PERMISSION) ? null : await this.rbac.getStationScope(actorId);
+    const scope = await this.rbac.getStationScope(actorId);
     const total = await this.prisma.exception.count({
       where: {
         approvedById: null,
@@ -216,7 +219,7 @@ export class ReportsService {
   }
 
   private buildViolationsWhere(
-    stationId: string | undefined,
+    stationId: string | { in: string[] } | undefined,
     from: string | undefined,
     to: string | undefined,
     status: 'pending' | 'approved' | 'all' | undefined,
@@ -266,7 +269,11 @@ export class ReportsService {
   // without the query timing out." A single groupBy (by stationId AND
   // isException, in the same query) instead of one query per station is
   // what makes that true regardless of station count.
-  async getDashboard(query: DashboardQueryDto) {
+  async getDashboard(query: DashboardQueryDto, actorId: string) {
+    // Phase 5A: bounded by the caller's own scope - a municipality manager's
+    // dashboard is their municipality's stations, never the whole country's.
+    const scope = await this.rbac.getStationScope(actorId);
+    const stationWhere = scope === null ? {} : { stationId: { in: scope } };
     const to = query.to ? new Date(query.to) : new Date();
     const from = query.from
       ? new Date(query.from)
@@ -274,7 +281,7 @@ export class ReportsService {
 
     const grouped = await this.prisma.fillUpTransaction.groupBy({
       by: ['stationId', 'isException'],
-      where: { occurredAt: { gte: from, lte: to } },
+      where: { occurredAt: { gte: from, lte: to }, ...stationWhere },
       _count: { _all: true },
       _sum: { quantityLiters: true },
     });
@@ -329,7 +336,7 @@ export class ReportsService {
     // binds `from`/`to` rather than string-concatenating them).
     const fuelGrouped = await this.prisma.fillUpTransaction.groupBy({
       by: ['fuelType'],
-      where: { occurredAt: { gte: from, lte: to } },
+      where: { occurredAt: { gte: from, lte: to }, ...stationWhere },
       _count: { _all: true },
       _sum: { quantityLiters: true },
     });
@@ -348,6 +355,7 @@ export class ReportsService {
              COUNT(*) FILTER (WHERE "isException")::bigint AS "exceptionCount"
       FROM "FillUpTransaction"
       WHERE "occurredAt" >= ${from} AND "occurredAt" <= ${to}
+        AND (${scope === null}::boolean OR "stationId" = ANY(${scope ?? []}::text[]))
       GROUP BY day
       ORDER BY day ASC
     `;

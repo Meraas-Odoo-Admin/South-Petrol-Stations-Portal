@@ -50,19 +50,37 @@ async function recordFromReview(page: Page, amount = '10') {
   await page.getByTestId('fillup-mobile-continue-to-review').click();
 }
 
+// Phase 5A: a municipality's dates are edited on its own page (stage card).
+// In-app navigation (history + popstate): a full page load refreshes the
+// session through POST /auth/refresh, which is throttled to 10 a minute per
+// IP, and this spec's three signed-in pages would exhaust it.
+async function spaGo(page: Page, to: string) {
+  await page.evaluate((target) => {
+    window.history.pushState({}, '', target);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, to);
+}
+
+async function openSabha(adminPage: Page) {
+  await spaGo(adminPage, '/admin/municipalities');
+  await adminPage.locator('tr', { hasText: 'سبها' }).first().getByRole('link', { name: 'فتح' }).click();
+  await expect(adminPage.getByRole('button', { name: 'تعديل التواريخ' })).toBeVisible();
+}
+
 async function setStageDates(adminPage: Page, awareness: string, deadline: string, confirmName?: string) {
-  const row = adminPage.locator('tr', { hasText: 'سبها' }).first();
-  await row.getByRole('button', { name: 'تواريخ المراحل' }).click();
-  const editor = adminPage.getByTestId('municipality-dates-editor');
-  const inputs = editor.getByTestId('date-field-input');
+  await openSabha(adminPage);
+  await adminPage.getByRole('button', { name: 'تعديل التواريخ' }).click();
+  const dialog = adminPage.getByRole('dialog');
+  const inputs = dialog.getByTestId('date-field-input');
   await inputs.nth(0).fill(awareness);
   await inputs.nth(1).fill(deadline);
   if (confirmName) {
     await expect(adminPage.getByTestId('municipality-dates-confirm')).toBeVisible();
     await adminPage.getByTestId('municipality-dates-confirm-name').fill(confirmName);
   }
-  await editor.getByRole('button', { name: 'حفظ' }).click();
-  await expect(editor).toHaveCount(0);
+  await dialog.getByText('تبدأ المرحلة عند منتصف الليل').click({ force: true });
+  await dialog.getByRole('button', { name: 'حفظ' }).click();
+  await expect(dialog).toHaveCount(0);
 }
 
 test('launch day: unregistered fill-ups, linking, awareness, deadline, override, sheet', async ({ page, browser }) => {
@@ -75,18 +93,17 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
 
   try {
     // The municipalities screen is the system administrator's.
-    await loginAs(admin, 'sysadmin1', fixtures.sysadminPasswordChanged ? 'PwTemp123!' : process.env.PW_SYSADMIN_PASSWORD || 'ChangeMe123!');
-    await admin.goto('/admin/municipalities');
+    await loginAs(admin, 'sysadmin1', fixtures.sysadminPassword);
+    await spaGo(admin, '/admin/municipalities');
     await expect(admin.locator('tr', { hasText: 'سبها' }).first()).toBeVisible();
+    await openSabha(admin);
     // Independent of earlier runs: start from a known state (no dates = grace
     // with no deadline), whatever an aborted run left behind. Restored in `finally`.
     await setStageDates(admin, '', '');
     await shot(admin, '00-municipalities-initial');
     // Grace with no deadline shows a persistent admin warning for سبها.
-    const sabhaRow = admin.locator('tr', { hasText: 'سبها' }).first();
-    await expect(sabhaRow.getByTestId(/municipality-no-deadline-warning-/)).toContainText(
-      'فترة السماح فعّالة — لم يُحدَّد موعد نهائي',
-    );
+    await openSabha(admin);
+    await expect(admin.getByTestId(/municipality-no-deadline-warning-/)).toContainText('فترة السماح فعّالة');
 
     // ── Step 1: grace — an unregistered plate is recorded, a too-soon retry
     // typed differently (leading zero, Arabic digits) is blocked, and a
@@ -150,15 +167,22 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
     // ── Step 2: register the vehicle — the earlier fill-up is found and linked.
     await loginAs(registrar, fixtures.registrarUsername, fixtures.registrarPassword);
     await registrar.locator('aside').getByRole('link', { name: 'تسجيل المركبات' }).click();
-    const identity = `1${Math.floor(Math.random() * 1e11).toString().padStart(11, '0')}`;
+    const identity = `119${Math.floor(Math.random() * 1e9).toString().padStart(9, '0')}`;
     await fillDigitBoxes(registrar, 'registration-identity-input', identity);
     await registrar.getByTestId('registration-owner-search').click();
-    await registrar.getByTestId('registration-owner-name').fill(`PW Grace Owner ${fixtures.runId}`);
+    await registrar.getByTestId('registration-owner-name').fill('مالك تجربة السماح');
     await registrar.getByTestId('registration-owner-phone').fill('0912345678');
     await registrar.getByTestId('registration-owner-save').click();
     await expect(registrar.getByTestId('registration-owner-selected')).toBeVisible();
     await fillDigitBoxes(registrar, 'registration-plate-input', '7');
     await fillDigitBoxes(registrar, 'registration-plate-input', firstPlateDigits, 2);
+    await registrar.getByTestId('registration-chassis-input').fill(`GR${seq}ABCDEFGHJK1`.slice(0, 17));
+    await registrar.getByTestId('registration-booklet-input').fill(`GB${seq}`);
+    await registrar.getByTestId('registration-make').fill('Toyota');
+    await registrar.getByTestId('registration-model').fill('Hilux');
+    await registrar.getByTestId('registration-color').selectOption('ابيض');
+    await registrar.getByTestId('registration-year').fill('2020');
+    await registrar.getByTestId('registration-fuel').selectOption('PETROL');
     await registrar.getByTestId('registration-vehicle-save').click();
     await expect(registrar.getByTestId('registration-success')).toContainText('تم تسجيل المركبة');
     // Only the 7-… fill-up joins the car; the 71-… one is another car.
@@ -170,7 +194,7 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
     await expect(admin.getByTestId(/municipality-stage-/).first()).toBeVisible();
     await shot(admin, '05-municipalities-awareness');
     // With a deadline set, the warning goes away.
-    await expect(sabhaRow.getByTestId(/municipality-no-deadline-warning-/)).toHaveCount(0);
+    await expect(admin.getByTestId(/municipality-no-deadline-warning-/)).toHaveCount(0);
 
     await page.goto('/fillups/new');
     await page.getByTestId('fillup-type-plate-instead').first().click();
@@ -199,15 +223,16 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
     writeFileSync(path.join(SHOTS, 'registration-stations-sheet.pdf'), pdf);
 
     // ── Step 4: deadline today needs the municipality name typed.
-    const row = admin.locator('tr', { hasText: 'سبها' }).first();
-    await row.getByRole('button', { name: 'تواريخ المراحل' }).click();
-    const editor = admin.getByTestId('municipality-dates-editor');
+    await openSabha(admin);
+    await admin.getByRole('button', { name: 'تعديل التواريخ' }).click();
+    const editor = admin.getByRole('dialog');
     await editor.getByTestId('date-field-input').nth(0).fill('');
     await editor.getByTestId('date-field-input').nth(1).fill(tripoliDay(0));
     await expect(admin.getByTestId('municipality-dates-confirm')).toBeVisible();
     await expect(editor.getByRole('button', { name: 'حفظ' })).toBeDisabled();
     await shot(admin, '07-deadline-today-needs-name');
     await admin.getByTestId('municipality-dates-confirm-name').fill('سبها');
+    await editor.getByText('تبدأ المرحلة عند منتصف الليل').click({ force: true });
     await editor.getByRole('button', { name: 'حفظ' }).click();
     await expect(editor).toHaveCount(0);
 
@@ -238,13 +263,13 @@ test('launch day: unregistered fill-ups, linking, awareness, deadline, override,
   } finally {
     // Put the dates back (idempotent: no dates = grace indefinitely).
     try {
-      await admin.goto('/admin/municipalities');
-      const row = admin.locator('tr', { hasText: 'سبها' }).first();
-      await row.getByRole('button', { name: 'تواريخ المراحل' }).click();
-      const editor = admin.getByTestId('municipality-dates-editor');
+      await openSabha(admin);
+      await admin.getByRole('button', { name: 'تعديل التواريخ' }).click();
+      const editor = admin.getByRole('dialog');
       await editor.getByTestId('date-field-input').nth(0).fill('');
       await editor.getByTestId('date-field-input').nth(1).fill('');
-      await editor.getByRole('button', { name: 'حفظ' }).click();
+      await editor.getByText('تبدأ المرحلة عند منتصف الليل').click({ force: true });
+    await editor.getByRole('button', { name: 'حفظ' }).click();
       await expect(editor).toHaveCount(0);
       await shot(admin, '10-dates-restored');
     } catch (error) {

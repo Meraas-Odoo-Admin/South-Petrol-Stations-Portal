@@ -1,4 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { IsOptionalLibyanMobile } from '../../common/validators/shared-field-checks';
+import { normalizePhoneValue } from '../../common/validators/phone-transform';
 import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateUserDto {
@@ -23,7 +26,9 @@ export class CreateUserDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @Transform(normalizePhoneValue)
   @IsString()
+  @IsOptionalLibyanMobile()
   @MaxLength(30)
   phone?: string;
 
