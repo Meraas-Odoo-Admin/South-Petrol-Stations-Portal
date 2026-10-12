@@ -211,6 +211,7 @@ describe('Phase 4a grace period (e2e)', () => {
     await prisma.vehicleCard.deleteMany({ where: { vehicleId: { in: vIds } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: vIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vIds } } });
+    await prisma.duplicateCatch.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });

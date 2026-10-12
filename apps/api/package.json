@@ -15,7 +15,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "node ../../scripts/refresh.mjs && prisma db seed",
     "plates:report": "ts-node --transpile-only prisma/plates-report.ts",
-    "dev:reset-test-users": "ts-node --transpile-only prisma/reset-test-users.ts"
+    "dev:reset-test-users": "ts-node --transpile-only prisma/reset-test-users.ts",
+    "dev:seed-activity": "ts-node --transpile-only prisma/seed-dev-activity.ts"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

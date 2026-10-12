@@ -11,6 +11,7 @@
     "dev": "pnpm refresh && pnpm --parallel --filter ./apps/* run dev",
     "dev:phone": "node scripts/refresh.mjs && node scripts/dev-phone.mjs",
     "reset:test-users": "pnpm --filter @fuel-tracking/api run dev:reset-test-users",
+    "seed:dev-activity": "pnpm --filter @fuel-tracking/api run dev:seed-activity",
     "build:packages": "pnpm --filter @fuel-tracking/shared-types run build",
     "build": "pnpm --recursive run build",
     "lint": "pnpm run build:packages && pnpm --recursive run lint",

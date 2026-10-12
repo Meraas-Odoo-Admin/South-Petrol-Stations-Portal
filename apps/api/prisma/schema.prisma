@@ -161,6 +161,9 @@ model RegistrationStation {
   vehiclesRegistered Vehicle[]
   desks              RegistrationDesk[]
   cardsIssued        VehicleCard[]
+  cardPrints         CardPrint[]
+  stockEntries       StockEntry[]
+  duplicateCatches   DuplicateCatch[]
   createdAt          DateTime                       @default(now())
   updatedAt          DateTime                       @updatedAt
 }
@@ -177,6 +180,8 @@ model RegistrationDesk {
   printerSerial         String?
   isActive              Boolean             @default(true)
   cardsIssued           VehicleCard[]
+  cardPrints            CardPrint[]
+  stockEntries          StockEntry[]
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
@@ -226,6 +231,8 @@ model VehicleCard {
   createdAt             DateTime               @default(now())
 
   @@index([vehicleId, issuedAt])
+  @@index([registrationStationId, issuedAt]) // office monitoring: cards issued per office per day
+  @@index([issuedById, issuedAt]) // per-employee activity
 }
 
 enum VehicleCardIssueReason {
@@ -395,6 +402,9 @@ model User {
   registrationStationScope     UserRegistrationStationScope[] // same semantics as stationScope, for registration stations
   registeredVehicles           Vehicle[]                      @relation("VehicleRegisteredBy")
   cardsIssued                  VehicleCard[]                  @relation("VehicleCardIssuedBy")
+  cardPrints                   CardPrint[]                    @relation("CardPrintedBy")
+  stockEntriesCreated          StockEntry[]                   @relation("StockEntryCreatedBy")
+  duplicateCatches             DuplicateCatch[]               @relation("DuplicateCaughtBy")
   cardsCancelled               VehicleCard[]                  @relation("VehicleCardCancelledBy")
   stationScope                 UserStationScope[] // the stations this user is confined to, UNLESS one of their roles has unrestrictedStationAccess: true — an empty list here means access to NO stations, never "all of them"
   refreshTokens                RefreshToken[]
@@ -557,6 +567,7 @@ model OwnerChangeRequest {
   createdAt DateTime @default(now())
 
   @@index([ownerId])
+  @@index([requestedById, createdAt])
 }
 
 enum VehicleUsageType {
@@ -636,6 +647,8 @@ model Vehicle {
   updatedAt                         DateTime                @updatedAt
 
   @@index([normalizedPlate])
+  @@index([registeredAtRegistrationStationId, createdAt]) // vehicles registered per office
+  @@index([registeredById, createdAt])
 }
 
 // Plates change (sale, re-registration, damage) — never lose fill-up history
@@ -748,6 +761,7 @@ model VehicleChangeRequest {
   createdAt DateTime @default(now())
 
   @@index([vehicleId])
+  @@index([requestedById, createdAt])
 }
 
 model DriverVehicle {
@@ -832,6 +846,7 @@ model FillUpTransaction {
   @@index([municipalityId, normalizedPlate, occurredAt])
   @@index([driverId, occurredAt])
   @@index([stationId, occurredAt])
+  @@index([municipalityId, occurredAt, stationId]) // deadline readiness: per day, per station
 }
 
 enum FillUpIdentification {
@@ -927,4 +942,81 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([userId, createdAt])
+}
+
+// ── Registration pivot, phase 4c: monitoring reports ─────────────────
+
+// One row per blank plastic card consumed at a desk: every card or reprint
+// PDF printed (kind CARD) and every test card printed for set-up or a ribbon
+// change (kind TEST). This is what the card-stock reconciliation counts as
+// "prints the system recorded". Before phase 4c only card prints existed, as
+// PRINT_CARD audit rows; the migration copies those in (nothing invented) and
+// test-card prints are recorded from phase 4c on.
+enum CardPrintKind {
+  CARD // a card or reprint PDF printed
+  TEST // a test card printed (desk set-up, ribbon change)
+}
+
+model CardPrint {
+  id                    String              @id @default(cuid())
+  registrationStationId String
+  registrationStation   RegistrationStation @relation(fields: [registrationStationId], references: [id])
+  deskId                String
+  desk                  RegistrationDesk    @relation(fields: [deskId], references: [id])
+  kind                  CardPrintKind
+  cardId                String? // null for a test card
+  printedById           String
+  printedBy             User                @relation("CardPrintedBy", fields: [printedById], references: [id])
+  printedAt             DateTime            @default(now())
+
+  @@index([registrationStationId, printedAt])
+  @@index([deskId, printedAt])
+  @@index([printedById, printedAt])
+}
+
+// Physical stock of blank cards. INSERT-ONLY: a database trigger (see the
+// phase 4c migration) refuses UPDATE and DELETE, and the API has no such
+// endpoints. A mistake is fixed by a new CORRECTION entry linked to the one it
+// corrects, with a reason.
+enum StockEntryKind {
+  RECEIVED // a delivery of blanks (quantity received)
+  COUNT // a physical count of blanks remaining (quantity counted)
+  CORRECTION // replaces the quantity of the earlier entry it points to
+}
+
+model StockEntry {
+  id                    String              @id @default(cuid())
+  registrationStationId String
+  registrationStation   RegistrationStation @relation(fields: [registrationStationId], references: [id])
+  deskId                String? // null = the whole office
+  desk                  RegistrationDesk?   @relation(fields: [deskId], references: [id])
+  kind                  StockEntryKind
+  quantity              Int
+  occurredAt            DateTime // when the delivery arrived / when the count was made
+  correctsEntryId       String?
+  corrects              StockEntry?         @relation("StockEntryCorrection", fields: [correctsEntryId], references: [id])
+  corrections           StockEntry[]        @relation("StockEntryCorrection")
+  reason                String? // required on a CORRECTION
+  createdById           String
+  createdBy             User                @relation("StockEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt             DateTime            @default(now())
+
+  @@index([registrationStationId, occurredAt])
+  @@index([correctsEntryId])
+}
+
+// A registration attempt refused because the plate, chassis number or
+// registration booklet already belongs to a vehicle. Recorded from phase 4c on
+// (nothing earlier was kept), so reports say "recorded since <date>".
+model DuplicateCatch {
+  id                    String              @id @default(cuid())
+  registrationStationId String
+  registrationStation   RegistrationStation @relation(fields: [registrationStationId], references: [id])
+  userId                String
+  user                  User                @relation("DuplicateCaughtBy", fields: [userId], references: [id])
+  fields                String[] // PLATE | CHASSIS | BOOKLET
+  occurredAt            DateTime            @default(now())
+
+  @@index([registrationStationId, occurredAt])
+  @@index([userId, occurredAt])
 }

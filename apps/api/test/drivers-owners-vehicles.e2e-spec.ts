@@ -199,6 +199,10 @@ describe('Owners/Vehicles (e2e)', () => {
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     // Vehicles registered here (including auto-coded ones this file doesn't
     // track individually) reference the station and the manager.
+    // Phase 4c: a duplicate registration records a catch against the office and user.
+    await prisma.duplicateCatch.deleteMany({
+      where: { OR: [{ registrationStationId }, { userId: { in: allUserIds } }] },
+    });
     await prisma.vehicle.updateMany({
       where: { registeredAtRegistrationStationId: registrationStationId },
       data: { registeredAtRegistrationStationId: null, registeredById: null },

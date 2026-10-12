@@ -114,6 +114,7 @@ describe('Vehicle cards (e2e)', () => {
 
   afterAll(async () => {
     const ids = Object.values(userIds);
+    await prisma.cardPrint.deleteMany({ where: { registrationStationId: { in: [stationId, otherStationId] } } });
     await prisma.vehicleCard.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.auditLog.deleteMany({ where: { userId: { in: ids } } });
@@ -292,6 +293,13 @@ describe('Vehicle cards (e2e)', () => {
 
     const prints = (await audits(replacementCard.id)).filter((a) => a.action === 'PRINT_CARD');
     expect(prints.map((a) => (a.newValue as { mode: string }).mode).sort()).toEqual(['black', 'full']);
+
+    // Each print uses up a blank card, so each is recorded for the stock reconciliation.
+    const recorded = await prisma.cardPrint.findMany({ where: { cardId: replacementCard.id } });
+    expect(recorded).toHaveLength(2);
+    for (const row of recorded) {
+      expect(row).toMatchObject({ kind: 'CARD', registrationStationId: stationId, deskId, printedById: userIds.registrar });
+    }
   }, 60_000);
 
   it('a replaced card can no longer be printed', async () => {
@@ -310,10 +318,26 @@ describe('Vehicle cards (e2e)', () => {
 
   it('serves a test card for desk setup', async () => {
     const registrar = await as('registrar');
-    const res = await registrar.get(`/cards/test-card?registrationStationId=${stationId}`).buffer(true).parse(binary).expect(200);
+    const before = await prisma.cardPrint.count({ where: { registrationStationId: stationId, kind: 'TEST' } });
+    const res = await registrar
+      .get(`/cards/test-card?registrationStationId=${stationId}&deskId=${deskId}`)
+      .buffer(true)
+      .parse(binary)
+      .expect(200);
     expect((res.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
     for (const size of await pdfPageSizesMm(res.body as Buffer)) expect(isExactCardSize(size, 0.01)).toBe(true);
-    await registrar.get(`/cards/test-card?registrationStationId=${otherStationId}`).expect(403);
+
+    // A test card uses up a blank too: recorded against the desk, with its audit row.
+    const rows = await prisma.cardPrint.findMany({ where: { registrationStationId: stationId, kind: 'TEST' } });
+    expect(rows).toHaveLength(before + 1);
+    expect(rows.at(-1)).toMatchObject({ deskId, cardId: null, printedById: userIds.registrar });
+    expect(await prisma.auditLog.count({ where: { action: 'PRINT_TEST_CARD', entityId: deskId } })).toBeGreaterThanOrEqual(1);
+
+    // A desk is required, it must be at this station, and the station must be in scope.
+    await registrar.get(`/cards/test-card?registrationStationId=${stationId}`).expect(400);
+    await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=not-a-desk`).expect(404);
+    await registrar.get(`/cards/test-card?registrationStationId=${otherStationId}&deskId=${deskId}`).expect(403);
+    expect(await prisma.cardPrint.count({ where: { registrationStationId: stationId, kind: 'TEST' } })).toBe(before + 1);
   }, 60_000);
 
   // ── Failed print ───────────────────────────────────────────────────
@@ -336,6 +360,30 @@ describe('Vehicle cards (e2e)', () => {
     const pump = await as('pump');
     expect((await pump.get(`/cards/scan/${first.cardNumber}`).expect(409)).body.message).toBe('CARD_REVOKED');
   });
+
+  it('every blank-consuming print is counted: a card print, a reprint, the failed-print path and a test card', async () => {
+    const registrar = await as('registrar');
+    const count = async (kind: 'CARD' | 'TEST') => prisma.cardPrint.count({ where: { registrationStationId: stationId, kind } });
+    const [cardBefore, testBefore] = [await count('CARD'), await count('TEST')];
+
+    const card = (await registrar.post(`/vehicles/${vehicleIds[3] ?? vehicleIds[2]!}/cards`, issueBody()).expect(201)).body;
+    // Issuing alone prints nothing: the blank is used when the card is printed.
+    expect(await count('CARD')).toBe(cardBefore);
+
+    await registrar.post(`/cards/${card.id}/print`, { mode: 'full' }).buffer(true).parse(binary).expect(200); // the first print
+    await registrar.post(`/cards/${card.id}/print`, { mode: 'full' }).buffer(true).parse(binary).expect(200); // a reprint
+    const replacement = (await registrar.post(`/cards/${card.id}/failed-print`).expect(201)).body; // "not printed properly"
+    // The failed print itself consumed no further blank; its replacement does, when printed.
+    expect(await count('CARD')).toBe(cardBefore + 2);
+    await registrar.post(`/cards/${replacement.id}/print`, { mode: 'full' }).buffer(true).parse(binary).expect(200);
+    await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=${deskId}`).buffer(true).parse(binary).expect(200);
+
+    expect(await count('CARD')).toBe(cardBefore + 3);
+    expect(await count('TEST')).toBe(testBefore + 1);
+    // Total blanks the system recorded as used by this office, in this test: 4.
+    const rows = await prisma.cardPrint.findMany({ where: { OR: [{ cardId: card.id }, { cardId: replacement.id }, { kind: 'TEST', registrationStationId: stationId }] } });
+    expect(rows.filter((r) => r.cardId === card.id || r.cardId === replacement.id)).toHaveLength(3);
+  }, 120_000);
 
   // ── Scanning ───────────────────────────────────────────────────────
 

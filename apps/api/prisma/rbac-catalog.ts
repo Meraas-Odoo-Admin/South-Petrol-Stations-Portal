@@ -31,6 +31,25 @@ export const PERMISSIONS = [
   { key: 'cards:issue', description: 'Issue, print and reprint vehicle cards at a registration station' },
   { key: 'cards:cancel', description: 'Cancel a vehicle card without replacing it' },
   { key: 'cards:scan', description: 'Look up a vehicle by scanning its card at the pump' },
+  // Registration pivot, phase 4c: monitoring reports. All three are scoped by
+  // the caller's own offices or stations (the admin roles see everything), and
+  // registration employees hold none of them.
+  {
+    key: 'registration_reports:view',
+    description: 'View the registration-office monitoring report: cards, vehicles, people and per-employee activity (subject to registration-station scope)',
+  },
+  {
+    key: 'card_stock:read',
+    description: 'View blank-card stock entries and the stock reconciliation (subject to registration-station scope)',
+  },
+  {
+    key: 'card_stock:record',
+    description: 'Record a delivery of blank cards, a physical count, or a correction (insert-only; subject to registration-station scope)',
+  },
+  {
+    key: 'readiness:view',
+    description: 'View the deadline-readiness report: cards vs no-card fill-ups and card issuance (subject to station / registration-station scope)',
+  },
   { key: 'stations:read', description: 'View stations (subject to station scope)' },
   { key: 'stations:manage', description: 'Create/update stations' },
   // Registration pivot, phase 1: stations in a PREPARING municipality are
@@ -191,6 +210,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'owners:reveal_identity',
     'reports:view',
     'users:manage_staff',
+    'readiness:view',
   ],
   // Search the registry (to avoid duplicates), register owners and
   // vehicles at their registration station(s), request corrections to
@@ -225,6 +245,10 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'cards:issue',
     'cards:cancel',
     'users:manage_staff',
+    'registration_reports:view',
+    'card_stock:read',
+    'card_stock:record',
+    'readiness:view',
   ],
   directorate_admin: [
     'companies:read',
@@ -265,6 +289,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'exception_types:manage',
     'users:manage',
     'roles:manage',
+    'registration_reports:view',
+    'card_stock:read',
+    'readiness:view',
   ],
   system_admin: PERMISSIONS.map((p) => p.key),
 };

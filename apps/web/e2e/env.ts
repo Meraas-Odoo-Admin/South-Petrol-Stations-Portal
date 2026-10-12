@@ -13,7 +13,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const certsPresent = existsSync(path.resolve(__dirname, '../../../.certs/dev-cert.pem'));
 const protocol = certsPresent ? 'https' : 'http';
 
-export const WEB_BASE = `${protocol}://localhost:5173`;
+// E2E_WEB_PROTOCOL=http reuses a plain-HTTP dev server already on :5173 (the
+// phone-tunnel one) instead of starting an HTTPS one beside it. The API stays as is.
+const webProtocol = process.env.E2E_WEB_PROTOCOL === 'http' ? 'http' : protocol;
+
+export const WEB_BASE = `${webProtocol}://localhost:5173`;
 export const API_ORIGIN = `${protocol}://localhost:3000`;
 export const API_BASE = `${API_ORIGIN}/api/v1`;
 

@@ -119,6 +119,25 @@ export function Layout() {
       icon: <Icon d={ICONS.reports} />,
       show: NAV_ACCESS.dailyReport(hasPermission),
     },
+    // Phase 4c: the monitoring reports, under the reports area.
+    {
+      to: '/reports/registration',
+      label: 'متابعة مكاتب التسجيل',
+      icon: <Icon d={ICONS.reports} />,
+      show: NAV_ACCESS.registrationReports(hasPermission),
+    },
+    {
+      to: '/reports/card-stock',
+      label: 'مخزون البطاقات',
+      icon: <Icon d={ICONS.register} />,
+      show: NAV_ACCESS.cardStock(hasPermission),
+    },
+    {
+      to: '/reports/readiness',
+      label: 'الجاهزية للموعد النهائي',
+      icon: <Icon d={ICONS.dashboard} />,
+      show: NAV_ACCESS.readiness(hasPermission),
+    },
     // Phase 4b: a supervisor's own staff — a menu entry of their own, not
     // under «الإدارة». Admins manage accounts from the admin area instead.
     { to: '/staff', label: 'فريق العمل', icon: <Icon d={ICONS.people} />, show: NAV_ACCESS.staff(hasPermission) },
@@ -149,6 +168,7 @@ export function Layout() {
   const SHEET_GROUPS: Array<{ title: string; paths: string[] }> = [
     { title: '', paths: ['/'] },
     { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
+    { title: 'تقارير المتابعة', paths: ['/reports/registration', '/reports/card-stock', '/reports/readiness'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
     { title: 'الفريق', paths: ['/staff'] },
     { title: 'الإدارة', paths: ['/admin'] },

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { ReportPdfService } from '../report-pdf/report-pdf.service';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
 import type { Prisma } from '@prisma/client';
 
 // Both formats are generated synchronously, on request, when the export
@@ -8,6 +8,17 @@ import type { Prisma } from '@prisma/client';
 // day/station's worth of data, or a filtered violations slice); revisit if
 // real usage proves export volume/latency actually needs one.
 export const EXPORT_ROW_LIMIT = 5000;
+
+// Dates in the PDF read in Tripoli time.
+const TRIPOLI_STAMP = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Africa/Tripoli',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
 
 type DailyReport = {
   stationId: string | null;
@@ -39,78 +50,11 @@ type ExceptionExportRow = Prisma.ExceptionGetPayload<{
   };
 }>;
 
-function pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-    doc.end();
-  });
-}
-
-interface PdfTableColumn {
-  header: string;
-  width: number;
-}
-
-// Item 14: PDF exports previously rendered each row as one pipe-delimited
-// text line (`doc.text(\`${a} | ${b} | ...\`)`) — readable but not a table:
-// no column alignment, no header emphasis, nothing that survives being
-// printed or resized. This draws an actual bordered/ruled table, wrapping
-// to a new page (with the header re-drawn) when a page fills up, same as
-// any real report generator would.
-function drawPdfTable(
-  doc: PDFKit.PDFDocument,
-  columns: PdfTableColumn[],
-  rows: string[][],
-  startY: number,
-): void {
-  const left = doc.page.margins.left;
-  const rowHeight = 20;
-  const bottomLimit = doc.page.height - doc.page.margins.bottom;
-
-  function drawHeader(y: number): number {
-    let x = left;
-    doc.font('Helvetica-Bold').fontSize(9);
-    for (const col of columns) {
-      doc.text(col.header, x + 2, y + 4, { width: col.width - 4, ellipsis: true });
-      x += col.width;
-    }
-    doc
-      .moveTo(left, y + rowHeight)
-      .lineTo(x, y + rowHeight)
-      .lineWidth(0.75)
-      .stroke();
-    return y + rowHeight;
-  }
-
-  let y = drawHeader(startY);
-  doc.font('Helvetica').fontSize(9);
-
-  for (const row of rows) {
-    if (y + rowHeight > bottomLimit) {
-      doc.addPage();
-      y = drawHeader(doc.page.margins.top);
-      doc.font('Helvetica').fontSize(9);
-    }
-    let x = left;
-    for (let i = 0; i < columns.length; i += 1) {
-      const col = columns[i]!;
-      doc.text(row[i] ?? '', x + 2, y + 4, { width: col.width - 4, ellipsis: true });
-      x += col.width;
-    }
-    doc
-      .moveTo(left, y + rowHeight)
-      .lineTo(x, y + rowHeight)
-      .lineWidth(0.25)
-      .stroke('#cccccc');
-    y += rowHeight;
-  }
-}
-
 @Injectable()
 export class ReportsExportService {
+  // PDFs go through the offline Chromium renderer with the bundled Cairo font: pdfkit has no Arabic shaping, so Arabic names and reasons came out blank there.
+  constructor(private readonly pdf: ReportPdfService) {}
+
   async dailyReportToXlsx(report: DailyReport): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Daily Report');
@@ -132,30 +76,21 @@ export class ReportsExportService {
   }
 
   async dailyReportToPdf(report: DailyReport): Promise<Buffer> {
-    const doc = new PDFDocument({ margin: 50 });
-    doc.fontSize(16).text('Daily Fill-Up Report', { underline: true });
-    doc.moveDown();
-    doc.fontSize(11).font('Helvetica');
-    doc.text(`Station: ${report.stationId ?? 'All stations'}`);
-    doc.text(`Date: ${report.date}`);
-    doc.moveDown();
-
-    drawPdfTable(
-      doc,
-      [
-        { header: 'Field', width: 220 },
-        { header: 'Value', width: 220 },
+    return this.pdf.render({
+      title: 'تقرير التعبئة اليومي',
+      subtitle: [`المحطة: ${report.stationId ?? 'كل المحطات'}`, `التاريخ: ${report.date}`],
+      tables: [
+        {
+          headers: ['البند', 'القيمة'],
+          rows: [
+            ['إجمالي التعبئات', report.totalFillUps],
+            ['إجمالي اللترات', report.totalLiters],
+            ['الاستثناءات بانتظار الاعتماد', report.exceptionsPending],
+            ['الاستثناءات المعتمدة', report.exceptionsApproved],
+          ],
+        },
       ],
-      [
-        ['Total fill-ups', String(report.totalFillUps)],
-        ['Total liters', String(report.totalLiters)],
-        ['Exceptions pending', String(report.exceptionsPending)],
-        ['Exceptions approved', String(report.exceptionsApproved)],
-      ],
-      doc.y,
-    );
-
-    return pdfToBuffer(doc);
+    });
   }
 
   async violationsToXlsx(rows: ExceptionExportRow[]): Promise<Buffer> {
@@ -179,34 +114,28 @@ export class ReportsExportService {
   }
 
   async violationsToPdf(rows: ExceptionExportRow[]): Promise<Buffer> {
-    const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
-    doc.fontSize(16).text('Violations / Exceptions', { underline: true });
-    doc.moveDown();
-
-    if (rows.length === 0) {
-      doc.fontSize(11).font('Helvetica').text('No violations match this filter.');
-      return pdfToBuffer(doc);
-    }
-
-    drawPdfTable(
-      doc,
-      [
-        { header: 'Date', width: 110 },
-        { header: 'Station', width: 90 },
-        { header: 'Vehicle', width: 90 },
-        { header: 'Owner', width: 130 },
-        { header: 'Exception Type', width: 110 },
-        { header: 'Status', width: 70 },
-        { header: 'Reason', width: 200 },
+    return this.pdf.render({
+      title: 'المخالفات والاستثناءات',
+      landscape: true,
+      tables: [
+        {
+          headers: ['التاريخ', 'المحطة', 'المركبة', 'المالك', 'نوع الاستثناء', 'الحالة', 'السبب'],
+          rows: rows.map((row) => {
+            const plain = this.violationRowToPlainObject(row);
+            return [
+              TRIPOLI_STAMP.format(new Date(plain.date)).replace(',', ''),
+              plain.station,
+              plain.vehicle.replace('(unregistered)', '(غير مسجلة)'),
+              plain.owner,
+              plain.exceptionType,
+              plain.status === 'approved' ? 'معتمد' : 'بانتظار الاعتماد',
+              plain.reason,
+            ];
+          }),
+          emptyText: 'لا توجد مخالفات تطابق هذا الفلتر.',
+        },
       ],
-      rows.map((row) => {
-        const plain = this.violationRowToPlainObject(row);
-        return [plain.date, plain.station, plain.vehicle, plain.owner, plain.exceptionType, plain.status, plain.reason];
-      }),
-      doc.y,
-    );
-
-    return pdfToBuffer(doc);
+    });
   }
 
   // Deliberately excludes owner.identityNumber (and identityType), even

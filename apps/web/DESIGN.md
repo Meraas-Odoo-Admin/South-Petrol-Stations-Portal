@@ -342,6 +342,9 @@ The temporary password in large left-to-right mono on white inside an amber-tint
 ### Plate and Code Displays
 Plates, internal codes and rule identifiers render as left-to-right isolated runs in JetBrains Mono. An unregistered vehicle shows its typed plate with a Gauge Amber Tint badge reading "مركبة غير مسجلة".
 
+### Charts and Report Figures (phase 4c)
+Report charts use two colours with fixed meanings: teal `#0D5C52` for a fill-up with a card (and for cards issued), deep amber `#B97A1A` for one without. The pair passes the colour-vision and contrast checks; teal sits below the validator's lightness band because it is the brand colour. Amber is "needs attention", not "wrong", so red is never used for «no card». A chart always carries a legend in words with a direct total for each series, 2px surface gaps between stacked segments, a 4px rounded data end, bars from zero, a hover tooltip, grid and axis text in the ink and hairline tokens (axis text 13px), and a «عرض الأرقام في جدول» table view. Key figures on a report are 28px. A reconciliation or estimate verdict is a pill or sentence that names the state in words with a mark (✓, ⚠, ✕) and the number: «بطاقات غير مبرَّرة: 15» is red, a likely counting error is amber, a zero difference is green. Wide comparison tables become one card per item on a phone, with the same rows.
+
 ### Motion
 Short, quiet entrance and feedback animations only: fade-in-up (380ms, 6px rise) for card grids and rows, fade-in (300ms), scale-in (200ms), and a soft pulse (1.6s) for loading. Component state changes use the default Tailwind transition. Hover is tint-only: a background wash or a brightness change, never a lift or an added shadow.
 

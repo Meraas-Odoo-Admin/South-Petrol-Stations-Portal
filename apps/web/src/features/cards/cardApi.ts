@@ -118,9 +118,10 @@ export function printCardPdf(cardId: string, mode: 'full' | 'black' = 'full'): P
   return fetchPdf(() => apiClient.post<Blob>(`/cards/${cardId}/print`, { mode }, { responseType: 'blob' }));
 }
 
-export function testCardPdf(registrationStationId: string): Promise<Blob> {
+// A test card uses up a blank, so it is printed (and recorded) at a desk.
+export function testCardPdf(registrationStationId: string, deskId: string): Promise<Blob> {
   return fetchPdf(() =>
-    apiClient.get<Blob>('/cards/test-card', { params: { registrationStationId }, responseType: 'blob' }),
+    apiClient.get<Blob>('/cards/test-card', { params: { registrationStationId, deskId }, responseType: 'blob' }),
   );
 }
 

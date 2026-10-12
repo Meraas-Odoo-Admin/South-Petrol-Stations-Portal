@@ -12,8 +12,9 @@ This document is the background every phase prompt refers to. Sections 1–14 ar
 | 2 | New roles and permission clean-up, registration stations, registration screen, removing vehicle creation and WhatsApp sharing from the pump side, admin screens for municipalities and authorities | Built on `feat/p2-roles-registration-stations`; decisions logged in `OPEN_ITEMS.md` #54 |
 | 3 | The card: card record, QR holds the card number, card PDF, printing flow, desks and printers, card panel on the vehicle page, scan-first fill-up screen | Built on `feat/p3-vehicle-card`; decisions logged in `OPEN_ITEMS.md` #55. Kiosk printing on real hardware and scanning a printed plastic card in noon and night light are still to be tested by the client |
 | 4a | Launch day for vehicles without a card: per-municipality stages (grace, awareness, card required), typed-plate fill-ups for unregistered vehicles, linking at registration, awareness message, A4 registration-stations sheet, emergency override | Built on `feat/p4a-grace-period`; decisions logged in `OPEN_ITEMS.md` #56 |
-| 4b | Accounts: a redesigned users screen (one job per person, searchable places, phone-friendly), edit / deactivate / reset password / unlock, supervisors managing their own employees, stage dates for the directorate admin, developer housekeeping | Built on `feat/p4b-accounts`; decisions logged in `OPEN_ITEMS.md` #57 |
-| 4c | Registration-station monitoring reports, card-stock reconciliation, deadline-readiness report | Next |
+| 4b | Accounts: a redesigned users screen (one job per person, searchable places, phone-friendly), edit / deactivate / reset password / unlock, supervisors managing their own employees, stage dates for the directorate admin, developer housekeeping | Built and merged to main (`bc5ed9c`); decisions logged in `OPEN_ITEMS.md` #57 |
+| 4c | Registration-station monitoring reports, card-stock reconciliation, deadline-readiness report | Built on `feat/p4c-reports`; decisions logged in `OPEN_ITEMS.md` #58 |
+| 4d | Older screens brought to the DESIGN.md text sizes, ink text on amber buttons, the real-iPhone re-test of the 4b fixes | Next |
 | 5 | Go-live clean-up: remove non-Sabha data, clear test data, make the municipality columns required in the database | Waits on the client's list of which place names belong to Sabha |
 
 ---

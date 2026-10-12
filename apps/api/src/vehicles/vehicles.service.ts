@@ -119,6 +119,33 @@ export class VehiclesService {
     private readonly registrationStations: RegistrationStationsService,
   ) {}
 
+  // Phase 4c: a registration attempt refused because the plate, chassis number
+  // or booklet already belongs to a vehicle. Kept (with who and where) so the
+  // office report can show how many duplicates each office caught. Nothing
+  // earlier was recorded, so reports say "recorded since" the migration date.
+  // The as-you-type duplicate lookup (findDuplicates) is not an attempt and is
+  // not recorded.
+  private async recordDuplicateCatch(
+    registrationStationId: string,
+    userId: string,
+    conflictFields: Array<VehicleDuplicate['field']>,
+  ): Promise<void> {
+    const names: Record<VehicleDuplicate['field'], string> = {
+      currentPlate: 'PLATE',
+      chassisNumber: 'CHASSIS',
+      registrationBooklet: 'BOOKLET',
+    };
+    const fields = [...new Set(conflictFields.map((f) => names[f]))];
+    const row = await this.prisma.duplicateCatch.create({ data: { registrationStationId, userId, fields } });
+    await this.audit.log({
+      userId,
+      action: 'DUPLICATE_CAUGHT',
+      entityType: 'RegistrationStation',
+      entityId: registrationStationId,
+      newValue: { fields, duplicateCatchId: row.id },
+    });
+  }
+
   async findDuplicates(values: DuplicateCheckQueryDto): Promise<{ conflicts: VehicleDuplicate[] }> {
     const select = { id: true, internalCode: true, currentPlate: true } as const;
     const checks: Array<[VehicleDuplicate['field'], Promise<VehicleDuplicate['vehicle'] | null>]> = [];
@@ -215,6 +242,7 @@ export class VehiclesService {
     // the vehicle it already belongs to — the screen shows them all.
     const { conflicts } = await this.findDuplicates(dto);
     if (conflicts.length > 0) {
+      await this.recordDuplicateCatch(registrationStationId, actorId, conflicts.map((c) => c.field));
       throw new ConflictException({ message: 'VEHICLE_DUPLICATE', details: { conflicts } });
     }
 
@@ -242,6 +270,8 @@ export class VehiclesService {
         select: { id: true, internalCode: true, currentPlate: true },
       });
       if (clash) {
+        // On its own connection, so the record survives this transaction's rollback.
+        await this.recordDuplicateCatch(registrationStationId, actorId, ['currentPlate']);
         throw new ConflictException({
           message: 'VEHICLE_DUPLICATE',
           details: { conflicts: [{ field: 'currentPlate', vehicle: clash }] },

@@ -7,4 +7,11 @@ export class TestCardQueryDto {
   @IsString()
   @MinLength(1)
   registrationStationId!: string;
+
+  // The desk the test card is printed at: a test card uses up a blank, which
+  // the stock reconciliation counts against that desk.
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  deskId!: string;
 }
