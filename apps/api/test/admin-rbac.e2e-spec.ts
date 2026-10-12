@@ -40,6 +40,7 @@ describe('Admin panel RBAC (e2e)', () => {
       'exception_types:manage',
       'standing_exceptions:manage',
       'stations:manage',
+      'stations:create',
       'vehicles:read',
     ],
     sysadmin: [
@@ -50,6 +51,7 @@ describe('Admin panel RBAC (e2e)', () => {
       'exception_types:manage',
       'standing_exceptions:manage',
       'stations:manage',
+      'stations:create',
       'vehicles:read',
       'fillups:create',
     ],
@@ -143,6 +145,7 @@ describe('Admin panel RBAC (e2e)', () => {
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: allRoleIds } } });
     await prisma.role.deleteMany({ where: { id: { in: allRoleIds } } });
     await prisma.systemSetting.delete({ where: { key: settingKey } });
+    await prisma.stationFuelAvailability.deleteMany({ where: { stationId: station.id } });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.company.delete({ where: { id: company.id } });
     await app.close();
@@ -226,10 +229,11 @@ describe('Admin panel RBAC (e2e)', () => {
     }
   });
 
-  // ── POST /stations, PATCH /stations/:id — stations:manage only ──────
+  // ── POST /stations needs stations:create; PATCH /stations/:id needs stations:manage,
+  // and without stations:create only the fuel types may change (phase 5A) ──────
   it.each(ALL_ROLES)('POST /stations — role=%s gets exactly the status its grant implies', async (role) => {
     const token = await loginAs(role);
-    const hasPermission = ROLE_PERMISSIONS[role].includes('stations:manage');
+    const hasPermission = ROLE_PERMISSIONS[role].includes('stations:create');
     const res = await request(app.getHttpServer())
       .post('/api/v1/stations')
       .set('Authorization', `Bearer ${token}`)
@@ -249,11 +253,22 @@ describe('Admin panel RBAC (e2e)', () => {
 
   it.each(ALL_ROLES)('PATCH /stations/:id — role=%s gets exactly the status its grant implies', async (role) => {
     const token = await loginAs(role);
-    const expected = expectedStatus(role, 'stations:manage');
+    // Renaming a station is the municipality manager's (stations:create): a
+    // supervisor holding only stations:manage is refused, not just an employee.
+    const expected = ROLE_PERMISSIONS[role].includes('stations:create') ? 200 : 403;
     await request(app.getHttpServer())
       .patch(`/api/v1/stations/${station.id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'E2E ARB station renamed' })
       .expect(expected);
+  });
+
+  it('lets a supervisor (stations:manage only) change the fuel types of their own station', async () => {
+    const token = await loginAs('supervisor');
+    await request(app.getHttpServer())
+      .patch(`/api/v1/stations/${station.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ fuelTypes: ['PETROL_95', 'DIESEL'] })
+      .expect(200);
   });
 });

@@ -1,4 +1,6 @@
+import { randomInt } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { checkArabicPersonName, checkInstitutionName, institutionNameKey } from '@fuel-tracking/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
@@ -8,6 +10,17 @@ import { CreateOwnerChangeRequestDto } from './dto/create-owner-change-request.d
 import { RejectOwnerChangeRequestDto } from './dto/reject-owner-change-request.dto';
 import { FindOwnerChangeRequestsQueryDto } from './dto/find-owner-change-requests-query.dto';
 import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
+import type { Prisma } from '@prisma/client';
+
+// An institution has no personal ID of its own, so it gets a generated
+// reference (INS-XXXXXXXX) in the owner's identityNumber slot - random, from
+// an alphabet with no look-alikes, never a person's number.
+const INSTITUTION_REF_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function generateInstitutionReference(): string {
+  let out = 'INS-';
+  for (let i = 0; i < 8; i++) out += INSTITUTION_REF_ALPHABET[randomInt(INSTITUTION_REF_ALPHABET.length)];
+  return out;
+}
 
 @Injectable()
 export class OwnersService {
@@ -18,23 +31,76 @@ export class OwnersService {
   ) {}
 
   async create(dto: CreateOwnerDto, actorId: string) {
-    const { registrationStationId, ...ownerFields } = dto;
+    const { registrationStationId, ownerKind, ...ownerFields } = dto;
     await this.registrationStations.assertCanRegisterAt(registrationStationId, actorId);
 
+    // ── an institution (bank, hospital, company) ─────────────────────
+    if (ownerKind === 'INSTITUTION') {
+      const nameKey = institutionNameKey(dto.fullName);
+      const duplicate = await this.prisma.vehicleOwner.findUnique({
+        where: { institutionNameKey: nameKey },
+        select: { id: true, fullName: true },
+      });
+      if (duplicate) {
+        // The same institution must not be created twice: say which one it
+        // is so the employee picks it instead.
+        throw new ConflictException({
+          message: 'INSTITUTION_DUPLICATE',
+          details: { ownerId: duplicate.id, fullName: duplicate.fullName },
+        });
+      }
+      const owner = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.vehicleOwner.create({
+          data: {
+            ownerKind: 'INSTITUTION',
+            identityType: 'INSTITUTION',
+            identityNumber: generateInstitutionReference(),
+            fullName: dto.fullName.trim().replace(/\s+/g, ' '),
+            institutionNameKey: nameKey,
+            phone: dto.phone || null,
+            address: dto.address || null,
+            responsibleDriverNationalId: dto.responsibleDriverNationalId,
+            responsibleDriverName: dto.responsibleDriverName || null,
+            responsibleDriverPhone: dto.responsibleDriverPhone || null,
+          },
+        });
+        // No national ID, no phone number in the audit trail (CLAUDE.md rule 10).
+        await this.audit.log(
+          {
+            userId: actorId,
+            action: 'CREATE',
+            entityType: 'VehicleOwner',
+            entityId: created.id,
+            newValue: { ownerKind: 'INSTITUTION', fullName: created.fullName, registrationStationId },
+          },
+          tx,
+        );
+        return created;
+      });
+      return owner;
+    }
+
+    // ── an individual ───────────────────────────────────────────────
+    const identityType = dto.identityType!;
+    const identityNumber = dto.identityNumber!;
     const existing = await this.prisma.vehicleOwner.findUnique({
-      where: {
-        identityType_identityNumber: {
-          identityType: dto.identityType,
-          identityNumber: dto.identityNumber,
-        },
-      },
+      where: { identityType_identityNumber: { identityType, identityNumber } },
     });
     if (existing) {
       throw new ConflictException('An owner with this identity type and number already exists.');
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const owner = await tx.vehicleOwner.create({ data: ownerFields });
+      const owner = await tx.vehicleOwner.create({
+        data: {
+          ownerKind: 'INDIVIDUAL',
+          identityType,
+          identityNumber,
+          fullName: ownerFields.fullName.trim().replace(/\s+/g, ' '),
+          phone: ownerFields.phone,
+          address: ownerFields.address,
+        },
+      });
 
       await this.audit.log(
         {
@@ -62,14 +128,17 @@ export class OwnersService {
     }
     const search = query.search?.trim();
     return this.prisma.vehicleOwner.findMany({
-      where: search
-        ? {
-            OR: [
-              { fullName: { contains: search } },
-              { identityNumber: { contains: search } },
-            ],
-          }
-        : undefined,
+      where: {
+        ...(query.ownerKind ? { ownerKind: query.ownerKind } : {}),
+        ...(search
+          ? {
+              OR: [
+                { fullName: { contains: search, mode: 'insensitive' as const } },
+                { identityNumber: { contains: search } },
+              ],
+            }
+          : {}),
+      },
       skip: query.skip,
       take: query.take,
       orderBy: { createdAt: 'asc' },
@@ -103,9 +172,33 @@ export class OwnersService {
 
   async update(id: string, dto: UpdateOwnerDto, actorId: string) {
     const before = await this.findOne(id);
+    const isInstitution = before.ownerKind === 'INSTITUTION';
+
+    if (!isInstitution && (dto.responsibleDriverNationalId || dto.responsibleDriverName || dto.responsibleDriverPhone)) {
+      throw new BadRequestException('RESPONSIBLE_DRIVER_FOR_INSTITUTIONS_ONLY');
+    }
+
+    const data: Prisma.VehicleOwnerUpdateInput = { ...dto };
+    if (dto.fullName !== undefined) {
+      // The same name rule as at registration, for this owner's kind.
+      const check = isInstitution ? checkInstitutionName(dto.fullName) : checkArabicPersonName(dto.fullName, 'اسم المالك');
+      if (!check.ok) throw new BadRequestException(check.message);
+      data.fullName = check.value;
+      if (isInstitution) {
+        const key = institutionNameKey(check.value);
+        const clash = await this.prisma.vehicleOwner.findUnique({ where: { institutionNameKey: key } });
+        if (clash && clash.id !== id) {
+          throw new ConflictException({
+            message: 'INSTITUTION_DUPLICATE',
+            details: { ownerId: clash.id, fullName: clash.fullName },
+          });
+        }
+        data.institutionNameKey = key;
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
-      const owner = await tx.vehicleOwner.update({ where: { id }, data: dto });
+      const owner = await tx.vehicleOwner.update({ where: { id }, data });
 
       await this.audit.log(
         {
@@ -133,6 +226,12 @@ export class OwnersService {
   // already-established identity and always goes through approval.
   async requestIdentityChange(ownerId: string, dto: CreateOwnerChangeRequestDto, actorId: string) {
     const owner = await this.findOne(ownerId);
+
+    // An institution has no personal identity number to correct; its
+    // responsible driver is edited on the owner itself.
+    if (owner.ownerKind === 'INSTITUTION') {
+      throw new BadRequestException('INSTITUTION_HAS_NO_IDENTITY_NUMBER');
+    }
 
     if (owner.identityType === dto.identityType && owner.identityNumber === dto.identityNumber) {
       throw new ConflictException('The requested identity is the same as the current one.');

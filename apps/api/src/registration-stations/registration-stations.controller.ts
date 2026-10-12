@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { ListRegistrationStationsQueryDto } from './dto/list-registration-stations-query.dto';
+import { RestoreDto } from '../municipalities/dto/archive-municipality.dto';
 import { RegistrationStationsService } from './registration-stations.service';
 import { CreateRegistrationStationDto } from './dto/create-registration-station.dto';
 import { UpdateRegistrationStationDto } from './dto/update-registration-station.dto';
@@ -18,11 +20,18 @@ export class RegistrationStationsController {
     return this.registrationStations.create(dto, actor.id);
   }
 
-  // Scoped: a registration employee sees only their own station(s).
+  // Scoped: a registration employee sees only their own station(s); a
+  // municipality manager sees every office of their municipality.
   @RequirePermission('registration_stations:read')
   @Get()
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.registrationStations.findAll(user.id);
+  findAll(@Query() query: ListRegistrationStationsQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.registrationStations.findAll(user.id, query);
+  }
+
+  @RequirePermission('registration_stations:read')
+  @Get(':id/activity')
+  activity(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.registrationStations.activity(id, user.id);
   }
 
   @RequirePermission('registration_stations:read')
@@ -39,5 +48,20 @@ export class RegistrationStationsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.registrationStations.update(id, dto, actor.id);
+  }
+
+  // Phase 5A: "delete" means archive; the level that archived it restores it.
+  @RequirePermission('registration_stations:manage')
+  @Post(':id/archive')
+  @HttpCode(200)
+  archive(@Param('id') id: string, @Body() dto: RestoreDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.registrationStations.archive(id, dto.reason, actor.id);
+  }
+
+  @RequirePermission('registration_stations:manage')
+  @Post(':id/restore')
+  @HttpCode(200)
+  restore(@Param('id') id: string, @Body() dto: RestoreDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.registrationStations.restore(id, dto.reason, actor.id);
   }
 }

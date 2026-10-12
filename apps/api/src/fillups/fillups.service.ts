@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { FillUpIdentification, Prisma } from '@prisma/client';
-import { normalizePlate } from '@fuel-tracking/shared-types';
+import { fuelTypeMismatch, normalizePlate } from '@fuel-tracking/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -128,7 +128,13 @@ export class FillUpsService {
   // plate — including the refusal after the deadline — can't disagree with
   // the real submit.
   async previewRules(
-    input: { vehicleId?: string; cardNumber?: string; plate?: string; emergencyOverride?: boolean },
+    input: {
+      vehicleId?: string;
+      cardNumber?: string;
+      plate?: string;
+      emergencyOverride?: boolean;
+      fuelType?: 'PETROL_95' | 'DIESEL' | 'KEROSENE';
+    },
     stationId: string,
     actorId: string,
   ) {
@@ -141,16 +147,25 @@ export class FillUpsService {
       actorId,
     });
     const ruleSubject = this.toRuleSubject(subject);
-    const { checks, skipped } = await this.ruleEngine.evaluateSubjectWithChecks(
+    const { checks, skipped, skippedBecause, disabled } = await this.ruleEngine.evaluateSubjectWithChecks(
       ruleSubject,
       context.municipalityId,
       new Date(),
     );
+    const vehicleFuelType = subject.kind === 'vehicle' ? subject.vehicle.fuelType : null;
     return {
       checks,
       // Rules that can't be evaluated for this subject (the three owner-level
-      // rules for an unregistered plate) — the screen says so.
+      // rules for an unregistered plate or an institution's vehicle) — the
+      // screen says so, and why.
       skippedRules: skipped,
+      skippedReason: skippedBecause,
+      // Rules the super admin has switched off - not applied at all.
+      disabledRules: disabled,
+      // The vehicle's own fuel type, and (when the screen says which fuel is
+      // chosen) whether it matches - a warning, never a block.
+      vehicleFuelType,
+      fuelMismatch: input.fuelType ? fuelTypeMismatch(vehicleFuelType, input.fuelType) : false,
       identifiedBy,
       registered: subject.kind === 'vehicle',
       stage: context.stage,
@@ -173,10 +188,18 @@ export class FillUpsService {
   private async resolveRecordingContext(stationId: string): Promise<RecordingContext> {
     const station = await this.prisma.station.findUnique({
       where: { id: stationId },
-      select: { municipality: true },
+      select: { municipality: true, archivedAt: true },
     });
     if (!station) {
       throw new NotFoundException('Station not found.');
+    }
+    // Phase 5A: an archived station (or a station of an archived
+    // municipality) takes no new fill-ups - its history stays.
+    if (station.archivedAt) {
+      throw new ConflictException('STATION_ARCHIVED');
+    }
+    if (station.municipality?.archivedAt) {
+      throw new ConflictException('MUNICIPALITY_ARCHIVED');
     }
     if (!station.municipality) {
       throw new ConflictException('STATION_HAS_NO_MUNICIPALITY');
@@ -276,7 +299,12 @@ export class FillUpsService {
 
   private toRuleSubject(subject: ResolvedSubject): RuleSubject {
     return subject.kind === 'vehicle'
-      ? { kind: 'vehicle', vehicleId: subject.vehicle.id, ownerId: subject.vehicle.ownerId }
+      ? {
+          kind: 'vehicle',
+          vehicleId: subject.vehicle.id,
+          ownerId: subject.vehicle.ownerId,
+          ownerKind: subject.vehicle.owner?.ownerKind,
+        }
       : { kind: 'plate', normalizedPlate: subject.normalizedPlate };
   }
 
@@ -442,29 +470,6 @@ export class FillUpsService {
     const vehicle = subject.kind === 'vehicle' ? subject.vehicle : null;
     const fallbackPlate = subject.kind === 'plate' ? subject.typedPlate : null;
 
-    // Round 11 item 1: a DRIVERS_LICENSE-identified owner is a one-time,
-    // provisional stand-in — the client's own framing was "only the first
-    // fill is available," a hard block, not a flaggable/exception-
-    // routable rule like the checks FillUpRuleEngine evaluates. Deliberately
-    // structured as a separate check here (not folded into the rule
-    // engine's RuleFailureReason set) since it must ALSO block exception
-    // mode below — every other rule is bypassable by recording an
-    // exception, this one specifically must not be. "First fill-up" means
-    // this vehicle has zero PERSISTED FillUpTransaction rows so far — a
-    // prior rejected attempt never created one, so it doesn't count.
-    if (vehicle?.owner?.identityType === 'DRIVERS_LICENSE') {
-      const priorFillUpCount = await this.prisma.fillUpTransaction.count({
-        where: { vehicleId: vehicle.id },
-      });
-      if (priorFillUpCount > 0) {
-        // Machine-checkable marker, not prose — the frontend maps this to
-        // a specific Arabic message (never shows raw English text per the
-        // code-leak audit) rather than the generic fallback every other
-        // non-422 error gets.
-        throw new ForbiddenException('OWNER_IDENTITY_PROVISIONAL');
-      }
-    }
-
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
     const exceptionModeFieldsPresent = Boolean(
       dto.exceptionTypeId ?? dto.reason ?? dto.proofReference,
@@ -486,12 +491,16 @@ export class FillUpsService {
       typedPlate: subject.typedPlate,
       normalizedPlate: subject.normalizedPlate,
       overrideReason,
+      // Phase 5A: the fuel poured is not the vehicle's own fuel type - a
+      // warning at the pump, recorded here so reports can list mismatches.
+      fuelMismatch: vehicle ? fuelTypeMismatch(vehicle.fuelType, dto.fuelType) : false,
     };
     const auditBase = {
       vehicleId: baseData.vehicleId,
       stationId: baseData.stationId,
       municipalityId,
       identifiedBy,
+      fuelMismatch: baseData.fuelMismatch || undefined,
       // A plate is not personal data under CLAUDE.md rule 10 (national/
       // administrative IDs and phone numbers are); it's what the unregistered
       // fill-up is recorded against.

@@ -1,13 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { MunicipalityStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, Matches, MinLength, MaxLength } from 'class-validator';
 
 export class UpdateMunicipalityDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MinLength(1)
+  @MinLength(2)
+  @MaxLength(80)
   name?: string;
+
+  // The municipality's security directorate (created automatically as
+  // «مديرية أمن ‹الاسم›»). Only the super admin renames it.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(120)
+  securityAuthorityName?: string;
 
   // PREPARING -> LIVE is the go-live switch for a municipality (see the
   // schema comment on Municipality.status). Replaces the old, unused

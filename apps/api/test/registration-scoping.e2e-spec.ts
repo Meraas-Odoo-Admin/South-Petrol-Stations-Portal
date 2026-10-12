@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { nationalIdTail, vehicleBody } from './support/registration-fixtures';
 
 // Registration pivot, phase 2 — the registration-station boundary test
 // (CLAUDE.md rule 3), the counterpart of station-scoping.e2e-spec.ts:
@@ -161,9 +162,9 @@ describe('Registration stations — scoping boundary (e2e)', () => {
     const req = request(app.getHttpServer())[method](`/api/v1${path}`).set('Authorization', `Bearer ${token}`);
     return body ? req.send(body) : req;
   }
-  const ownerBody = (registrationStationId: string, identityDigits = randomDigits(11)) => ({
+  const ownerBody = (registrationStationId: string, identityDigits = nationalIdTail()) => ({
     registrationStationId,
-    fullName: `E2E RS Owner ${runId}`,
+    fullName: 'مالك تجريبي للتسجيل',
     identityType: 'NATIONAL_ID',
     identityNumber: `1${identityDigits}`,
     phone: '0912345678',
@@ -187,7 +188,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
   // ── Registering an owner ─────────────────────────────────────────────
 
   it('refuses to register an owner at an out-of-scope registration station, and creates nothing', async () => {
-    const digits = randomDigits(11);
+    const digits = nationalIdTail();
     const res = await asRegistrar('post', '/owners', ownerBody(stations.outOfScope, digits));
     expect(res.status).toBe(403);
     expect(
@@ -218,13 +219,17 @@ describe('Registration stations — scoping boundary (e2e)', () => {
   // ── Registering a vehicle ────────────────────────────────────────────
 
   it('registers a vehicle at an in-scope station and records where and by whom', async () => {
-    const res = await asRegistrar('post', '/vehicles', {
-      registrationStationId: stations.inScope,
-      ownerId,
-      currentPlate: plate,
-      chassisNumber: chassis,
-      registrationBooklet: booklet,
-    });
+    const res = await asRegistrar(
+      'post',
+      '/vehicles',
+      vehicleBody({
+        registrationStationId: stations.inScope,
+        ownerId,
+        currentPlate: plate,
+        chassisNumber: chassis,
+        registrationBooklet: booklet,
+      }),
+    );
     expect(res.status).toBe(201);
     vehicleId = res.body.id;
     vehicleInternalCode = res.body.internalCode;
@@ -234,7 +239,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
 
   it('refuses registration out of scope (403), at closed / temporarily closed stations, and in a preparing municipality', async () => {
     const vehicleAt = (registrationStationId: string) =>
-      asRegistrar('post', '/vehicles', { registrationStationId, ownerId, currentPlate: `7-${randomDigits(7)}` });
+      asRegistrar('post', '/vehicles', vehicleBody({ registrationStationId, ownerId, currentPlate: `7-${randomDigits(7)}` }));
 
     expect((await vehicleAt(stations.outOfScope)).status).toBe(403);
 
@@ -256,7 +261,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
   });
 
   it('requires a registration station on every registration', async () => {
-    expect((await asRegistrar('post', '/vehicles', { ownerId, currentPlate: `7-${randomDigits(7)}` })).status).toBe(400);
+    expect((await asRegistrar('post', '/vehicles', vehicleBody({ ownerId, currentPlate: `7-${randomDigits(7)}` }))).status).toBe(400);
     const { registrationStationId: _omit, ...noStation } = ownerBody(stations.inScope);
     expect((await asRegistrar('post', '/owners', noStation)).status).toBe(400);
   });
@@ -283,11 +288,11 @@ describe('Registration stations — scoping boundary (e2e)', () => {
     // The as-you-type lookup is not a registration attempt: nothing is recorded.
     expect(await caught()).toBe(caughtBefore);
 
-    const save = await asRegistrar('post', '/vehicles', {
-      registrationStationId: stations.inScope,
-      ownerId,
-      currentPlate: plate,
-    });
+    const save = await asRegistrar(
+      'post',
+      '/vehicles',
+      vehicleBody({ registrationStationId: stations.inScope, ownerId, currentPlate: plate }),
+    );
     expect(save.status).toBe(409);
     expect(save.body.message).toBe('VEHICLE_DUPLICATE');
     expect(save.body.details.conflicts).toEqual([

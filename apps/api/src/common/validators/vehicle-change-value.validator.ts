@@ -6,7 +6,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { VehicleChangeType, VehicleUsageType } from '@prisma/client';
-import { CHASSIS_NUMBER_REGEX, REGISTRATION_BOOKLET_REGEX } from './libyan-formats';
+import { checkBooklet, checkChassis } from '@fuel-tracking/shared-types';
 import { isLibyanPlate } from './libyan-plate.validator';
 
 // requestedValue's format depends on the sibling changeType field, same
@@ -26,10 +26,12 @@ class IsValidVehicleChangeValueConstraint implements ValidatorConstraintInterfac
     }
     const changeType = (args.object as { changeType?: VehicleChangeType }).changeType;
     if (changeType === VehicleChangeType.CHASSIS_CHANGE) {
-      return CHASSIS_NUMBER_REGEX.test(value);
+      // The shared chassis rule: 17 characters, or 6-20 with the tick.
+      const nonStandard = Boolean((args.object as { chassisNonStandard?: boolean }).chassisNonStandard);
+      return checkChassis(value, nonStandard).ok;
     }
     if (changeType === VehicleChangeType.BOOKLET_CHANGE) {
-      return REGISTRATION_BOOKLET_REGEX.test(value);
+      return checkBooklet(value).ok;
     }
     if (changeType === VehicleChangeType.OWNER_CHANGE) {
       return value.trim().length > 0;
@@ -48,7 +50,7 @@ class IsValidVehicleChangeValueConstraint implements ValidatorConstraintInterfac
   }
 
   defaultMessage(): string {
-    return 'requestedValue must match changeType: a 17-character chassis number (CHASSIS_CHANGE), a 6-12 character alphanumeric registration booklet number (BOOKLET_CHANGE), an existing owner id (OWNER_CHANGE), a city-code+sequence plate (PLATE_CHANGE), or an existing vehicle type id (VEHICLE_TYPE_CHANGE).';
+    return 'القيمة المطلوبة لا تطابق نوع التعديل: رقم هيكل من 17 خانة (أو 6–20 مع «رقم هيكل غير قياسي»)، أو رقم دفتر من 6 إلى 12 خانة، أو لوحة بصيغة صحيحة، أو معرّف مالك أو نوع مركبة موجود.';
   }
 }
 

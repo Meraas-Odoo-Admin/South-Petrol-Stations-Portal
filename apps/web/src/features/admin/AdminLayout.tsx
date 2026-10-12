@@ -20,17 +20,8 @@ export function AdminLayout() {
   // One list drives both the tabs and the subtitle, so the subtitle can
   // only ever name sections the person can actually open (phase 4b).
   const tabs = [
-    { to: '/admin/users', label: 'الحسابات', show: hasPermission('users:manage') },
-    { to: '/admin/registration-stations', label: 'مكاتب التسجيل', show: hasPermission('registration_stations:manage') },
-    {
-      to: '/admin/municipalities',
-      label: 'البلديات',
-      // The directorate admin sets the two stage dates but nothing else; the
-      // tab opens for them with only that on it.
-      show: hasPermission('municipalities:manage') || hasPermission('municipalities:set_stage_dates'),
-    },
-    { to: '/admin/security-authorities', label: 'الجهات الأمنية', show: hasPermission('security_authorities:manage') },
-    { to: '/admin/settings', label: 'الإعدادات', show: hasPermission('settings:manage') },
+    { to: '/admin/municipalities', label: 'البلديات', show: hasPermission('municipalities:manage') },
+    { to: '/admin/settings', label: 'الإعدادات وقواعد التعبئة', show: hasPermission('settings:manage') },
     { to: '/admin/exception-types', label: 'أنواع الاستثناءات', show: hasPermission('exception_types:manage') },
     { to: '/admin/vehicle-types', label: 'أنواع المركبات', show: hasPermission('vehicle_types:manage') },
     { to: '/admin/audit-log', label: 'سجل التغييرات', show: hasPermission('audit:view') },

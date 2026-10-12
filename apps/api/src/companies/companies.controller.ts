@@ -30,7 +30,10 @@ export class CompaniesController {
     return this.companies.findOne(id);
   }
 
-  @RequirePermission('companies:manage')
+  // Companies are shared across municipalities, so editing or archiving one
+  // (isActive) is the super admin's alone; a municipality manager may only
+  // create one (companies:manage), which a new station needs.
+  @RequirePermission('companies:update')
   @Patch(':id')
   update(
     @Param('id') id: string,

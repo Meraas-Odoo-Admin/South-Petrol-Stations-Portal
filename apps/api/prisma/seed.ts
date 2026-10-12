@@ -136,7 +136,7 @@ const SEED_OWNERS = [
   { key: 'O6', identityType: 'NATIONAL_ID', identityNumber: '118900000016', fullName: 'مادي كوكو غبدي', phone: '091-4560016' },
   { key: 'O7', identityType: 'NATIONAL_ID', identityNumber: '117650000017', fullName: 'الصادق عمر الحساوي', phone: '092-3780017' },
   { key: 'O8', identityType: 'NATIONAL_ID', identityNumber: '219770000018', fullName: 'زينب محمد الرقيعي', phone: '091-2340018' },
-  { key: 'O9', identityType: 'NATIONAL_ID', identityNumber: '118600000019', fullName: 'مفتاح سالم القذاذفة', phone: '092-6450019' },
+  { key: 'O9', identityType: 'NATIONAL_ID', identityNumber: '119600000019', fullName: 'مفتاح سالم القذاذفة', phone: '092-6450019' },
   { key: 'O10', identityType: 'NATIONAL_ID', identityNumber: '219850000020', fullName: 'حواء إبراهيم أنت عمر', phone: '091-3670020' },
   { key: 'O11', identityType: 'ADMINISTRATIVE_ID', identityNumber: '918700000021', fullName: 'عبدالناصر خليفة الفزاني', phone: '092-5890021' },
   { key: 'O12', identityType: 'NATIONAL_ID', identityNumber: '219730000022', fullName: 'سعاد علي المجابرة', phone: '091-4230022' },
@@ -975,10 +975,15 @@ async function main() {
 
   // ── System settings ───────────────────────────────────────────────
   for (const setting of SYSTEM_SETTINGS) {
+    // Phase 5A: a rule switch the super admin has set is never put back to
+    // its default by a re-seed - only its description is refreshed.
+    const isRuleSwitch = setting.key.startsWith('fillup.rule.');
     await prisma.systemSetting.upsert({
       where: { key: setting.key },
       create: setting,
-      update: { value: setting.value, description: setting.description },
+      update: isRuleSwitch
+        ? { description: setting.description }
+        : { value: setting.value, description: setting.description },
     });
   }
 
@@ -1178,8 +1183,13 @@ async function main() {
     { username: 'employee1', fullName: 'Test Station Employee', role: 'station_employee' },
     { username: 'supervisor1', fullName: 'Test Station Supervisor', role: 'station_supervisor' },
     { username: 'registration1', fullName: 'Test Registration Employee', role: 'registration_employee' },
-    { username: 'regsupervisor1', fullName: 'Test Registration Supervisor', role: 'registration_supervisor' },
-    { username: 'admin1', fullName: 'Test Directorate Admin', role: 'directorate_admin' },
+    // Phase 5A: the office manager (مدير مكتب التسجيل). The username and the
+    // internal role key (registration_supervisor) are unchanged so existing
+    // tests and the saved logins keep working; only the Arabic label changed.
+    { username: 'regsupervisor1', fullName: 'Test Registration Office Manager', role: 'registration_supervisor' },
+    // Phase 5A: two municipality managers (مدير البلدية), both for سبها.
+    { username: 'admin1', fullName: 'Test Municipality Manager 1', role: 'directorate_admin' },
+    { username: 'admin2', fullName: 'Test Municipality Manager 2', role: 'directorate_admin' },
     { username: 'sysadmin1', fullName: 'Test System Admin', role: 'system_admin' },
   ];
 
@@ -1210,6 +1220,16 @@ async function main() {
       await prisma.userStationScope.upsert({
         where: { userId_stationId: { userId: user.id, stationId: stationA.id } },
         create: { userId: user.id, stationId: stationA.id },
+        update: {},
+      });
+    }
+
+    if (spec.role === 'directorate_admin') {
+      // Confined to سبها: every station, office, person and report of the
+      // municipality, and nothing outside it.
+      await prisma.userMunicipalityScope.upsert({
+        where: { userId_municipalityId: { userId: user.id, municipalityId: sabhaMunicipalityId } },
+        create: { userId: user.id, municipalityId: sabhaMunicipalityId },
         update: {},
       });
     }
@@ -1299,7 +1319,10 @@ async function main() {
         normalizedPlate: normalizePlate(spec.currentPlate),
         chassisNumber: spec.chassisNumber,
         vehicleTypeId: vehicleTypesByName.get(spec.vehicleType)?.id,
-        model: spec.model,
+        // Phase 5A: `model` in the fixtures is the manufacturer, which now
+        // lives in `make`; the vehicle fuel type is petrol unless stated.
+        make: spec.model,
+        fuelType: 'PETROL',
         color: spec.color,
         manufactureYear: spec.manufactureYear,
         usageType: spec.usageType,

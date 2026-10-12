@@ -4,12 +4,17 @@ import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { restrictToIdentityNumber } from '../../lib/libyanFormats';
 import { identityTypeLabel } from '../../lib/labels';
+import {
+  ADMINISTRATIVE_ID_HELP,
+  NATIONAL_ID_HELP,
+  checkOwnerIdentity,
+} from '@fuel-tracking/shared-types';
 
-type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE';
+type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
 
 interface OwnerIdentityChangeRequestFormProps {
   ownerId: string;
-  currentIdentityType: IdentityType;
+  currentIdentityType: string;
   onDone: () => void;
 }
 
@@ -26,11 +31,12 @@ export function OwnerIdentityChangeRequestForm({
   onDone,
 }: OwnerIdentityChangeRequestFormProps) {
   const queryClient = useQueryClient();
-  const [identityType, setIdentityType] = useState<IdentityType>(currentIdentityType);
+  const [identityType, setIdentityType] = useState<IdentityType>(currentIdentityType === 'ADMINISTRATIVE_ID' ? 'ADMINISTRATIVE_ID' : 'NATIONAL_ID');
   const [identityNumber, setIdentityNumber] = useState('');
   const [reason, setReason] = useState('');
   const [proofReference, setProofReference] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const idLive = identityNumber ? checkOwnerIdentity(identityType, identityNumber, { partial: true }) : null;
   const [submitted, setSubmitted] = useState(false);
 
   const mutation = useMutation({
@@ -75,7 +81,6 @@ export function OwnerIdentityChangeRequestForm({
         >
           <option value="NATIONAL_ID">{identityTypeLabel('NATIONAL_ID')}</option>
           <option value="ADMINISTRATIVE_ID">{identityTypeLabel('ADMINISTRATIVE_ID')}</option>
-          <option value="DRIVERS_LICENSE">{identityTypeLabel('DRIVERS_LICENSE')}</option>
         </select>
       </div>
       <div>
@@ -87,6 +92,13 @@ export function OwnerIdentityChangeRequestForm({
           maxLength={12}
           className={`${inputClass} text-end font-mono`}
         />
+        {idLive && !idLive.ok ? (
+          <p role="alert" className="mt-1 text-[12px] font-medium text-danger-dark">{idLive.message}</p>
+        ) : (
+          <p className="mt-1 text-[11px] text-ink-faint">
+            {identityType === 'NATIONAL_ID' ? NATIONAL_ID_HELP : ADMINISTRATIVE_ID_HELP}
+          </p>
+        )}
       </div>
       <div>
         <label className="mb-1 block text-[11px] font-bold text-ink-soft">السبب</label>
@@ -110,6 +122,11 @@ export function OwnerIdentityChangeRequestForm({
             setError(null);
             if (!identityNumber || !reason.trim() || !proofReference.trim()) {
               setError('كل الحقول مطلوبة.');
+              return;
+            }
+            const checked = checkOwnerIdentity(identityType, identityNumber);
+            if (!checked.ok) {
+              setError(checked.message);
               return;
             }
             mutation.mutate();

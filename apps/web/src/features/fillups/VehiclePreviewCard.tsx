@@ -1,15 +1,10 @@
+import { VEHICLE_FUEL_TYPE_LABELS_AR } from '@fuel-tracking/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { apiClient } from '../../lib/apiClient';
-import {
-  PROVISIONAL_OWNER_LABEL,
-  PROVISIONAL_OWNER_VARIANT,
-  identityTypeLabel,
-  isProvisionalOwnerIdentity,
-} from '../../lib/labels';
+import { identityTypeLabel } from '../../lib/labels';
 import { maskIdentityNumber } from '../../lib/masking';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
-import { StatusPill } from '../../components/design/StatusPill';
 import { useAuth } from '../auth/AuthProvider';
 import type { VehicleBasicInfo } from '../vehicles/types';
 
@@ -46,7 +41,8 @@ export function VehiclePreviewCard({ vehicleId, idSuffix = '' }: { vehicleId: st
   return (
     <div className="mt-2.5 rounded-sm bg-surface-alt p-3 text-[12px]" data-testid={`vehicle-preview-card${idSuffix}`}>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        <PreviewField label="الطراز" value={data.model ?? '—'} />
+        <PreviewField label="المركبة" value={[data.make, data.model].filter(Boolean).join(' ') || '—'} />
+        <PreviewField label="نوع الوقود" value={data.fuelType ? VEHICLE_FUEL_TYPE_LABELS_AR[data.fuelType] : '—'} />
         <PreviewField label="نوع المركبة" value={data.vehicleType?.name ?? '—'} />
       </div>
 
@@ -69,11 +65,6 @@ export function VehiclePreviewCard({ vehicleId, idSuffix = '' }: { vehicleId: st
                 />
               }
             />
-            {isProvisionalOwnerIdentity(data.owner.identityType) && (
-              <div className="pt-1" data-testid={`vehicle-preview-owner-provisional${idSuffix}`}>
-                <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
-              </div>
-            )}
           </div>
         ) : (
           <p className="font-bold text-ink">—</p>

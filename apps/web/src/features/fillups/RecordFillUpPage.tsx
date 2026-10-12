@@ -25,7 +25,14 @@ import { LtrText } from '../../components/LtrText';
 import { DigitBoxInput } from '../../components/DigitBoxInput';
 import { PLATE_DIGIT_GROUPS, isAllComplete, splitToGroups } from '../../lib/digitBoxGroups';
 import { formatLicensePlate } from '../../lib/libyanFormats';
-import { normalizePlate, platesMatch, plateSearchTerm } from '@fuel-tracking/shared-types';
+import {
+  MAX_FILLUP_LITERS,
+  VEHICLE_FUEL_TYPE_LABELS_AR,
+  fuelTypeMismatch,
+  normalizePlate,
+  platesMatch,
+  plateSearchTerm,
+} from '@fuel-tracking/shared-types';
 import { fuelTypeLabel } from '../../lib/labels';
 import { useAuth } from '../auth/AuthProvider';
 import { useStations } from '../stations/useStations';
@@ -337,9 +344,10 @@ const fillUpSchema = z.object({
   quantityLiters: z.string().refine(
     (v) => {
       const n = Number(v);
-      return v.trim() !== '' && Number.isFinite(n) && n > 0 && n <= 1000;
+      // The same ceiling the API applies (MAX_FILLUP_LITERS, shared-types).
+      return v.trim() !== '' && Number.isFinite(n) && n > 0 && n <= MAX_FILLUP_LITERS;
     },
-    { message: 'يجب أن تكون الكمية رقمًا أكبر من صفر ولا يتجاوز 1000' },
+    { message: `يجب أن تكون الكمية رقمًا أكبر من صفر ولا يتجاوز ${MAX_FILLUP_LITERS} لترًا` },
   ),
 });
 
@@ -490,6 +498,11 @@ export function RecordFillUpPage() {
   // ── Mobile wizard state ──────────────────────────────────────────────
   const [mobileStep, setMobileStep] = useState<MobileStep>('plate');
   const [plateValue, setPlateValue] = useState('');
+  // Phase 5A: a plate may end in N (part of the plate's identity, so 5-123N is
+  // not 5-123). The toggle sits beside the two digit groups; every MATCH and
+  // the unregistered record use the full plate with the N.
+  const [plateN, setPlateN] = useState(false);
+  const plateFull = plateValue ? `${plateValue}${plateN ? 'N' : ''}` : '';
   // Round 11 item 4: whether the user has actually finished typing the
   // plate (moved focus away from the box row) since the last keystroke —
   // needed because the sequence group's `minFilled: 1` makes isAllComplete
@@ -624,6 +637,11 @@ export function RecordFillUpPage() {
     // a definitive answer, not a transient failure — don't retry it.
     retry: (failureCount, error) => !(isAxiosError(error) && error.response?.status === 409) && failureCount < 3,
   });
+  // Phase 5A: the fuel chosen is not the fuel the vehicle runs on. A clear
+  // warning, never a block - the server records it on the fill-up too.
+  const chosenFuel = fillUpForm.watch('fuelType');
+  const vehicleFuelType = selectedVehicle?.fuelType ?? rulePreviewQuery.data?.vehicleFuelType ?? null;
+  const fuelMismatch = fuelTypeMismatch(vehicleFuelType, chosenFuel);
   const previewCardRequired = isAxiosError(rulePreviewQuery.error) ? cardRequiredFrom(rulePreviewQuery.error) : null;
   const activeCardRequired = cardRequired ?? previewCardRequired;
   const rulePreviewErrorMessage = isAxiosError(rulePreviewQuery.error)
@@ -788,7 +806,7 @@ export function RecordFillUpPage() {
     enabled: plateSearchWorthwhile,
   });
   const matchedVehicle = plateLookupQuery.data?.find(
-    (v) => platesMatch(v.currentPlate, plateValue),
+    (v) => platesMatch(v.currentPlate, plateFull),
   );
   // Live-search candidates shown below the keypad WHILE still typing —
   // distinct from matchedVehicle (exact match, drives auto-advance).
@@ -807,7 +825,10 @@ export function RecordFillUpPage() {
   // caused the disappearing act. The live list now depends only on
   // whether the query actually has results and there's no exact match
   // yet — never on the idle/blur approximation.
-  const plateLiveCandidates = !matchedVehicle ? (plateLookupQuery.data ?? []) : [];
+  // With the N toggled on, only plates that end in N can be the vehicle.
+  const plateLiveCandidates = !matchedVehicle
+    ? (plateLookupQuery.data ?? []).filter((v) => !plateN || /N$/i.test(v.currentPlate.trim()))
+    : [];
   const plateHasNoCandidates =
     plateSearchWorthwhile && !plateLookupQuery.isFetching && !matchedVehicle && plateLiveCandidates.length === 0;
 
@@ -1264,6 +1285,19 @@ export function RecordFillUpPage() {
                   showKeypad
                   data-testid="fillup-mobile-plate-input"
                 />
+                <label className="mt-3 flex min-h-[48px] items-center justify-center gap-3 text-[16px] font-bold text-ink">
+                  <input
+                    type="checkbox"
+                    data-testid="fillup-mobile-plate-n"
+                    checked={plateN}
+                    onChange={(e) => {
+                      setPlateN(e.target.checked);
+                      setPlateBlurred(true);
+                    }}
+                    className="h-6 w-6"
+                  />
+                  تنتهي اللوحة بحرف N
+                </label>
                 {/* Round 12: candidate matches while still typing — the
                     client asked not to require the entire plate before
                     the system finds it. Shown whenever the search has
@@ -1336,12 +1370,12 @@ export function RecordFillUpPage() {
                 {plateHasNoCandidates && plateComplete && (
                   <NotRegisteredNotice
                     onRecord={
-                      (canViewAllStations && !fillUpForm.watch('stationId')) || normalizePlate(plateValue) === null
+                      (canViewAllStations && !fillUpForm.watch('stationId')) || normalizePlate(plateFull) === null
                         ? undefined
                         : () => {
                             fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
                             setSelectedVehicleLabel('');
-                            setUnregisteredPlate(plateValue);
+                            setUnregisteredPlate(plateFull);
                             setCardRequired(null);
                             setMobileStep('match');
                           }
@@ -1523,6 +1557,16 @@ export function RecordFillUpPage() {
                 );
               })}
             </div>
+            {fuelMismatch && vehicleFuelType && (
+              <div
+                role="alert"
+                data-testid="fillup-fuel-mismatch"
+                className="mt-3 rounded-md bg-accent-100 p-3.5 text-[16px] font-bold leading-[1.7] text-ink"
+              >
+                تنبيه: هذه المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[vehicleFuelType]}، والوقود المختار مختلف.
+                راجع نوع الوقود قبل المتابعة — يمكنك المتابعة، وسيُسجَّل التنبيه للمشرف.
+              </div>
+            )}
 
             <label className={`${fieldLabelClass} mt-4`}>المبلغ المدفوع (د.ل)</label>
             {(() => {
@@ -1606,8 +1650,21 @@ export function RecordFillUpPage() {
                   idSuffix="-mobile"
                 />
                 {rulePreviewQuery.data && rulePreviewQuery.data.skippedRules.length > 0 && (
-                  <p className="mt-3 rounded-sm bg-accent-100 p-2.5 text-[11.5px] leading-[1.7] text-accent-dark" data-testid="fillup-skipped-rules">
-                    مركبة غير مسجلة — لا يوجد مالك، فلا تُطبَّق قواعد المالك ({rulePreviewQuery.data.skippedRules.map((r) => RULE_CHECK_LABELS[r]).join('، ')}).
+                  <p className="mt-3 rounded-sm bg-accent-100 p-3 text-[14px] leading-[1.7] text-accent-dark" data-testid="fillup-skipped-rules">
+                    {rulePreviewQuery.data.skippedReason === 'INSTITUTION_OWNER'
+                      ? 'مركبة تابعة لجهة أو مؤسسة — تُطبَّق عليها قواعد المركبة وحدها، ولا تُجمع مع مركبات الجهة الأخرى'
+                      : 'مركبة غير مسجلة — لا يوجد مالك، فلا تُطبَّق قواعد المالك'}{' '}
+                    ({rulePreviewQuery.data.skippedRules.map((r) => RULE_CHECK_LABELS[r]).join('، ')}).
+                  </p>
+                )}
+                {fuelMismatch && vehicleFuelType && (
+                  <p role="alert" className="mt-3 rounded-sm bg-accent-100 p-3 text-[14px] font-bold leading-[1.7] text-ink" data-testid="fillup-fuel-mismatch-review">
+                    تنبيه: المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[vehicleFuelType]} والوقود المختار مختلف. سيُسجَّل التنبيه للمشرف.
+                  </p>
+                )}
+                {rulePreviewQuery.data && (rulePreviewQuery.data.disabledRules?.length ?? 0) > 0 && (
+                  <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft" data-testid="fillup-disabled-rules">
+                    قواعد غير مفعّلة حاليًا ولا تُطبَّق: {rulePreviewQuery.data.disabledRules!.map((r) => RULE_CHECK_LABELS[r]).join('، ')}.
                   </p>
                 )}
               </Card>
@@ -1672,7 +1729,9 @@ export function RecordFillUpPage() {
 // — plate very large, then make/model and colour — and must tap the big
 // confirm button. No fill-up is recorded without that tap.
 function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onConfirm: () => void; onReject: () => void }) {
-  const makeLine = [card.vehicle.model, card.vehicle.color].filter(Boolean).join(' — ');
+  const makeLine = [[card.vehicle.make, card.vehicle.model].filter(Boolean).join(' '), card.vehicle.color]
+    .filter(Boolean)
+    .join(' — ');
   return (
     <Card className="p-5 text-center" data-testid="fillup-scan-confirm">
       <p className="text-[12px] font-bold text-ink-soft">هل هذه هي المركبة التي أمامك؟</p>
@@ -1865,6 +1924,10 @@ function stationBlockedMessage(error: AxiosError<{ message?: string | string[] }
       return 'لا يمكن تسجيل تعبئة في هذه المحطة لأن البلدية التابعة لها غير محددة. يرجى التواصل مع مسؤول المنظومة لتحديد بلدية المحطة.';
     case 'MUNICIPALITY_NOT_LIVE':
       return 'لا يمكن تسجيل تعبئة في هذه المحطة لأن بلديتها لم تُفعَّل في المنظومة بعد.';
+    case 'STATION_ARCHIVED':
+      return 'هذه المحطة مؤرشفة ولا تقبل تعبئات جديدة. تواصل مع مدير البلدية.';
+    case 'MUNICIPALITY_ARCHIVED':
+      return 'بلدية هذه المحطة مؤرشفة ولا تقبل تعبئات جديدة.';
     default:
       return null;
   }
@@ -1874,14 +1937,6 @@ function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): s
   const stationBlocked = stationBlockedMessage(error);
   if (stationBlocked) {
     return stationBlocked;
-  }
-  // Round 11 item 1: FillUpsService.create's provisional-owner-identity
-  // hard gate (see OWNER_IDENTITY_PROVISIONAL there) — a 403 with this
-  // exact marker string as its message, checked here rather than shown as
-  // the generic fallback, since the client specifically wants this case
-  // to read as "go fix the owner's identity," not "something went wrong."
-  if (error.response?.status === 403 && error.response.data?.message === 'OWNER_IDENTITY_PROVISIONAL') {
-    return 'هوية مالك هذه المركبة مؤقتة (رخصة قيادة) وصالحة لأول تعبئة فقط. أضف رقمًا وطنيًا أو إداريًا حقيقيًا لبيانات المالك قبل تسجيل تعبئة أخرى.';
   }
   // Phase 4a plate markers.
   const marker = error.response?.data?.message;

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, MinLength } from 'class-validator';
-import { IdentityType } from '@prisma/client';
+import { IsIn, IsString, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { cleanDigits } from '@fuel-tracking/shared-types';
 import { IsValidIdentityNumber } from '../../common/validators/identity-number.validator';
 
 // Mirrors CreateVehicleChangeRequestDto, but for an owner's identityType/
@@ -8,11 +9,12 @@ import { IsValidIdentityNumber } from '../../common/validators/identity-number.v
 // `identityType` property off this same object, which is why the field is
 // named plainly `identityType` here rather than `requestedIdentityType`.
 export class CreateOwnerChangeRequestDto {
-  @ApiProperty({ enum: IdentityType })
-  @IsEnum(IdentityType)
-  identityType!: IdentityType;
+  @ApiProperty({ enum: ['NATIONAL_ID', 'ADMINISTRATIVE_ID'] })
+  @IsIn(['NATIONAL_ID', 'ADMINISTRATIVE_ID'], { message: 'نوع الهوية يجب أن يكون الرقم الوطني أو الرقم الإداري.' })
+  identityType!: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
 
   @ApiProperty({ description: 'The corrected identity number, in the format matching identityType.' })
+  @Transform(({ value }) => (typeof value === 'string' ? cleanDigits(value) : value))
   @IsString()
   @IsValidIdentityNumber()
   identityNumber!: string;

@@ -1,3 +1,4 @@
+import { VEHICLE_FUEL_TYPE_LABELS_AR } from '@fuel-tracking/shared-types';
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -10,9 +11,6 @@ import {
   fuelTypeLabel,
   vehicleChangeTypeLabel,
   identityTypeLabel,
-  isProvisionalOwnerIdentity,
-  PROVISIONAL_OWNER_LABEL,
-  PROVISIONAL_OWNER_VARIANT,
 } from '../../lib/labels';
 import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
 import { VehicleCardPanel } from '../cards/VehicleCardPanel';
@@ -141,9 +139,9 @@ export function VehicleDetailPage() {
                     (same source VehicleBrandPicker uses), or a generic vehicle
                     glyph for an unmatched/blank brand, as a circular avatar
                     heading the identity card. */}
-                <VehicleBrandLogo model={vehicle.model} size={52} />
+                <VehicleBrandLogo model={vehicle.make} size={52} />
                 <div className="min-w-0">
-                  <p className="truncate text-[15px] font-extrabold text-ink">{vehicle.model ?? 'طراز غير محدَّد'}</p>
+                  <p className="truncate text-[15px] font-extrabold text-ink">{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'طراز غير محدَّد'}</p>
                   <p className="truncate text-[11.5px] text-ink-faint">{vehicle.vehicleType?.name ?? 'نوع غير محدَّد'}</p>
                 </div>
               </div>
@@ -173,6 +171,10 @@ export function VehicleDetailPage() {
                 label="رقم كتيب المركبة"
                 value={vehicle.registrationBooklet ? <CodeText>{vehicle.registrationBooklet}</CodeText> : '—'}
               />
+              <Field label="نوع الوقود" value={vehicle.fuelType ? VEHICLE_FUEL_TYPE_LABELS_AR[vehicle.fuelType] : '—'} />
+              {vehicle.chassisNonStandard && (
+                <Field label="رقم الهيكل" value={<StatusPill variant="accent">غير قياسي</StatusPill>} />
+              )}
               <Field label="اللون" value={vehicle.color ?? '—'} />
               <Field label="سنة الصنع" value={vehicle.manufactureYear?.toString() ?? '—'} />
               <Field
@@ -184,15 +186,19 @@ export function VehicleDetailPage() {
                         ownerId={vehicle.owner.id}
                         fullName={vehicle.owner.fullName}
                         phone={vehicle.owner.phone}
+                        isInstitution={vehicle.owner.ownerKind === 'INSTITUTION'}
                         onDone={() => setEditingOwner(false)}
                       />
                     </div>
                   ) : (
                     <>
                       {vehicle.owner?.fullName ?? '—'}
-                      {vehicle.owner && isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
+                      {vehicle.owner?.ownerKind === 'INSTITUTION' && (
                         <div className="mt-1">
-                          <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
+                          <StatusPill variant="neutral">جهة / مؤسسة</StatusPill>
+                          {vehicle.owner.responsibleDriverName && (
+                            <p className="mt-1 text-[11px] text-ink-soft">السائق المسؤول: {vehicle.owner.responsibleDriverName}</p>
+                          )}
                         </div>
                       )}
                       {vehicle.owner && canEditOwner && (

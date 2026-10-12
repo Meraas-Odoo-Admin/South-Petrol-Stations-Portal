@@ -1,4 +1,17 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { RbacService } from '../rbac/rbac.service';
 import { ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -23,7 +36,22 @@ export class SystemSettingsController {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly settingsService: SystemSettingsService,
+    private readonly rbac: RbacService,
   ) {}
+
+  // Phase 5A: the fill-up rule switches (fillup.rule.*) are the super admin's
+  // alone - rules:toggle, checked on the server, whatever the screen shows.
+  // A switch holds exactly "true" or "false".
+  private async assertMayChange(key: string, value: string | undefined, actorId: string) {
+    if (!key.startsWith('fillup.rule.')) return;
+    const held = await this.rbac.getPermissionsForUser(actorId);
+    if (!held.has('rules:toggle')) {
+      throw new ForbiddenException('RULE_SWITCH_SUPER_ADMIN_ONLY');
+    }
+    if (value !== undefined && value !== 'true' && value !== 'false') {
+      throw new BadRequestException('RULE_SWITCH_VALUE_INVALID');
+    }
+  }
 
   @RequirePermission('settings:manage')
   @Get()
@@ -58,6 +86,7 @@ export class SystemSettingsController {
   @RequirePermission('settings:manage')
   @Post()
   async create(@Body() dto: CreateSettingDto, @CurrentUser() actor: AuthenticatedUser) {
+    await this.assertMayChange(dto.key, dto.value, actor.id);
     const existing = await this.prisma.systemSetting.findUnique({ where: { key: dto.key } });
     if (existing) {
       throw new ConflictException(`SystemSetting "${dto.key}" already exists.`);
@@ -90,6 +119,7 @@ export class SystemSettingsController {
     @Body() dto: UpdateSettingDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
+    await this.assertMayChange(key, dto.value, actor.id);
     const before = await this.prisma.systemSetting.findUnique({ where: { key } });
     if (!before) {
       throw new NotFoundException(`SystemSetting "${key}" does not exist — settings are not created here.`);

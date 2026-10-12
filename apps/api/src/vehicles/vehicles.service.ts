@@ -281,6 +281,9 @@ export class VehiclesService {
       const vehicle = await tx.vehicle.create({
         data: {
           ...vehicleFields,
+          // 'PETROL' | 'DIESEL' from the DTO; the column is the Prisma enum.
+          fuelType: vehicleFields.fuelType,
+          chassisNonStandard: vehicleFields.chassisNonStandard ?? false,
           normalizedPlate,
           internalCode,
           registeredAtRegistrationStationId: registrationStationId,
@@ -353,7 +356,6 @@ export class VehiclesService {
       [OwnerIdentityStatusFilter.VERIFIED]: {
         owner: { identityType: { in: ['NATIONAL_ID', 'ADMINISTRATIVE_ID'] } },
       },
-      [OwnerIdentityStatusFilter.PROVISIONAL]: { owner: { identityType: 'DRIVERS_LICENSE' } },
       [OwnerIdentityStatusFilter.MISSING]: { ownerId: null },
     };
 
@@ -384,7 +386,7 @@ export class VehiclesService {
           : {}),
         chassisNumber: query.chassisNumber ? { contains: query.chassisNumber } : undefined,
         usageType: query.usageType,
-        model: query.brand ? { equals: query.brand } : undefined,
+        make: query.brand ? { equals: query.brand } : undefined,
         vehicleTypeId: query.vehicleTypeId,
         ...(query.ownerIdentityStatus ? ownerIdentityFilter[query.ownerIdentityStatus] : {}),
         // Independent OR search — a caller who doesn't know whether their
@@ -404,7 +406,18 @@ export class VehiclesService {
           : undefined,
       },
       include: {
-        owner: { select: { id: true, fullName: true, identityType: true, identityNumber: true, phone: true } },
+        owner: {
+          select: {
+            id: true,
+            fullName: true,
+            identityType: true,
+            identityNumber: true,
+            phone: true,
+            ownerKind: true,
+            responsibleDriverName: true,
+            responsibleDriverPhone: true,
+          },
+        },
         vehicleType: { select: { id: true, name: true } },
       },
       skip: query.skip,
@@ -435,7 +448,18 @@ export class VehiclesService {
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id },
       include: {
-        owner: { select: { id: true, fullName: true, identityType: true, identityNumber: true, phone: true } },
+        owner: {
+          select: {
+            id: true,
+            fullName: true,
+            identityType: true,
+            identityNumber: true,
+            phone: true,
+            ownerKind: true,
+            responsibleDriverName: true,
+            responsibleDriverPhone: true,
+          },
+        },
         vehicleType: { select: { id: true, name: true } },
         plateHistory: { orderBy: { validFrom: 'asc' } },
       },
@@ -467,8 +491,20 @@ export class VehiclesService {
           action: 'UPDATE',
           entityType: 'Vehicle',
           entityId: vehicle.id,
-          oldValue: { model: before.model, color: before.color, manufactureYear: before.manufactureYear },
-          newValue: { model: vehicle.model, color: vehicle.color, manufactureYear: vehicle.manufactureYear },
+          oldValue: {
+            make: before.make,
+            model: before.model,
+            color: before.color,
+            manufactureYear: before.manufactureYear,
+            fuelType: before.fuelType,
+          },
+          newValue: {
+            make: vehicle.make,
+            model: vehicle.model,
+            color: vehicle.color,
+            manufactureYear: vehicle.manufactureYear,
+            fuelType: vehicle.fuelType,
+          },
         },
         tx,
       );
@@ -721,6 +757,15 @@ export class VehiclesService {
         }
         await tx.vehicleChassisHistory.create({
           data: { vehicleId: request.vehicleId, chassisNumber: request.requestedValue },
+        });
+        // The tick that lets a chassis number be non-standard follows the
+        // value now on the vehicle (not 17 characters, or holding I/O/Q).
+        await tx.vehicle.update({
+          where: { id: request.vehicleId },
+          data: {
+            chassisNonStandard:
+              request.requestedValue.length !== 17 || /[IOQ]/.test(request.requestedValue),
+          },
         });
       } else if (request.changeType === VehicleChangeType.BOOKLET_CHANGE) {
         const currentHistoryRow = await tx.vehicleBookletHistory.findFirst({

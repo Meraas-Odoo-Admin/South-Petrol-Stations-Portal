@@ -129,7 +129,14 @@ describe('Reports (e2e)', () => {
     // unrestrictedStationAccess on the role itself — the M4 scope-resolution
     // logic keys off the PERMISSION, not the role flag, so this
     // deliberately proves that distinction.
-    const allStationsRole = await prisma.role.create({ data: { name: `e2e_rpt_allstations_role_${runId}` } });
+    // Phase 5A: the permission only means "no station has to be named"; the
+    // caller's own scope still bounds every report. This role is also flagged
+    // unrestricted (the super admin), so it sees every station; a holder who is
+    // NOT unrestricted (a municipality manager) sees only their scope - see
+    // municipality-scope.e2e-spec.ts.
+    const allStationsRole = await prisma.role.create({
+      data: { name: `e2e_rpt_allstations_role_${runId}`, unrestrictedStationAccess: true },
+    });
     allStationsRoleId = allStationsRole.id;
     await prisma.rolePermission.createMany({
       data: [

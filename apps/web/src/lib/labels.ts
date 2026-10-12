@@ -12,9 +12,9 @@ export const ROLE_LABELS: Record<string, string> = {
   station_employee: 'موظف محطة',
   station_supervisor: 'مشرف محطة',
   registration_employee: 'موظف تسجيل',
-  registration_supervisor: 'مشرف تسجيل',
-  directorate_admin: 'إدارة المديرية',
-  system_admin: 'مدير المنظومة',
+  registration_supervisor: 'مدير مكتب التسجيل',
+  directorate_admin: 'مدير البلدية',
+  system_admin: 'المدير العام للنظام',
 };
 
 export function roleLabel(roleName: string): string {
@@ -31,7 +31,8 @@ export function roleLabel(roleName: string): string {
 // promptly — this list is meant to stay complete.
 export const PERMISSION_LABELS: Record<string, string> = {
   'companies:read': 'عرض الشركات',
-  'companies:manage': 'إدارة الشركات',
+  'companies:manage': 'إضافة الشركات',
+  'companies:update': 'تعديل الشركات وأرشفتها',
   'municipalities:read': 'عرض البلديات',
   'municipalities:manage': 'إدارة البلديات',
   'municipalities:set_stage_dates': 'تحديد تاريخي التوعية واشتراط البطاقة للبلدية',
@@ -152,10 +153,9 @@ export function fuelTypeLabel(fuelType: string | null | undefined): string {
 export const IDENTITY_TYPE_LABELS: Record<string, string> = {
   NATIONAL_ID: 'رقم وطني',
   ADMINISTRATIVE_ID: 'رقم إداري',
-  // Round 11 item 1: deliberately provisional — see
-  // VehicleOwner.identityType's schema comment and
-  // isProvisionalOwnerIdentity below.
-  DRIVERS_LICENSE: 'رخصة قيادة (مؤقت)',
+  // Rows created before phase 5A may still carry this; nothing creates it any more.
+  DRIVERS_LICENSE: 'رخصة قيادة (قديم)',
+  INSTITUTION: 'جهة / مؤسسة',
 };
 
 export function identityTypeLabel(identityType: string | null | undefined): string {
@@ -163,19 +163,6 @@ export function identityTypeLabel(identityType: string | null | undefined): stri
   return IDENTITY_TYPE_LABELS[identityType] ?? identityType;
 }
 
-// Round 11 item 1: a DRIVERS_LICENSE-identified owner is a one-time
-// fallback, valid only for the vehicle's first fill-up — the vehicle
-// profile stays flagged "incomplete" until a real national/administrative
-// ID replaces it. Reuses the same accent-badge language
-// STATION_STATUS_LABELS.UNVERIFIED already established for "on record but
-// needs review," rather than inventing a new visual vocabulary for
-// "incomplete."
-export function isProvisionalOwnerIdentity(identityType: string | null | undefined): boolean {
-  return identityType === 'DRIVERS_LICENSE';
-}
-
-export const PROVISIONAL_OWNER_LABEL = 'هوية مؤقتة — تحتاج مراجعة';
-export const PROVISIONAL_OWNER_VARIANT = 'accent' as const;
 
 // Generic pending/approved/rejected status wording, shared by change
 // requests and exceptions (dictionary's "حالات الاستثناء").
@@ -278,9 +265,9 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   station_employee: 'يسجّل التعبئات في محطته فقط.',
   station_supervisor: 'يعتمد الاستثناءات ويدير موظفي محطته.',
   registration_employee: 'يسجّل المركبات والملاك ويصدر البطاقات في مكتبه.',
-  registration_supervisor: 'يعتمد التصحيحات ويدير موظفي مكتبه.',
-  directorate_admin: 'يرى كل المحطات والمكاتب ويدير الحسابات والإعدادات.',
-  system_admin: 'كل الصلاحيات، بما فيها إدارة مديري المنظومة.',
+  registration_supervisor: 'يدير مكتبه وموظفيه، ويعتمد التصحيحات وإلغاء البطاقات.',
+  directorate_admin: 'يدير محطات بلديته ومكاتب التسجيل فيها ومشرفيها.',
+  system_admin: 'ينشئ البلديات ومديريها ويضبط قواعد المنظومة.',
 };
 
 export function roleDescription(roleName: string, fallback?: string | null): string | null {
@@ -299,6 +286,7 @@ export const ACCOUNT_STATUS_LABELS = {
   deactivated: 'موقوف',
   locked: 'مقفل',
   must_change: 'يجب تغيير كلمة المرور',
+  archived: 'مؤرشف',
 } as const;
 
 // AuditLog.action values written for an account (phase 4b), as a sentence.

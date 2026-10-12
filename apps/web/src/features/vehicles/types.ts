@@ -21,16 +21,20 @@ export interface VehicleBasicInfo {
   // replacing the old free-text field — see VehicleType's schema comment.
   vehicleTypeId: string | null;
   vehicleType: { id: string; name: string } | null;
+  make: string | null;
   model: string | null;
+  fuelType: 'PETROL' | 'DIESEL' | null;
+  chassisNonStandard: boolean;
   color: string | null;
   manufactureYear: number | null;
   usageType: string | null;
   owner: {
     id: string;
     fullName: string;
-    // Round 11 item 1: DRIVERS_LICENSE added — a provisional, one-time
-    // fallback identity type. See isProvisionalOwnerIdentity in lib/labels.ts.
-    identityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE';
+    identityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE' | 'INSTITUTION';
+    ownerKind?: 'INDIVIDUAL' | 'INSTITUTION';
+    responsibleDriverName?: string | null;
+    responsibleDriverPhone?: string | null;
     identityNumber: string;
     // Round 20: required for new owners — still nullable in the type since
     // owners created before that round have none.

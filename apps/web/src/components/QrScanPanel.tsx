@@ -17,7 +17,9 @@ export interface ScannedCard {
     id: string;
     internalCode: string;
     currentPlate: string;
+    make?: string | null;
     model: string | null;
+    fuelType?: 'PETROL' | 'DIESEL' | null;
     color: string | null;
     vehicleType: { name: string } | null;
   };

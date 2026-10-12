@@ -1,5 +1,5 @@
 import { resolveWeekWindowStrategy } from './week-window.strategy';
-import { OWNER_LEVEL_RULES } from './types';
+import { OWNER_LEVEL_RULES, RULE_SWITCH_DEFAULTS, RULE_SWITCH_KEYS } from './types';
 import type {
   FillUpHistoryReader,
   FillUpHistoryRecord,
@@ -8,6 +8,7 @@ import type {
   RuleResult,
   RuleSubject,
   SettingsReader,
+  SkippedBecause,
   StandingExceptionReader,
 } from './types';
 
@@ -77,15 +78,37 @@ export class FillUpRuleEngine {
   // station's). Every history count below is limited to it: a vehicle
   // draws on a separate allowance in each municipality. The limits
   // themselves stay system-wide SystemSetting values.
+  // Phase 5A: whether one rule is switched on. A rule switched off is skipped
+  // COMPLETELY - not evaluated, not reported as failed, not counted - in the
+  // submit and in the preview alike, because both come through here.
+  private async isRuleEnabled(reason: RuleFailureReason): Promise<boolean> {
+    let raw: string;
+    try {
+      raw = await this.settings.getString(RULE_SWITCH_KEYS[reason]);
+    } catch {
+      return RULE_SWITCH_DEFAULTS[reason];
+    }
+    return raw.trim().toLowerCase() === 'true';
+  }
+
   private async computeChecks(
     subject: RuleSubject,
     municipalityId: string,
     occurredAt: Date,
-  ): Promise<{ checks: (RuleCheckDetail & { record?: FillUpHistoryRecord })[] }> {
+  ): Promise<{
+    checks: (RuleCheckDetail & { record?: FillUpHistoryRecord })[];
+    disabled: RuleFailureReason[];
+    skippedBecause: SkippedBecause | null;
+  }> {
     // Phase 4a: for a plate with no registered vehicle the "vehicle-level"
     // rules count that plate's own history (same settings, same checks, same
     // reasons); there's no owner, so the owner-level rules are left out.
-    const ownerId = subject.kind === 'vehicle' ? subject.ownerId : null;
+    // Phase 5A: the same goes for an INSTITUTION owner - only the vehicle-
+    // level rules apply to an institution's vehicles.
+    const institution = subject.kind === 'vehicle' && subject.ownerKind === 'INSTITUTION';
+    const ownerId = subject.kind === 'vehicle' && !institution ? subject.ownerId : null;
+    const skippedBecause: SkippedBecause | null =
+      subject.kind === 'plate' ? 'UNREGISTERED_PLATE' : institution ? 'INSTITUTION_OWNER' : null;
     const maxPerWeekVehicle = await this.settings.getNumber('fillup.max_per_week');
     const minGapDaysVehicle = await this.settings.getNumber('fillup.min_gap_days');
     const maxPerWeekOwner = await this.settings.getNumber('fillup.max_per_week_per_owner');
@@ -159,7 +182,15 @@ export class FillUpRuleEngine {
       );
     }
 
-    return { checks };
+    // Drop every rule that is switched off. What is left is exactly what is
+    // applied and exactly what the preview shows.
+    const disabled: RuleFailureReason[] = [];
+    const applied: typeof checks = [];
+    for (const check of checks) {
+      if (await this.isRuleEnabled(check.reason)) applied.push(check);
+      else disabled.push(check.reason);
+    }
+    return { checks: applied, disabled, skippedBecause };
   }
 
   // Resolves a list of candidate violations against standing exceptions,
@@ -238,8 +269,14 @@ export class FillUpRuleEngine {
     subject: RuleSubject,
     municipalityId: string,
     occurredAt: Date,
-  ): Promise<{ result: RuleResult; checks: RuleCheckDetail[]; skipped: RuleFailureReason[] }> {
-    const { checks } = await this.computeChecks(subject, municipalityId, occurredAt);
+  ): Promise<{
+    result: RuleResult;
+    checks: RuleCheckDetail[];
+    skipped: RuleFailureReason[];
+    skippedBecause: SkippedBecause | null;
+    disabled: RuleFailureReason[];
+  }> {
+    const { checks, disabled, skippedBecause } = await this.computeChecks(subject, municipalityId, occurredAt);
     const violations: Violation[] = checks
       .filter((c) => !c.passed)
       .map((c) => ({ reason: c.reason, record: c.record }));
@@ -247,7 +284,9 @@ export class FillUpRuleEngine {
     return {
       result,
       checks: checks.map(({ record: _record, ...rest }) => rest),
-      skipped: subject.kind === 'plate' ? OWNER_LEVEL_RULES : [],
+      skipped: skippedBecause ? OWNER_LEVEL_RULES : [],
+      skippedBecause,
+      disabled,
     };
   }
 }

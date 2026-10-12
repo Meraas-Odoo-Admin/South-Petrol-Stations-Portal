@@ -15,9 +15,6 @@ import { Icon, ICONS } from '../../components/icons';
 import { useAuth } from '../auth/AuthProvider';
 import {
   identityTypeLabel,
-  isProvisionalOwnerIdentity,
-  PROVISIONAL_OWNER_LABEL,
-  PROVISIONAL_OWNER_VARIANT,
   CHANGE_NOT_YET_EFFECTIVE,
 } from '../../lib/labels';
 import { VEHICLE_BRANDS } from '../../lib/vehicleBrands';
@@ -34,10 +31,9 @@ interface PendingChangeSummary {
 // directly to item 1's mandatory-owner change ("which vehicles still need
 // their owner's real ID"). Mirrors OwnerIdentityStatusFilter in
 // apps/api/src/vehicles/dto/find-vehicles-query.dto.ts.
-type OwnerIdentityStatusFilter = 'VERIFIED' | 'PROVISIONAL' | 'MISSING';
+type OwnerIdentityStatusFilter = 'VERIFIED' | 'MISSING';
 const OWNER_IDENTITY_STATUS_LABELS: Record<OwnerIdentityStatusFilter, string> = {
   VERIFIED: 'هوية موثّقة',
-  PROVISIONAL: 'هوية مؤقتة',
   MISSING: 'بلا مالك',
 };
 
@@ -165,11 +161,6 @@ export function VehiclesListPage() {
       {data && (
         <div className="mb-4 grid animate-fade-in-up grid-cols-2 gap-2.5 sm:grid-cols-4">
           <KpiCard label="في هذه الصفحة" value={data.length} />
-          <KpiCard
-            label="هوية مؤقتة"
-            value={data.filter((v) => v.owner && isProvisionalOwnerIdentity(v.owner.identityType)).length}
-            variant={data.some((v) => v.owner && isProvisionalOwnerIdentity(v.owner.identityType)) ? 'accent' : 'neutral'}
-          />
           <KpiCard label="بلا مالك" value={data.filter((v) => !v.owner).length} />
           {canSeeChangeRequests && (
             <KpiCard
@@ -302,12 +293,12 @@ export function VehiclesListPage() {
                       >
                         <td className="px-[18px] py-3">
                           <Link to={`/vehicles/${vehicle.id}`} className="group flex items-center gap-2.5">
-                            <VehicleBrandLogo model={vehicle.model} size={34} />
+                            <VehicleBrandLogo model={vehicle.make} size={34} />
                             <span className="min-w-0">
                               <span className="block font-bold text-primary group-hover:underline">
                                 {vehicle.internalCode}
                               </span>
-                              <span className="block text-[11px] text-ink-faint">{vehicle.model ?? 'طراز غير محدَّد'}</span>
+                              <span className="block text-[11px] text-ink-faint">{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'طراز غير محدَّد'}</span>
                             </span>
                           </Link>
                         </td>
@@ -328,11 +319,6 @@ export function VehiclesListPage() {
                               <span className="ms-1.5 text-[11px] text-ink-faint">
                                 ({identityTypeLabel(vehicle.owner.identityType)})
                               </span>
-                              {isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
-                                <div className="mt-1">
-                                  <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
-                                </div>
-                              )}
                             </>
                           ) : (
                             '—'
@@ -368,7 +354,7 @@ export function VehiclesListPage() {
                     className={`p-4 transition-transform active:scale-[0.98] ${pending ? 'border-s-4 border-accent' : ''}`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <VehicleBrandLogo model={vehicle.model} size={36} />
+                      <VehicleBrandLogo model={vehicle.make} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-[14px] font-extrabold text-ink">{vehicle.internalCode}</span>
@@ -382,16 +368,11 @@ export function VehiclesListPage() {
                     <div className="mt-2 flex items-center gap-2 text-[11.5px] text-ink-faint">
                       <span>{vehicle.vehicleType?.name ?? '—'}</span>
                       <span>·</span>
-                      <span>{vehicle.model ?? '—'}</span>
+                      <span>{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || '—'}</span>
                     </div>
                     <div className="mt-1.5 text-[11.5px] text-ink-soft">
                       المالك: {vehicle.owner ? vehicle.owner.fullName : '—'}
                     </div>
-                    {vehicle.owner && isProvisionalOwnerIdentity(vehicle.owner.identityType) && (
-                      <div className="mt-1">
-                        <StatusPill variant={PROVISIONAL_OWNER_VARIANT}>{PROVISIONAL_OWNER_LABEL}</StatusPill>
-                      </div>
-                    )}
                     {pending && <p className="mt-2 text-[11.5px] text-ink-soft">{pending.reason}</p>}
                   </Card>
                 </Link>

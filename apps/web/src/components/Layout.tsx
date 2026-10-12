@@ -138,9 +138,10 @@ export function Layout() {
       icon: <Icon d={ICONS.dashboard} />,
       show: NAV_ACCESS.readiness(hasPermission),
     },
-    // Phase 4b: a supervisor's own staff — a menu entry of their own, not
-    // under «الإدارة». Admins manage accounts from the admin area instead.
-    { to: '/staff', label: 'فريق العمل', icon: <Icon d={ICONS.people} />, show: NAV_ACCESS.staff(hasPermission) },
+    // Phase 5A: each level's own place for its places and people.
+    { to: '/manage', label: 'إدارة المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.manage(hasPermission) },
+    { to: '/my-station', label: 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
+    { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
@@ -170,7 +171,7 @@ export function Layout() {
     { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
     { title: 'تقارير المتابعة', paths: ['/reports/registration', '/reports/card-stock', '/reports/readiness'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
-    { title: 'الفريق', paths: ['/staff'] },
+    { title: 'محطتي ومكتبي', paths: ['/manage', '/my-station', '/my-office'] },
     { title: 'الإدارة', paths: ['/admin'] },
   ];
   const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));

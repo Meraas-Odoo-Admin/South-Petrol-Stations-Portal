@@ -19,14 +19,19 @@ import { SetPlacesDto } from './dto/set-places.dto';
 import {
   ActorFacts,
   Capabilities,
+  PERM_MANAGE_PRIVILEGED,
+  PlaceKind,
   RoleFacts,
   Side,
   TargetFacts,
   canAssignRole,
   capabilitiesFor,
   isAdminCaller,
+  isMunicipalityManagerCaller,
   isStaffManagerCaller,
+  isSupervisorJob,
   placeIdsOf,
+  placeKindOfRole,
   placesWithinCallerScope,
 } from './user-access';
 
@@ -40,17 +45,19 @@ const FULL_INCLUDE = {
   roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
   stationScope: { include: { station: true } },
   registrationStationScope: { include: { registrationStation: true } },
+  municipalityScope: { include: { municipality: true } },
   directPermissions: { include: { permission: true } },
 } satisfies Prisma.UserInclude;
 
 type FullUser = Prisma.UserGetPayload<{ include: typeof FULL_INCLUDE }>;
 
-export type AccountStatus = 'active' | 'deactivated' | 'locked' | 'must_change';
+export type AccountStatus = 'active' | 'deactivated' | 'locked' | 'must_change' | 'archived';
 
 export function accountStatus(
-  user: { isActive: boolean; lockedUntil: Date | null; mustChangePassword: boolean },
+  user: { isActive: boolean; lockedUntil: Date | null; mustChangePassword: boolean; archivedAt?: Date | null },
   now = new Date(),
 ): AccountStatus {
+  if (user.archivedAt) return 'archived';
   if (!user.isActive) return 'deactivated';
   if (user.lockedUntil && user.lockedUntil > now) return 'locked';
   if (user.mustChangePassword) return 'must_change';
@@ -62,6 +69,7 @@ function roleFacts(role: FullUser['roles'][number]['role']): RoleFacts {
     id: role.id,
     name: role.name,
     kind: role.kind,
+    municipalityScoped: role.municipalityScoped,
     permissionKeys: role.permissions.map((p) => p.permission.key),
   };
 }
@@ -78,11 +86,36 @@ function targetFacts(user: FullUser): TargetFacts {
     permissions,
     stationIds: user.stationScope.map((s) => s.stationId),
     registrationStationIds: user.registrationStationScope.map((s) => s.registrationStationId),
+    municipalityIds: user.municipalityScope.map((s) => s.municipalityId),
   };
 }
 
 function sideOfUser(user: FullUser): Side | null {
   return user.roles.find((r) => r.role.kind)?.role.kind ?? null;
+}
+
+// Where this person works: municipalities (a municipality manager), petrol
+// stations, registration offices - or nowhere (the super admin).
+function placeKindOfUser(user: FullUser): PlaceKind | null {
+  const job = user.roles[0]?.role;
+  return job ? placeKindOfRole(roleFacts(job)) : null;
+}
+
+function placesOfUser(user: FullUser, kind: PlaceKind | null): { id: string; internalCode: string | null; name: string }[] {
+  if (kind === 'MUNICIPALITY') {
+    return user.municipalityScope.map((s) => ({ id: s.municipalityId, internalCode: s.municipality.code, name: s.municipality.name }));
+  }
+  if (kind === 'PETROL_STATION') {
+    return user.stationScope.map((s) => ({ id: s.stationId, internalCode: s.station.internalCode, name: s.station.name }));
+  }
+  if (kind === 'REGISTRATION') {
+    return user.registrationStationScope.map((s) => ({
+      id: s.registrationStationId,
+      internalCode: s.registrationStation.internalCode,
+      name: s.registrationStation.name,
+    }));
+  }
+  return [];
 }
 
 // Why an action on this person is refused, as a code the screen maps to
@@ -120,12 +153,19 @@ export class UsersAccountsService {
   private async actorFacts(actorId: string): Promise<ActorFacts> {
     const user = await this.loadFull(actorId);
     const facts = targetFacts(user);
+    // The scope as the rest of the system resolves it: a municipality
+    // manager reaches every station and office of their municipality.
+    const [stations, offices] = await Promise.all([
+      this.rbac.getStationScope(actorId),
+      this.rbac.getRegistrationStationScope(actorId),
+    ]);
     return {
       id: user.id,
       permissions: facts.permissions,
       kind: sideOfUser(user),
-      stationIds: new Set(facts.stationIds),
-      registrationStationIds: new Set(facts.registrationStationIds),
+      stationIds: new Set(stations ?? facts.stationIds),
+      registrationStationIds: new Set(offices ?? facts.registrationStationIds),
+      municipalityIds: new Set(facts.municipalityIds ?? []),
     };
   }
 
@@ -167,10 +207,15 @@ export class UsersAccountsService {
         OR: [
           { stationScope: { some: { stationId: query.placeId } } },
           { registrationStationScope: { some: { registrationStationId: query.placeId } } },
+          // Phase 5A: a municipality's own managers.
+          { municipalityScope: { some: { municipalityId: query.placeId } } },
         ],
       });
     }
     const now = new Date();
+    // Archived people leave the daily lists; they come back under the
+    // "archived" filter (and only there).
+    and.push(query.status === 'archived' ? { archivedAt: { not: null } } : { archivedAt: null });
     if (query.status === 'deactivated') and.push({ isActive: false });
     if (query.status === 'locked') and.push({ isActive: true, lockedUntil: { gt: now } });
     if (query.status === 'must_change') {
@@ -180,7 +225,15 @@ export class UsersAccountsService {
       and.push({ isActive: true, mustChangePassword: false, OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }] });
     }
 
-    const orderBy: Prisma.UserOrderByWithRelationInput[] = [{ fullName: 'asc' }, { id: 'asc' }];
+    const dir = query.dir ?? 'asc';
+    const orderBy: Prisma.UserOrderByWithRelationInput[] =
+      query.sort === 'username'
+        ? [{ username: dir }, { id: 'asc' }]
+        : query.sort === 'lastLogin'
+          ? [{ lastLoginAt: { sort: dir, nulls: 'last' } }, { id: 'asc' }]
+          : query.sort === 'created'
+            ? [{ createdAt: dir }, { id: 'asc' }]
+            : [{ fullName: dir }, { id: 'asc' }];
 
     if (isAdminCaller(actor)) {
       const where: Prisma.UserWhereInput = and.length ? { AND: and } : {};
@@ -189,6 +242,30 @@ export class UsersAccountsService {
         this.prisma.user.findMany({ where, include: FULL_INCLUDE, orderBy, skip, take }),
       ]);
       return { total, skip, take, items: rows.map((u) => this.toListItem(actor, u, now)) };
+    }
+
+    if (isMunicipalityManagerCaller(actor)) {
+      // Candidates: people holding a job that itself manages staff, with a
+      // place inside the caller's municipality. The capability check does
+      // the exact filtering (a single supervisor-level job, no place outside).
+      and.push({ id: { not: actor.id } });
+      and.push({
+        roles: { some: { role: { permissions: { some: { permission: { key: 'users:manage_staff' } } } } } },
+      });
+      and.push({
+        OR: [
+          { stationScope: { some: { stationId: { in: [...actor.stationIds] } } } },
+          { registrationStationScope: { some: { registrationStationId: { in: [...actor.registrationStationIds] } } } },
+        ],
+      });
+      const rows = await this.prisma.user.findMany({ where: { AND: and }, include: FULL_INCLUDE, orderBy });
+      const visible = rows.filter((u) => capabilitiesFor(actor, targetFacts(u)).canView);
+      return {
+        total: visible.length,
+        skip,
+        take,
+        items: visible.slice(skip, skip + take).map((u) => this.toListItem(actor, u, now)),
+      };
     }
 
     if (isStaffManagerCaller(actor) && actor.kind) {
@@ -219,23 +296,19 @@ export class UsersAccountsService {
   private toListItem(actor: ActorFacts, user: FullUser, now: Date) {
     const caps = capabilitiesFor(actor, targetFacts(user));
     const job = user.roles[0]?.role ?? null;
-    const side = sideOfUser(user);
-    const places =
-      side === 'PETROL_STATION'
-        ? user.stationScope.map((s) => s.station.name)
-        : side === 'REGISTRATION'
-          ? user.registrationStationScope.map((s) => s.registrationStation.name)
-          : [];
+    const placeKind = placeKindOfUser(user);
+    const places = placesOfUser(user, placeKind).map((p) => p.name);
     return {
       id: user.id,
       username: user.username,
       fullName: user.fullName,
       status: accountStatus(user, now),
       lastLoginAt: user.lastLoginAt,
+      archivedAt: user.archivedAt,
       job: job ? { roleId: job.id, name: job.name, kind: job.kind } : null,
       jobCount: user.roles.length,
-      sees: user.roles.some((r) => r.role.unrestrictedStationAccess) ? 'ALL' : 'PLACES',
-      placeKind: side,
+      sees: this.seesOf(user),
+      placeKind,
       placeNames: places.slice(0, 2),
       placeCount: places.length,
       canManage: caps.canManageAccount,
@@ -246,13 +319,14 @@ export class UsersAccountsService {
 
   async detail(actorId: string, id: string) {
     const { actor, user, caps } = await this.loadForCaller(actorId, id);
-    const side = sideOfUser(user);
+    const placeKind = placeKindOfUser(user);
     const roles = await this.assignableRoles(actor);
     return {
       id: user.id,
       username: user.username,
       fullName: user.fullName,
       phone: user.phone,
+      archivedAt: user.archivedAt,
       isActive: user.isActive,
       mustChangePassword: user.mustChangePassword,
       lockedUntil: user.lockedUntil,
@@ -268,6 +342,8 @@ export class UsersAccountsService {
           description: r.role.description,
           kind: r.role.kind,
           unrestrictedStationAccess: r.role.unrestrictedStationAccess,
+          municipalityScoped: r.role.municipalityScoped,
+          permissionKeys: r.role.permissions.map((p) => p.permission.key),
         },
       })),
       stationScope: user.stationScope.map((s) => ({ stationId: s.stationId, station: s.station })),
@@ -279,18 +355,9 @@ export class UsersAccountsService {
         permissionId: p.permissionId,
         permission: { id: p.permission.id, key: p.permission.key, description: p.permission.description },
       })),
-      placeKind: side,
-      places:
-        side === 'PETROL_STATION'
-          ? user.stationScope.map((s) => ({ id: s.stationId, internalCode: s.station.internalCode, name: s.station.name }))
-          : side === 'REGISTRATION'
-            ? user.registrationStationScope.map((s) => ({
-                id: s.registrationStationId,
-                internalCode: s.registrationStation.internalCode,
-                name: s.registrationStation.name,
-              }))
-            : [],
-      sees: user.roles.some((r) => r.role.unrestrictedStationAccess) ? 'ALL' : 'PLACES',
+      placeKind,
+      places: placesOfUser(user, placeKind),
+      sees: this.seesOf(user),
       capabilities: caps,
       assignableJobs: roles,
     };
@@ -308,6 +375,7 @@ export class UsersAccountsService {
           id: role.id,
           name: role.name,
           kind: role.kind,
+          municipalityScoped: role.municipalityScoped,
           permissionKeys: role.permissions.map((p) => p.permission.key),
         }),
       )
@@ -316,8 +384,18 @@ export class UsersAccountsService {
         name: role.name,
         description: role.description,
         kind: role.kind,
+        municipalityScoped: role.municipalityScoped,
+        // Where holders of this job work - the create flow asks for exactly this.
+        placeKind: role.municipalityScoped ? ('MUNICIPALITY' as const) : role.kind,
         unrestrictedStationAccess: role.unrestrictedStationAccess,
       }));
+  }
+
+  // 'ALL' (everything), 'MUNICIPALITY' (confined to a municipality) or 'PLACES'.
+  private seesOf(user: FullUser): 'ALL' | 'MUNICIPALITY' | 'PLACES' {
+    if (user.roles.some((r) => r.role.unrestrictedStationAccess)) return 'ALL';
+    if (user.roles.some((r) => r.role.municipalityScoped)) return 'MUNICIPALITY';
+    return 'PLACES';
   }
 
   async options(actorId: string) {
@@ -339,10 +417,13 @@ export class UsersAccountsService {
     }
 
     const placeIds = [...new Set(dto.placeIds ?? [])];
-    if (role?.kind) {
+    const placeKind = role ? placeKindOfRole(role) : null;
+    if (placeKind) {
       if (placeIds.length === 0) throw new BadRequestException('PLACES_REQUIRED');
-      await this.assertPlacesExist(role.kind, placeIds);
-      if (!placesWithinCallerScope(actor, role.kind, placeIds)) {
+      // A municipality manager belongs to ONE municipality.
+      if (placeKind === 'MUNICIPALITY' && placeIds.length !== 1) throw new BadRequestException('ONE_MUNICIPALITY_ONLY');
+      await this.assertPlacesExist(placeKind, placeIds);
+      if (!placesWithinCallerScope(actor, placeKind, placeIds)) {
         throw new ForbiddenException('PLACES_OUTSIDE_SCOPE');
       }
     } else if (placeIds.length > 0) {
@@ -369,13 +450,7 @@ export class UsersAccountsService {
       });
       if (role) {
         await tx.userRole.create({ data: { userId: user.id, roleId: role.id } });
-        if (role.kind === 'PETROL_STATION') {
-          await tx.userStationScope.createMany({ data: placeIds.map((stationId) => ({ userId: user.id, stationId })) });
-        } else if (role.kind === 'REGISTRATION') {
-          await tx.userRegistrationStationScope.createMany({
-            data: placeIds.map((registrationStationId) => ({ userId: user.id, registrationStationId })),
-          });
-        }
+        await this.writePlaces(tx, user.id, placeKind, placeIds);
       }
       await this.audit.log(
         {
@@ -448,11 +523,14 @@ export class UsersAccountsService {
 
     const oldSide = sideOfUser(user);
     const target = targetFacts(user);
+    const placeKind = placeKindOfRole(role);
     let placeIds: string[] = [];
-    if (role.kind) {
-      placeIds = dto.placeIds ? [...new Set(dto.placeIds)] : [...placeIdsOf(target, role.kind)];
+    if (placeKind) {
+      placeIds = dto.placeIds ? [...new Set(dto.placeIds)] : [...placeIdsOf(target, placeKind)];
       if (placeIds.length === 0) throw new BadRequestException('PLACES_REQUIRED');
-      await this.assertPlacesExist(role.kind, placeIds);
+      if (placeKind === 'MUNICIPALITY' && placeIds.length !== 1) throw new BadRequestException('ONE_MUNICIPALITY_ONLY');
+      await this.assertPlacesExist(placeKind, placeIds);
+      if (!placesWithinCallerScope(actor, placeKind, placeIds)) throw new ForbiddenException('PLACES_OUTSIDE_SCOPE');
     } else if (dto.placeIds && dto.placeIds.length > 0) {
       throw new BadRequestException('PLACES_NOT_FOR_THIS_JOB');
     }
@@ -464,13 +542,8 @@ export class UsersAccountsService {
       // side's, so the separation rule is never violated mid-change.
       await tx.userStationScope.deleteMany({ where: { userId: id } });
       await tx.userRegistrationStationScope.deleteMany({ where: { userId: id } });
-      if (role.kind === 'PETROL_STATION') {
-        await tx.userStationScope.createMany({ data: placeIds.map((stationId) => ({ userId: id, stationId })) });
-      } else if (role.kind === 'REGISTRATION') {
-        await tx.userRegistrationStationScope.createMany({
-          data: placeIds.map((registrationStationId) => ({ userId: id, registrationStationId })),
-        });
-      }
+      await tx.userMunicipalityScope.deleteMany({ where: { userId: id } });
+      await this.writePlaces(tx, id, placeKind, placeIds);
       await tx.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
       await this.audit.log(
         {
@@ -493,10 +566,11 @@ export class UsersAccountsService {
     const { actor, user, caps } = await this.loadForCaller(actorId, id);
     this.require(caps, 'canSetPlaces');
 
-    const side = sideOfUser(user);
+    const side = placeKindOfUser(user);
     if (!side) throw new BadRequestException('PLACES_NOT_FOR_THIS_JOB');
     const placeIds = [...new Set(dto.placeIds)];
     if (placeIds.length === 0) throw new BadRequestException('PLACES_REQUIRED');
+    if (side === 'MUNICIPALITY' && placeIds.length !== 1) throw new BadRequestException('ONE_MUNICIPALITY_ONLY');
     await this.assertPlacesExist(side, placeIds);
     if (!placesWithinCallerScope(actor, side, placeIds)) throw new ForbiddenException('PLACES_OUTSIDE_SCOPE');
 
@@ -505,7 +579,12 @@ export class UsersAccountsService {
     const removed = [...current].filter((p) => !placeIds.includes(p));
 
     await this.prisma.$transaction(async (tx) => {
-      if (side === 'PETROL_STATION') {
+      if (side === 'MUNICIPALITY') {
+        await tx.userMunicipalityScope.deleteMany({ where: { userId: id, municipalityId: { in: removed } } });
+        await tx.userMunicipalityScope.createMany({
+          data: added.map((municipalityId) => ({ userId: id, municipalityId })),
+        });
+      } else if (side === 'PETROL_STATION') {
         await tx.userStationScope.deleteMany({ where: { userId: id, stationId: { in: removed } } });
         await tx.userStationScope.createMany({ data: added.map((stationId) => ({ userId: id, stationId })) });
       } else {
@@ -599,6 +678,123 @@ export class UsersAccountsService {
     return this.detail(actorId, id);
   }
 
+  // "Delete" means archive: the account stops working and leaves the daily
+  // lists, its history (fill-ups, cards, audit) stays, and the level above can
+  // restore it. Same capability as the other account actions.
+  async archive(actorId: string, id: string, reason: string) {
+    const { user, caps } = await this.loadForCaller(actorId, id);
+    this.require(caps, 'canManageAccount');
+    if (user.archivedAt) throw new ConflictException('ALREADY_ARCHIVED');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: { archivedAt: new Date(), archivedById: actorId, isActive: false } });
+      await tx.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      await this.audit.log(
+        { userId: actorId, action: 'ARCHIVE_USER', entityType: 'User', entityId: id, newValue: { reason } },
+        tx,
+      );
+    });
+    this.rbac.invalidate(id);
+    return this.detail(actorId, id);
+  }
+
+  async restore(actorId: string, id: string, reason: string) {
+    const { user, caps } = await this.loadForCaller(actorId, id);
+    this.require(caps, 'canManageAccount');
+    if (!user.archivedAt) throw new ConflictException('NOT_ARCHIVED');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: { archivedAt: null, archivedById: null, isActive: true } });
+      await this.audit.log(
+        { userId: actorId, action: 'RESTORE_USER', entityType: 'User', entityId: id, newValue: { reason } },
+        tx,
+      );
+    });
+    this.rbac.invalidate(id);
+    return this.detail(actorId, id);
+  }
+
+  // A municipality manager adjusting a supervisor's or office manager's
+  // individual permissions, WITHIN the set those jobs may hold: the union of
+  // what supervisor-level jobs carry in the catalog (data, loaded here) minus
+  // anything that manages people or the system. Nothing outside that set can
+  // be granted, whatever the request says.
+  async grantDelegatedPermission(actorId: string, id: string, permissionId: string) {
+    const { user, caps } = await this.loadForCaller(actorId, id);
+    this.require(caps, 'canManageAdvanced');
+    const permission = await this.prisma.permission.findUnique({ where: { id: permissionId } });
+    if (!permission) throw new NotFoundException('Permission not found.');
+    const allowed = await this.delegablePermissionKeys();
+    if (!allowed.has(permission.key)) throw new ForbiddenException('PERMISSION_NOT_DELEGABLE');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPermission.upsert({
+        where: { userId_permissionId: { userId: user.id, permissionId } },
+        create: { userId: user.id, permissionId, grantedById: actorId },
+        update: {},
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'GRANT_PERMISSION',
+          entityType: 'User',
+          entityId: id,
+          newValue: { permissionId, permissionKey: permission.key },
+        },
+        tx,
+      );
+    });
+    this.rbac.invalidate(id);
+    return this.detail(actorId, id);
+  }
+
+  async revokeDelegatedPermission(actorId: string, id: string, permissionId: string) {
+    const { user, caps } = await this.loadForCaller(actorId, id);
+    this.require(caps, 'canManageAdvanced');
+    const permission = await this.prisma.permission.findUnique({ where: { id: permissionId } });
+    if (!permission) throw new NotFoundException('Permission not found.');
+    const allowed = await this.delegablePermissionKeys();
+    if (!allowed.has(permission.key)) throw new ForbiddenException('PERMISSION_NOT_DELEGABLE');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPermission.deleteMany({ where: { userId: user.id, permissionId } });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'REVOKE_PERMISSION',
+          entityType: 'User',
+          entityId: id,
+          oldValue: { permissionId, permissionKey: permission.key },
+        },
+        tx,
+      );
+    });
+    this.rbac.invalidate(id);
+    return this.detail(actorId, id);
+  }
+
+  // The permission keys supervisor-level jobs may hold, from the role rows.
+  async delegablePermissionKeys(): Promise<Set<string>> {
+    const roles = await this.prisma.role.findMany({ include: { permissions: { include: { permission: true } } } });
+    const keys = new Set<string>();
+    for (const role of roles) {
+      const facts: RoleFacts = {
+        id: role.id,
+        name: role.name,
+        kind: role.kind,
+        municipalityScoped: role.municipalityScoped,
+        permissionKeys: role.permissions.map((p) => p.permission.key),
+      };
+      if (!isSupervisorJob(facts)) continue;
+      for (const key of facts.permissionKeys) keys.add(key);
+    }
+    // Never the levers that manage people or the system themselves.
+    for (const key of [...keys]) {
+      if (key.startsWith('users:') || key.startsWith('roles:') || key === PERM_MANAGE_PRIVILEGED) keys.delete(key);
+    }
+    return keys;
+  }
+
   // The latest account-level entries about this person. Logins are left out
   // (the person page shows the last login on its own).
   async activity(actorId: string, id: string) {
@@ -630,14 +826,38 @@ export class UsersAccountsService {
       include: { permissions: { include: { permission: true } } },
     });
     if (!role) throw new NotFoundException('Role not found.');
-    return { id: role.id, name: role.name, kind: role.kind, permissionKeys: role.permissions.map((p) => p.permission.key) };
+    return {
+      id: role.id,
+      name: role.name,
+      kind: role.kind,
+      municipalityScoped: role.municipalityScoped,
+      permissionKeys: role.permissions.map((p) => p.permission.key),
+    };
   }
 
-  private async assertPlacesExist(side: Side, placeIds: string[]) {
+  private async assertPlacesExist(side: PlaceKind, placeIds: string[]) {
+    // An archived place takes no new people.
+    const live = { id: { in: placeIds }, archivedAt: null };
     const found =
-      side === 'PETROL_STATION'
-        ? await this.prisma.station.count({ where: { id: { in: placeIds } } })
-        : await this.prisma.registrationStation.count({ where: { id: { in: placeIds } } });
+      side === 'MUNICIPALITY'
+        ? await this.prisma.municipality.count({ where: live })
+        : side === 'PETROL_STATION'
+          ? await this.prisma.station.count({ where: live })
+          : await this.prisma.registrationStation.count({ where: live });
     if (found !== placeIds.length) throw new BadRequestException('PLACE_NOT_FOUND');
+  }
+
+  private async writePlaces(tx: Prisma.TransactionClient, userId: string, kind: PlaceKind | null, placeIds: string[]) {
+    if (kind === 'MUNICIPALITY') {
+      await tx.userMunicipalityScope.createMany({
+        data: placeIds.map((municipalityId) => ({ userId, municipalityId })),
+      });
+    } else if (kind === 'PETROL_STATION') {
+      await tx.userStationScope.createMany({ data: placeIds.map((stationId) => ({ userId, stationId })) });
+    } else if (kind === 'REGISTRATION') {
+      await tx.userRegistrationStationScope.createMany({
+        data: placeIds.map((registrationStationId) => ({ userId, registrationStationId })),
+      });
+    }
   }
 }

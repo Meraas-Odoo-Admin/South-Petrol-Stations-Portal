@@ -3,6 +3,19 @@ import { fillDigitBoxes, loadFixtures, loginAs } from './helpers';
 
 const fixtures = loadFixtures();
 
+// Phase 5A: the vehicle's required fields, in the order they are filled in.
+async function fillVehicleDetails(page: import('@playwright/test').Page) {
+  const alphabet = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+  const rnd = (n: number) => Array.from({ length: n }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  await page.getByTestId('registration-chassis-input').fill(rnd(17));
+  await page.getByTestId('registration-booklet-input').fill(rnd(8));
+  await page.getByTestId('registration-make').fill('Toyota');
+  await page.getByTestId('registration-model').fill('Hilux');
+  await page.getByTestId('registration-color').selectOption('ابيض');
+  await page.getByTestId('registration-year').fill('2020');
+  await page.getByTestId('registration-fuel').selectOption('PETROL');
+}
+
 // Registration pivot, phase 2 — the registration employee's workspace.
 // One login for the whole flow (POST /auth/login is throttled to 5/min per
 // app instance — see the other specs' notes).
@@ -21,8 +34,8 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
 
   // ── Owner first: a fresh identity is not found, so register it ───────
   const random = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
-  const identity = `1${random(11)}`;
-  const ownerName = `PW Registered Owner ${fixtures.runId}`;
+  const identity = `119${random(9)}`;
+  const ownerName = 'مالك مسجَّل بالاختبار';
   await fillDigitBoxes(page, 'registration-identity-input', identity);
   await page.getByTestId('registration-owner-search').click();
   await expect(page.getByTestId('registration-owner-new')).toBeVisible();
@@ -35,6 +48,7 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
   const plateSeq = random(7);
   await fillDigitBoxes(page, 'registration-plate-input', '7');
   await fillDigitBoxes(page, 'registration-plate-input', plateSeq, 2);
+  await fillVehicleDetails(page);
   await page.getByTestId('registration-vehicle-save').click();
 
   await expect(page.getByTestId('registration-success')).toContainText('تم تسجيل المركبة');
@@ -71,6 +85,7 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
 
   await fillDigitBoxes(page, 'registration-plate-input', '7');
   await fillDigitBoxes(page, 'registration-plate-input', plateSeq, 2);
+  await fillVehicleDetails(page);
 
   // Flagged before saving, naming the vehicle it already belongs to.
   const warning = page.getByTestId('registration-duplicate-currentPlate');

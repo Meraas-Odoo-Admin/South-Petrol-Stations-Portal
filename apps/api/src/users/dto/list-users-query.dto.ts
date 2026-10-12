@@ -3,7 +3,9 @@ import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 export const USER_SIDE_FILTERS = ['PETROL_STATION', 'REGISTRATION', 'ADMIN'] as const;
-export const USER_STATUS_FILTERS = ['active', 'deactivated', 'locked', 'must_change'] as const;
+export const USER_STATUS_FILTERS = ['active', 'deactivated', 'locked', 'must_change', 'archived'] as const;
+// Sortable columns of the people list.
+export const USER_SORTS = ['name', 'username', 'lastLogin', 'created'] as const;
 
 export class ListUsersQueryDto extends PaginationQueryDto {
   // Name or username, anywhere in the text, any case.
@@ -34,4 +36,14 @@ export class ListUsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(USER_STATUS_FILTERS)
   status?: (typeof USER_STATUS_FILTERS)[number];
+
+  @ApiProperty({ required: false, enum: USER_SORTS })
+  @IsOptional()
+  @IsIn(USER_SORTS)
+  sort?: (typeof USER_SORTS)[number];
+
+  @ApiProperty({ required: false, enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  dir?: 'asc' | 'desc';
 }

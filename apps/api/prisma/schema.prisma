@@ -79,6 +79,16 @@ model Station {
   operatorName             String?
   operatorPhone            String?
 
+  // Phase 5A: "delete" means archive. An archived station disappears from
+  // daily screens (no fill-up can be recorded at it) but every fill-up, card
+  // and audit row that points at it stays. Restored by clearing both columns.
+  // Phase 5A: the area or neighbourhood inside the municipality, used by the
+  // municipality manager's station list filter. Free text, optional.
+  locality String?
+
+  archivedAt   DateTime?
+  archivedById String?
+
   userScopes UserStationScope[]
   fillUps    FillUpTransaction[]
   createdAt  DateTime            @default(now())
@@ -100,33 +110,39 @@ enum StationOwnershipType {
 // FillUpRuleEngine counts a vehicle's/owner's history only within the
 // municipality stamped on each FillUpTransaction (see there).
 model Municipality {
-  id                   String                @id @default(cuid())
-  name                 String                @unique
+  id                   String                  @id @default(cuid())
+  name                 String                  @unique
   // Registration pivot, phase 3: short uppercase prefix for card numbers
   // issued in this municipality (سبها → SBH, so cards read SBH-7K2M9Q4X).
   // Optional until set; a card can't be issued in a municipality without one.
-  code                 String?               @unique
-  isActive             Boolean               @default(true) // No longer used — superseded by `status` in Phase 1; kept so migrations stay additive.
+  code                 String?                 @unique
+  isActive             Boolean                 @default(true) // No longer used — superseded by `status` in Phase 1; kept so migrations stay additive.
   // PREPARING: being set up — its stations are visible only on admin
   // screens (holders of stations:manage) and no fill-up can be recorded
   // at them. LIVE: in normal use. New rows start PREPARING; switching to
   // LIVE requires the municipality's security authority to exist first.
-  status               MunicipalityStatus    @default(PREPARING)
+  status               MunicipalityStatus      @default(PREPARING)
   // Registration pivot, phase 4a: the two optional calendar days that move a
   // LIVE municipality through its stages (go-live itself is `status`). Both
   // are calendar days in Africa/Tripoli — a stage begins at 00:00 Tripoli
   // time on its date. No deadline = grace indefinitely. See
   // common/utils/grace-stage.ts, the only place the stage is computed.
-  awarenessStartDate   DateTime?             @db.Date
-  cardRequiredFromDate DateTime?             @db.Date
+  awarenessStartDate   DateTime?               @db.Date
+  cardRequiredFromDate DateTime?               @db.Date
   // Exactly one per municipality (client-confirmed, OPEN_ITEMS.md #4) —
   // the authority overseeing every petrol station in it. Stations get
   // their authority from here, never picked per station.
   securityAuthority    SecurityAuthority?
+  // Phase 5A: archived instead of deleted; history stays. An archived
+  // municipality is hidden from daily screens and its stations and offices
+  // take no new fill-ups or registrations.
+  archivedAt           DateTime?
+  archivedById         String?
   stations             Station[]
   registrationStations RegistrationStation[]
   fillUps              FillUpTransaction[]
-  createdAt            DateTime              @default(now())
+  userScopes           UserMunicipalityScope[]
+  createdAt            DateTime                @default(now())
 }
 
 // Fixed, not Settings-managed — code branches on these values (same
@@ -157,6 +173,11 @@ model RegistrationStation {
   workingHours       String? // free text, e.g. "السبت–الخميس 8:00–14:00"
   status             RegistrationStationStatus      @default(ACTIVE)
   statusNote         String?
+  // Phase 5A: the area or neighbourhood (filter on the office list).
+  locality           String?
+  // Phase 5A: archived instead of deleted (see Station.archivedAt).
+  archivedAt         DateTime?
+  archivedById       String?
   userScopes         UserRegistrationStationScope[]
   vehiclesRegistered Vehicle[]
   desks              RegistrationDesk[]
@@ -337,6 +358,12 @@ model Role {
   // rbac-catalog.ts's ROLE_KINDS by the seed/bootstrap sync — code checks
   // this column, never a role name (CLAUDE.md rule 2).
   kind                      RoleKind?
+  // Phase 5A: holders of this role are confined to the municipalities listed
+  // in UserMunicipalityScope - they reach every station and registration
+  // office inside those municipalities and nothing outside. Data set from
+  // rbac-catalog.ts's MUNICIPALITY_SCOPED_ROLES (never a role-name check in
+  // code). false = scope comes only from the explicit station/office rows.
+  municipalityScoped        Boolean          @default(false)
   permissions               RolePermission[]
   users                     UserRole[]
 }
@@ -396,6 +423,12 @@ model User {
   // (AuthService.validateCredentials). Null = never logged in. Shown on the
   // users list; the phase 4c monitoring reports use it too.
   lastLoginAt                  DateTime?
+  // Phase 5A: "delete" means archive. An archived account cannot sign in
+  // (isActive is cleared with it), disappears from daily lists and keeps its
+  // history; the level that archived it can restore it.
+  archivedAt                   DateTime?
+  archivedById                 String?
+  municipalityScope            UserMunicipalityScope[]
   roles                        UserRole[]
   directPermissions            UserPermission[]
   permissionsGranted           UserPermission[]               @relation("UserPermissionGrantedBy")
@@ -452,6 +485,19 @@ model UserRegistrationStationScope {
   @@id([userId, registrationStationId])
 }
 
+// Phase 5A: mirrors UserStationScope for municipalities. A user holding a
+// municipalityScoped role reaches every station and registration office in
+// these municipalities (RbacService expands it) and nothing outside them.
+model UserMunicipalityScope {
+  userId         String
+  municipalityId String
+  user           User         @relation(fields: [userId], references: [id])
+  municipality   Municipality @relation(fields: [municipalityId], references: [id])
+
+  @@id([userId, municipalityId])
+  @@index([municipalityId])
+}
+
 model RefreshToken {
   id        String    @id @default(cuid())
   userId    String
@@ -486,6 +532,20 @@ enum IdentityType {
   // formats and application-process pages turned up) — validated
   // permissively for now (DRIVERS_LICENSE_REGEX), see docs/OPEN_ITEMS.md.
   DRIVERS_LICENSE
+  // Phase 5A: the provisional driver's-license path is removed from
+  // registration, the API and the UI - the value stays in the enum only so
+  // existing rows keep reading (migrations are additive). Nothing creates it.
+  //
+  // Phase 5A: an institution (bank, hospital, company). identityNumber is a
+  // generated reference (INS-XXXXXXXX), never a person's number; the
+  // responsible driver's national ID lives in
+  // VehicleOwner.responsibleDriverNationalId.
+  INSTITUTION
+}
+
+enum OwnerKind {
+  INDIVIDUAL // individual
+  INSTITUTION // institution
 }
 
 // Round 6: no longer required on a fill-up, and has no active create/edit UI
@@ -518,17 +578,29 @@ model Driver {
 // needs to vary independently of it yet; add a real status field instead
 // if that ever changes.
 model VehicleOwner {
-  id                 String               @id @default(cuid())
-  identityType       IdentityType
-  identityNumber     String // immutable together with identityType after creation, like Driver.identityNumber/User.username — the ONLY sanctioned way to change it is via OwnerChangeRequest approval, same anti-fraud posture as VehicleChangeRequest for chassis/booklet
-  fullName           String
-  phone              String?
-  address            String?
-  vehicles           Vehicle[]
-  standingExceptions StandingException[]
-  changeRequests     OwnerChangeRequest[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  id                          String               @id @default(cuid())
+  identityType                IdentityType
+  identityNumber              String // immutable together with identityType after creation, like Driver.identityNumber/User.username — the ONLY sanctioned way to change it is via OwnerChangeRequest approval, same anti-fraud posture as VehicleChangeRequest for chassis/booklet
+  fullName                    String
+  phone                       String?
+  address                     String?
+  // Phase 5A. INSTITUTION owners: fullName is the institution's name (shown
+  // as the owner's name everywhere); the responsible driver is who is held
+  // accountable. The owner-level fill-up rules never lump an institution's
+  // vehicles together - only the vehicle-level rules apply to them.
+  ownerKind                   OwnerKind            @default(INDIVIDUAL)
+  // The institution's name folded for duplicate checks (institutionNameKey);
+  // unique so the same institution cannot be created twice. Null for
+  // individuals.
+  institutionNameKey          String?              @unique
+  responsibleDriverNationalId String?
+  responsibleDriverName       String?
+  responsibleDriverPhone      String?
+  vehicles                    Vehicle[]
+  standingExceptions          StandingException[]
+  changeRequests              OwnerChangeRequest[]
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
 
   @@unique([identityType, identityNumber])
 }
@@ -568,6 +640,11 @@ model OwnerChangeRequest {
 
   @@index([ownerId])
   @@index([requestedById, createdAt])
+}
+
+enum VehicleFuelType {
+  PETROL // petrol
+  DIESEL // diesel
 }
 
 enum VehicleUsageType {
@@ -613,7 +690,18 @@ model Vehicle {
   registrationBooklet               String?                 @unique
   vehicleTypeId                     String?
   vehicleType                       VehicleType?            @relation(fields: [vehicleTypeId], references: [id])
+  // Phase 5A: the make and the model, both free text typed exactly as written
+  // in the vehicle's booklet. Before 5A the single `model` column held the
+  // manufacturer picked from a list; the migration copies that into `make`
+  // and clears `model`, so old rows read the same.
+  make                              String?
   model                             String?
+  // The fuel the vehicle itself runs on. A pump choice that does not match is
+  // warned about (never blocked) and recorded on the fill-up.
+  fuelType                          VehicleFuelType?
+  // Ticked by the employee when the chassis number in the booklet is not the
+  // usual 17 characters (6-20 allowed). Recorded and shown.
+  chassisNonStandard                Boolean                 @default(false)
   color                             String?
   manufactureYear                   Int?
   usageType                         VehicleUsageType?
@@ -777,13 +865,13 @@ model DriverVehicle {
 // ── Fill-ups & Exceptions ────────────────────────────────────────────
 
 model FillUpTransaction {
-  id                  String             @id @default(cuid())
+  id                  String               @id @default(cuid())
   // Phase 4a: null for a fill-up recorded against a plate that isn't
   // registered yet (grace / awareness stages). The database requires a
   // vehicle OR a typed plate (CHECK FillUpTransaction_has_subject). When the
   // vehicle registers, its earlier unregistered fill-ups get this link.
   vehicleId           String?
-  vehicle             Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  vehicle             Vehicle?             @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
   // The plate exactly as the employee typed it, and its normalized form
   // (the key the by-plate allowance counts use). Null for a card scan.
   typedPlate          String?
@@ -794,15 +882,19 @@ model FillUpTransaction {
   // Written reason of a supervisor's emergency override (the card
   // requirement waived at the deadline). Null otherwise.
   overrideReason      String?
+  // Phase 5A: the fuel poured does not match the vehicle's own fuel type. A
+  // warning, never a block - recorded so supervisors can see mismatches in
+  // reports. false for unregistered plates and vehicles with no fuel type.
+  fuelMismatch        Boolean              @default(false)
   // Nullable since round 6: fill-ups no longer require driver identity (see
   // docs/DESIGN_owner_based_fillups.md) — rule evaluation and standing
   // exceptions are scoped to the vehicle's owner instead. Kept (not
   // dropped) so historical fill-ups recorded before this change keep their
   // driver attribution.
   driverId            String?
-  driver              Driver?            @relation(fields: [driverId], references: [id])
+  driver              Driver?              @relation(fields: [driverId], references: [id])
   stationId           String
-  station             Station            @relation(fields: [stationId], references: [id])
+  station             Station              @relation(fields: [stationId], references: [id])
   // The municipality this fill-up happened in — stamped from the
   // station's municipality at creation and NEVER updated afterward. The
   // rule engine counts allowances per vehicle/owner per municipality
@@ -812,13 +904,13 @@ model FillUpTransaction {
   // pre-existing rows at stations with no municipality can't be
   // backfilled; FillUpsService refuses to create a fill-up without one.
   municipalityId      String?
-  municipality        Municipality?      @relation(fields: [municipalityId], references: [id])
+  municipality        Municipality?        @relation(fields: [municipalityId], references: [id])
   fuelType            FuelType
   quantityLiters      Decimal
-  occurredAt          DateTime           @default(now())
+  occurredAt          DateTime             @default(now())
   recordedById        String
-  recordedBy          User               @relation("RecordedBy", fields: [recordedById], references: [id])
-  isException         Boolean            @default(false)
+  recordedBy          User                 @relation("RecordedBy", fields: [recordedById], references: [id])
+  isException         Boolean              @default(false)
   exception           Exception?
   // Set when a rule that would have blocked this fill-up was instead
   // auto-allowed by an active StandingException — distinct from the
@@ -827,15 +919,15 @@ model FillUpTransaction {
   // isException: a fill-up is either flagged for one-time review or
   // silently covered by a standing grant, not both.
   standingExceptionId String?
-  standingException   StandingException? @relation(fields: [standingExceptionId], references: [id])
+  standingException   StandingException?   @relation(fields: [standingExceptionId], references: [id])
   // Which specific rule the standing exception covered for THIS fill-up —
   // a grant can cover several rules, but a given fill-up trips at most one
   // (first-failure-wins, same as the rejection path).
   coveredRule         String?
   // Client retry key for POST /fillups — a flaky station connection retrying
   // the same submission must resolve to the SAME row, never a duplicate.
-  idempotencyKey      String             @unique
-  createdAt           DateTime           @default(now())
+  idempotencyKey      String               @unique
+  createdAt           DateTime             @default(now())
 
   @@index([vehicleId, occurredAt]) // the rule engine's hottest query path
   // Per-vehicle-per-municipality history — FillUpsRepository's vehicle

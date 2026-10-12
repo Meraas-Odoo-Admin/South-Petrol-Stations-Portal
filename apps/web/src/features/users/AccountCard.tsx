@@ -11,7 +11,7 @@ import { formatWhen } from './format';
 import { useAccountMutation } from './useUsers';
 import type { UserDetail } from './types';
 
-type Open = null | 'deactivate' | 'reactivate' | 'reset';
+type Open = null | 'deactivate' | 'reactivate' | 'reset' | 'archive' | 'restore';
 
 // The account itself: deactivate or reactivate (with a written reason, never
 // delete — history must stay), reset the password (the temporary password is
@@ -32,11 +32,18 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
   const reset = useAccountMutation(user.id, async () =>
     (await apiClient.post<{ temporaryPassword: string }>(`/users/${user.id}/reset-password`)).data,
   );
+  const archive = useAccountMutation(user.id, async () =>
+    (await apiClient.post<UserDetail>(`/users/${user.id}/archive`, { reason: reason.trim() })).data,
+  );
+  const restore = useAccountMutation(user.id, async () =>
+    (await apiClient.post<UserDetail>(`/users/${user.id}/restore`, { reason: reason.trim() })).data,
+  );
   const unlock = useAccountMutation(user.id, async () => (await apiClient.post<UserDetail>(`/users/${user.id}/unlock`)).data);
 
   const can = user.capabilities.canManageAccount;
-  const busy = deactivate.isPending || reactivate.isPending || reset.isPending;
-  const error = deactivate.error ?? reactivate.error ?? reset.error ?? unlock.error;
+  const archived = Boolean(user.archivedAt);
+  const busy = deactivate.isPending || reactivate.isPending || reset.isPending || archive.isPending || restore.isPending;
+  const error = deactivate.error ?? reactivate.error ?? reset.error ?? unlock.error ?? archive.error ?? restore.error;
 
   function close() {
     if (busy) return;
@@ -79,7 +86,14 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
         {error && <Notice kind="error">{adminErrorMessage(error, 'تعذّر تنفيذ الإجراء. حاول مجددًا.')}</Notice>}
         {done && <Notice kind="success">{done}</Notice>}
 
-        {can && (
+        {can && archived && (
+          <div className="flex flex-col gap-2.5 lg:flex-row">
+            <PillButton size="field" onClick={() => setOpen('restore')}>
+              استعادة الحساب من الأرشيف
+            </PillButton>
+          </div>
+        )}
+        {can && !archived && (
           <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap">
             {!user.isActive ? (
               <PillButton size="field" onClick={() => setOpen('reactivate')}>
@@ -115,10 +129,13 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
                 </PillButton>
               </>
             )}
+            <PillButton size="field" variant="danger" onClick={() => setOpen('archive')}>
+              أرشفة الحساب
+            </PillButton>
           </div>
         )}
         <p className="text-[14px] text-ink-soft lg:text-[12px]">
-          لا تُحذف الحسابات أبدًا؛ يبقى سجل صاحبها محفوظًا حتى بعد إيقافه.
+          لا تُحذف الحسابات أبدًا؛ تُؤرشف، ويبقى سجل صاحبها محفوظًا ويمكن استعادتها.
         </p>
       </div>
 
@@ -157,6 +174,47 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
           {open === 'deactivate'
             ? `سيُمنع ${user.fullName} من الدخول فورًا وسيُنهى تسجيل دخوله على كل أجهزته. يمكنك إعادة تفعيله لاحقًا.`
             : `سيتمكن ${user.fullName} من الدخول مجددًا بكلمة مروره الحالية.`}
+        </p>
+        <TextAreaField
+          label="السبب (مطلوب)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          error={reasonError}
+          hint="يُحفظ السبب في سجل التغييرات مع اسمك."
+        />
+      </Dialog>
+
+      <Dialog
+        open={open === 'archive' || open === 'restore'}
+        title={open === 'archive' ? 'أرشفة الحساب' : 'استعادة الحساب'}
+        busy={busy}
+        onClose={close}
+        footer={
+          <>
+            <PillButton size="field" variant="secondary" disabled={busy} onClick={close}>
+              رجوع
+            </PillButton>
+            {open === 'archive' ? (
+              <PillButton
+                size="field"
+                variant="danger"
+                disabled={busy}
+                onClick={() => submitReason(archive, 'تمت أرشفة الحساب. يبقى سجله محفوظًا ويمكن استعادته.')}
+              >
+                {archive.isPending ? 'جارٍ الأرشفة…' : 'أرشفة الحساب'}
+              </PillButton>
+            ) : (
+              <PillButton size="field" disabled={busy} onClick={() => submitReason(restore, 'تمت استعادة الحساب.')}>
+                {restore.isPending ? 'جارٍ الاستعادة…' : 'استعادة الحساب'}
+              </PillButton>
+            )}
+          </>
+        }
+      >
+        <p className="mb-3 leading-[1.8]">
+          {open === 'archive'
+            ? `سيختفي حساب ${user.fullName} من القوائم اليومية ولن يستطيع الدخول، ويبقى كل ما سجّله محفوظًا. يمكنك استعادته من فلتر «مؤرشف».`
+            : `سيعود حساب ${user.fullName} فعّالًا ويتمكن من الدخول بكلمة مروره الحالية.`}
         </p>
         <TextAreaField
           label="السبب (مطلوب)"

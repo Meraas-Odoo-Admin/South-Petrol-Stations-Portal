@@ -1,10 +1,11 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { CreateStationDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
+import { ListStationsQueryDto } from './dto/list-stations-query.dto';
 
 // Station-scoped access is enforced HERE, in the service layer — not in the
 // controller and not in the UI. Every read goes through the caller's scope
@@ -59,7 +60,25 @@ export class StationsService {
     return dto;
   }
 
+  // Phase 5A: a station is created inside a municipality the caller is
+  // confined to. The super admin (unrestricted) may use any non-archived one.
+  private async assertMunicipalityWritable(municipalityId: string | undefined, actorId: string) {
+    const scope = await this.rbac.getMunicipalityScope(actorId);
+    if (scope !== null) {
+      if (!municipalityId) throw new BadRequestException('MUNICIPALITY_REQUIRED');
+      if (!scope.includes(municipalityId)) {
+        throw new ForbiddenException('You do not have access to this municipality.');
+      }
+    }
+    if (municipalityId) {
+      const municipality = await this.prisma.municipality.findUnique({ where: { id: municipalityId } });
+      if (!municipality) throw new NotFoundException('Municipality not found.');
+      if (municipality.archivedAt) throw new ConflictException('MUNICIPALITY_ARCHIVED');
+    }
+  }
+
   async create(dto: CreateStationDto, actorId: string) {
+    await this.assertMunicipalityWritable(dto.municipalityId, actorId);
     const internalCode = dto.internalCode?.trim() || (await this.generateInternalCode());
 
     // Only re-check uniqueness for an explicitly-supplied code —
@@ -87,7 +106,7 @@ export class StationsService {
       const station = await tx.station.create({
         data: {
           ...rest,
-          ...this.resolveOperatorFields(dto),
+          ...this.resolveOperatorFields(rest),
           internalCode,
           fuelAvailability: fuelTypes?.length
             ? { create: fuelTypes.map((fuelType) => ({ fuelType, isAvailable: true })) }
@@ -122,6 +141,7 @@ export class StationsService {
   private readonly cardInclude = {
     municipality: { include: { securityAuthority: { select: { id: true, name: true } } } },
     route: true,
+    company: { select: { id: true, name: true } },
     fuelAvailability: true,
   } as const;
 
@@ -130,17 +150,49 @@ export class StationsService {
     return permissions.has('stations:view_preparing');
   }
 
-  async findAll(userId: string) {
+  // Phase 5A: archived stations are left out of every daily list; a manager
+  // reaches them under the "archived" filter (and only a holder of
+  // stations:create may ask for it - a supervisor never sees archived ones).
+  async findAll(userId: string, query: ListStationsQueryDto = {}) {
     const scope = await this.rbac.getStationScope(userId);
-    const includePreparing = await this.canSeePreparingStations(userId);
-    const where: Prisma.StationWhereInput = {
-      ...(scope !== null ? { id: { in: scope } } : {}),
-      ...(includePreparing ? {} : { OR: [{ municipalityId: null }, { municipality: { status: 'LIVE' } }] }),
-    };
+    const permissions = await this.rbac.getPermissionsForUser(userId);
+    const includePreparing = permissions.has('stations:view_preparing');
+    const mayArchive = permissions.has('stations:create');
+    const archived = mayArchive ? query.archived : undefined;
+    const and: Prisma.StationWhereInput[] = [];
+    if (scope !== null) and.push({ id: { in: scope } });
+    if (!includePreparing) and.push({ OR: [{ municipalityId: null }, { municipality: { status: 'LIVE' } }] });
+    and.push({ archivedAt: archived === 'only' ? { not: null } : archived === 'include' ? undefined : null });
+    if (query.municipalityId) and.push({ municipalityId: query.municipalityId });
+    if (query.companyId) and.push({ companyId: query.companyId });
+    if (query.status) and.push({ status: query.status });
+    if (query.ownershipType) and.push({ ownershipType: query.ownershipType });
+    if (query.locality?.trim()) and.push({ locality: { contains: query.locality.trim(), mode: 'insensitive' } });
+    if (query.q?.trim()) {
+      const q = query.q.trim();
+      and.push({
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { internalCode: { contains: q, mode: 'insensitive' } },
+          { stationNumber: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    const dir = query.dir ?? 'asc';
+    const orderBy: Prisma.StationOrderByWithRelationInput[] =
+      query.sort === 'name'
+        ? [{ name: dir }, { internalCode: 'asc' }]
+        : query.sort === 'status'
+          ? [{ status: dir }, { internalCode: 'asc' }]
+          : query.sort === 'company'
+            ? [{ company: { name: dir } }, { internalCode: 'asc' }]
+            : query.sort === 'municipality'
+              ? [{ municipality: { name: dir } }, { internalCode: 'asc' }]
+              : [{ internalCode: dir }];
     return this.prisma.station.findMany({
-      where,
+      where: { AND: and },
       include: this.cardInclude,
-      orderBy: { internalCode: 'asc' },
+      orderBy,
     });
   }
 
@@ -165,8 +217,108 @@ export class StationsService {
     return station;
   }
 
+  // The station's own page: what happened to it lately (audit entries about
+  // the station, and the people changes at it) and how busy it has been.
+  // Scope-checked like findOne.
+  async activity(id: string, userId: string) {
+    await this.findOne(id, userId);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [rows, fillUpsLast30Days] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { entityType: 'Station', entityId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        include: { user: { select: { fullName: true } } },
+      }),
+      this.prisma.fillUpTransaction.count({ where: { stationId: id, occurredAt: { gte: since } } }),
+    ]);
+    return {
+      fillUpsLast30Days,
+      items: rows.map((r) => ({
+        id: r.id,
+        action: r.action,
+        createdAt: r.createdAt,
+        actorName: r.user?.fullName ?? null,
+        reason: typeof (r.newValue as { reason?: unknown } | null)?.reason === 'string' ? (r.newValue as { reason: string }).reason : null,
+      })),
+    };
+  }
+
+  // "Delete" means archive: the station disappears from daily screens and no
+  // fill-up can be recorded at it, while every fill-up and audit row stays.
+  async archive(id: string, reason: string, actorId: string) {
+    const before = await this.findOne(id, actorId);
+    if (before.archivedAt) {
+      throw new ConflictException('ALREADY_ARCHIVED');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.station.update({
+        where: { id },
+        data: { archivedAt: new Date(), archivedById: actorId },
+        include: this.cardInclude,
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'ARCHIVE',
+          entityType: 'Station',
+          entityId: id,
+          newValue: { internalCode: station.internalCode, reason },
+        },
+        tx,
+      );
+      return station;
+    });
+  }
+
+  async restore(id: string, reason: string, actorId: string) {
+    const before = await this.findOne(id, actorId);
+    if (!before.archivedAt) {
+      throw new ConflictException('NOT_ARCHIVED');
+    }
+    if (before.municipalityId) {
+      const municipality = await this.prisma.municipality.findUnique({ where: { id: before.municipalityId } });
+      if (municipality?.archivedAt) throw new ConflictException('MUNICIPALITY_ARCHIVED');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.station.update({
+        where: { id },
+        data: { archivedAt: null, archivedById: null },
+        include: this.cardInclude,
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'RESTORE',
+          entityType: 'Station',
+          entityId: id,
+          newValue: { internalCode: station.internalCode, reason },
+        },
+        tx,
+      );
+      return station;
+    });
+  }
+
   async update(id: string, dto: UpdateStationDto, userId: string, actorId: string) {
     const before = await this.findOne(id, userId);
+    if (before.archivedAt) {
+      throw new ConflictException('STATION_ARCHIVED');
+    }
+    // A station supervisor controls their own station - the fuel types it
+    // sells - and nothing else about it: name, company, municipality, status
+    // and contacts are the municipality manager's (stations:create).
+    const permissions = await this.rbac.getPermissionsForUser(actorId);
+    if (!permissions.has('stations:create')) {
+      const extra = Object.keys(dto).filter(
+        (key) => (dto as Record<string, unknown>)[key] !== undefined && key !== 'fuelTypes',
+      );
+      if (extra.length > 0) {
+        throw new ForbiddenException('STATION_FIELDS_RESTRICTED');
+      }
+    } else if (dto.municipalityId && dto.municipalityId !== before.municipalityId) {
+      await this.assertMunicipalityWritable(dto.municipalityId, actorId);
+    }
     const { fuelTypes, ...rest } = dto;
 
     return this.prisma.$transaction(async (tx) => {
@@ -189,7 +341,7 @@ export class StationsService {
 
       const station = await tx.station.update({
         where: { id },
-        data: { ...rest, ...this.resolveOperatorFields(dto) },
+        data: { ...rest, ...this.resolveOperatorFields(rest) },
         include: this.cardInclude,
       });
 

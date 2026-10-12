@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { RegistrationStationStatus } from '@prisma/client';
-import { IsEnum, IsLatitude, IsLongitude, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsEnum, IsLatitude, IsLongitude, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 // A desk landline or duty phone as often as a mobile — deliberately looser
 // than LIBYAN_MOBILE_REGEX: digits with optional leading +, spaces or dashes.
@@ -61,4 +61,11 @@ export class CreateRegistrationStationDto {
   @IsOptional()
   @IsString()
   statusNote?: string;
+
+  // Phase 5A: the area or neighbourhood (list filter).
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  locality?: string;
 }

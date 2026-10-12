@@ -6,7 +6,10 @@
 
 export const PERMISSIONS = [
   { key: 'companies:read', description: 'View companies' },
-  { key: 'companies:manage', description: 'Create/update companies' },
+  { key: 'companies:manage', description: 'Create companies (a station needs one)' },
+  // Companies are shared across municipalities: editing or archiving one is
+  // held only by the super admin (system_admin holds every permission).
+  { key: 'companies:update', description: 'Edit or archive a company (shared across municipalities)' },
   // station-card-field-spec: municipality/route/security-authority are
   // Settings-managed lookup lists, same read/manage split as companies:*.
   { key: 'municipalities:read', description: 'View the municipality list' },
@@ -51,7 +54,40 @@ export const PERMISSIONS = [
     description: 'View the deadline-readiness report: cards vs no-card fill-ups and card issuance (subject to station / registration-station scope)',
   },
   { key: 'stations:read', description: 'View stations (subject to station scope)' },
-  { key: 'stations:manage', description: 'Create/update stations' },
+  {
+    key: 'stations:manage',
+    description:
+      "Edit a station (subject to station scope). Without stations:create only the station's fuel types may be changed",
+  },
+  // Phase 5A: creating and archiving petrol stations belongs to the
+  // municipality manager (inside their own municipality) - not to a station
+  // supervisor, who only controls their own station.
+  {
+    key: 'stations:create',
+    description: 'Create, archive and restore petrol stations inside your own municipality (municipality managers)',
+  },
+  // Phase 5A: the office manager's tool - desks and printers of their own
+  // office. Creating/editing/archiving the office itself stays
+  // registration_stations:manage.
+  {
+    key: 'registration_desks:manage',
+    description: "Manage the desks and printers of your own registration office (subject to registration-station scope)",
+  },
+  // Phase 5A: the municipality manager's people tool. Creates, edits and
+  // archives the supervisor and office-manager accounts of their own
+  // municipality - never an account on their own level or above - and may
+  // adjust those accounts' individual permissions within the set those jobs
+  // may hold. Enforced in UsersAccountsService, not only on the screen.
+  {
+    key: 'users:manage_municipality_staff',
+    description:
+      'Create and manage the supervisor and office-manager accounts of your own municipality, and adjust their permissions (municipality managers)',
+  },
+  // Phase 5A: only the super admin switches fill-up rules on and off.
+  {
+    key: 'rules:toggle',
+    description: 'Switch each fill-up rule on or off (system settings; audited)',
+  },
   // Registration pivot, phase 1: stations in a PREPARING municipality are
   // visible only on admin screens. Deliberately separate from
   // stations:manage, which station_supervisor also holds.
@@ -244,25 +280,36 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'cards:read',
     'cards:issue',
     'cards:cancel',
+    'registration_desks:manage',
     'users:manage_staff',
     'registration_reports:view',
     'card_stock:read',
     'card_stock:record',
     'readiness:view',
   ],
+  // Phase 5A: "مدير البلدية" - the municipality manager. The internal key
+  // stays directorate_admin; the role is now scoped to ONE municipality
+  // (MUNICIPALITY_SCOPED_ROLES) and no longer holds the system-wide levers:
+  // users:manage / roles:manage (a manager makes only the level directly
+  // below via users:manage_municipality_staff), settings:manage, audit:view
+  // and the global lookups (vehicle types, exception types), which belong to
+  // the super admin.
   directorate_admin: [
     'companies:read',
+    'companies:manage',
     'municipalities:read',
     'municipalities:set_stage_dates',
     'routes:read',
     'security_authorities:read',
     'vehicle_types:read',
-    'vehicle_types:manage',
     'stations:read',
     'stations:manage',
+    'stations:create',
     'stations:view_preparing',
     'registration_stations:read',
     'registration_stations:manage',
+    'registration_desks:manage',
+    'users:manage_municipality_staff',
     'cards:read',
     'cards:cancel',
     'cards:scan',
@@ -284,11 +331,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'registration_sheet:print',
     'standing_exceptions:manage',
     'owners:reveal_identity',
-    'settings:manage',
-    'audit:view',
-    'exception_types:manage',
-    'users:manage',
-    'roles:manage',
     'registration_reports:view',
     'card_stock:read',
     'readiness:view',
@@ -301,7 +343,13 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
 // both are exercised as scoped-to-one-station in the e2e boundary test.
 // Also covers registration stations: these roles see every registration
 // station regardless of UserRegistrationStationScope.
-export const UNRESTRICTED_STATION_ACCESS_ROLES = new Set(['directorate_admin', 'system_admin']);
+export const UNRESTRICTED_STATION_ACCESS_ROLES = new Set(['system_admin']);
+
+// Phase 5A: the roles confined to the municipality (or municipalities) listed
+// in UserMunicipalityScope. Everything inside those municipalities is theirs
+// to reach; nothing outside it is. Set on Role.municipalityScoped by the
+// seed/bootstrap sync - code reads that column, never a role name.
+export const MUNICIPALITY_SCOPED_ROLES = new Set(['directorate_admin']);
 
 // Which side of the split each role is on (Role.kind). Roles not listed
 // (the admin roles) are on neither side and may be combined with anything.
@@ -336,6 +384,35 @@ export const SYSTEM_SETTINGS = [
     key: 'fillup.min_gap_days_per_owner',
     value: '2',
     description: 'PLACEHOLDER — minimum days between two fill-ups for the same vehicle owner, across all their vehicles',
+  },
+  // Phase 5A: every rule the engine applies can be switched on or off by the
+  // super admin. All on by default except the owner liters rule. The seed
+  // never overwrites a value an admin already set (see seed.ts), and the
+  // migration inserts the same defaults with ON CONFLICT DO NOTHING.
+  {
+    key: 'fillup.rule.vehicle_gap.enabled',
+    value: 'true',
+    description: 'Rule switch: minimum days between two fill-ups of the same vehicle',
+  },
+  {
+    key: 'fillup.rule.vehicle_weekly.enabled',
+    value: 'true',
+    description: 'Rule switch: weekly fill-up count per vehicle',
+  },
+  {
+    key: 'fillup.rule.owner_gap.enabled',
+    value: 'true',
+    description: 'Rule switch: minimum days between two fill-ups of the same owner',
+  },
+  {
+    key: 'fillup.rule.owner_weekly.enabled',
+    value: 'true',
+    description: 'Rule switch: weekly fill-up count per owner',
+  },
+  {
+    key: 'fillup.rule.owner_liters.enabled',
+    value: 'false',
+    description: 'Rule switch: weekly liters per owner',
   },
   {
     key: 'fillup.week_window_mode',

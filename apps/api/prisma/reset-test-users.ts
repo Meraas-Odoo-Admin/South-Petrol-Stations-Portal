@@ -21,6 +21,7 @@ const TEST_USERNAMES = [
   'registration1',
   'regsupervisor1',
   'admin1',
+  'admin2',
   'sysadmin1',
 ];
 const TEST_PASSWORD = 'ChangeMe123!';

@@ -8,11 +8,12 @@ import { JobPicker } from './JobPicker';
 import { PlacePicker } from './PlacePicker';
 import { Notice, SectionCard } from './parts';
 import { useAccountMutation, usePlaceOptions } from './useUsers';
-import type { JobKind, UserDetail } from './types';
+import type { PlaceKind, UserDetail } from './types';
 
-const SIDE_NOUN: Record<'PETROL_STATION' | 'REGISTRATION', { noun: string; label: string }> = {
-  PETROL_STATION: { noun: 'محطة', label: 'ابحث عن محطة' },
-  REGISTRATION: { noun: 'مكتب', label: 'ابحث عن مكتب تسجيل' },
+const SIDE_NOUN: Record<'PETROL_STATION' | 'REGISTRATION' | 'MUNICIPALITY', { noun: string; label: string; title: string }> = {
+  PETROL_STATION: { noun: 'محطة', label: 'ابحث عن محطة', title: 'محطات العمل' },
+  REGISTRATION: { noun: 'مكتب', label: 'ابحث عن مكتب تسجيل', title: 'مكاتب العمل' },
+  MUNICIPALITY: { noun: 'بلدية', label: 'ابحث عن بلدية', title: 'البلدية' },
 };
 
 // What job this person has and where they work. One job, picked from a list
@@ -20,7 +21,7 @@ const SIDE_NOUN: Record<'PETROL_STATION' | 'REGISTRATION', { noun: string; label
 // asks first, because it ends the person's sessions and replaces the old job.
 export function JobAndPlaceCard({ user }: { user: UserDetail }) {
   const currentJob = user.roles[0]?.role ?? null;
-  const currentKind: JobKind = currentJob?.kind ?? null;
+  const currentKind: PlaceKind = currentJob?.municipalityScoped ? 'MUNICIPALITY' : (currentJob?.kind ?? null);
   const currentPlaceIds = useMemo(() => user.places.map((p) => p.id), [user.places]);
 
   const [jobId, setJobId] = useState<string | null>(currentJob?.id ?? null);
@@ -37,7 +38,11 @@ export function JobAndPlaceCard({ user }: { user: UserDetail }) {
   const selected = jobs.find((j) => j.id === jobId) ?? null;
   // A person's present job may be one this caller cannot give (a top-level
   // job seen by a directorate admin): it is shown, not offered.
-  const selectedKind: JobKind = selected ? selected.kind : jobId === currentJob?.id ? currentKind : null;
+  const selectedKind: PlaceKind = selected
+    ? (selected.placeKind ?? (selected.municipalityScoped ? 'MUNICIPALITY' : selected.kind))
+    : jobId === currentJob?.id
+      ? currentKind
+      : null;
   const jobChanged = jobId !== (currentJob?.id ?? null);
   const sideChanged = jobChanged && selectedKind !== currentKind;
   const placesChanged =
@@ -65,7 +70,8 @@ export function JobAndPlaceCard({ user }: { user: UserDetail }) {
     setJobId(id);
     const next = jobs.find((j) => j.id === id);
     // A different side has different places: start empty and ask.
-    if (next && next.kind !== currentKind) setPlaceIds([]);
+    const nextKind: PlaceKind = next ? (next.placeKind ?? (next.municipalityScoped ? 'MUNICIPALITY' : next.kind)) : null;
+    if (next && nextKind !== currentKind) setPlaceIds([]);
     else setPlaceIds(currentPlaceIds);
   }
 
@@ -103,7 +109,7 @@ export function JobAndPlaceCard({ user }: { user: UserDetail }) {
         {needsPlaces ? (
           <div>
             <h3 className="mb-2 text-[16px] font-extrabold text-ink lg:text-[14px]">
-              {selectedKind === 'PETROL_STATION' ? 'محطات العمل' : 'مكاتب العمل'}
+              {SIDE_NOUN[selectedKind].title}
             </h3>
             {sideChanged && (
               <div className="mb-3">
@@ -117,6 +123,7 @@ export function JobAndPlaceCard({ user }: { user: UserDetail }) {
               searchLabel={SIDE_NOUN[selectedKind].label}
               options={places.options}
               loading={places.isLoading}
+              single={selectedKind === 'MUNICIPALITY'}
               selected={placeIds}
               onChange={(ids) => {
                 setDone(null);
@@ -126,7 +133,7 @@ export function JobAndPlaceCard({ user }: { user: UserDetail }) {
             />
           </div>
         ) : (
-          <Notice kind="info">هذه الوظيفة ترى كل المحطات والمكاتب، فلا حاجة لتحديد مكان عمل.</Notice>
+          <Notice kind="info">هذه الوظيفة ترى كل البلديات والمحطات والمكاتب، فلا حاجة لتحديد مكان عمل.</Notice>
         )}
 
         {mutationError && (

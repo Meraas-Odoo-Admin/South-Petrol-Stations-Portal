@@ -22,10 +22,23 @@ export const NAV_ACCESS = {
   registrationReports: (has: HasPermission) => has('registration_reports:view'),
   cardStock: (has: HasPermission) => has('card_stock:read'),
   readiness: (has: HasPermission) => has('readiness:view'),
-  // A supervisor's own staff. Admins manage accounts from the admin area.
-  staff: (has: HasPermission) => has('users:manage_staff') && !has('users:manage'),
-  stations: (has: HasPermission) => has('stations:read'),
-  admin: (has: HasPermission) => has('users:manage'),
+  // Phase 5A: each level has its own place for its own people, never a
+  // free-floating users list.
+  //  - «إدارة المحطات»: the municipality manager's stations and offices (and
+  //    the people inside each);
+  //  - «محطتي»: a station supervisor's own station and employees;
+  //  - «مكتبي»: a registration office manager's own office and employees;
+  //  - «الإدارة»: the super admin's municipalities, settings and audit log.
+  manage: (has: HasPermission) => has('stations:create') || has('registration_stations:manage'),
+  myStation: (has: HasPermission) =>
+    has('users:manage_staff') && has('stations:manage') && !has('stations:create'),
+  myOffice: (has: HasPermission) =>
+    has('users:manage_staff') && has('registration_desks:manage') && !has('registration_stations:manage'),
+  // The plain station list is for people who have no station page of their own.
+  stations: (has: HasPermission) =>
+    has('stations:read') && !has('stations:create') && !has('users:manage_staff'),
+  admin: (has: HasPermission) =>
+    has('municipalities:manage') || has('settings:manage') || has('audit:view'),
 } as const;
 
 export type NavKey = keyof typeof NAV_ACCESS;

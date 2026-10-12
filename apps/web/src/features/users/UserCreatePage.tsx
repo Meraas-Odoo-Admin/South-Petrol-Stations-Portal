@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { checkLibyanMobile } from '@fuel-tracking/shared-types';
 import { isAxiosError } from 'axios';
 import { PageHeader } from '../../components/design/PageHeader';
 import { PillButton } from '../../components/design/PillButton';
@@ -12,13 +13,22 @@ import { PlacePicker } from './PlacePicker';
 import { TemporaryPasswordPanel } from './TemporaryPasswordPanel';
 import { Notice, SectionCard } from './parts';
 import { useCreateUser, usePlaceOptions, useUserOptions } from './useUsers';
-import type { CreatedUser } from './types';
+import type { CreatedUser, JobOption, PlaceKind } from './types';
+
+const placeKindOf = (job: JobOption): PlaceKind => job.placeKind ?? (job.municipalityScoped ? 'MUNICIPALITY' : job.kind);
+
+const PLACE_NOUN: Record<'PETROL_STATION' | 'REGISTRATION' | 'MUNICIPALITY', { noun: string; label: string }> = {
+  PETROL_STATION: { noun: 'محطة', label: 'ابحث عن محطة' },
+  REGISTRATION: { noun: 'مكتب', label: 'ابحث عن مكتب تسجيل' },
+  MUNICIPALITY: { noun: 'بلدية', label: 'ابحث عن بلدية' },
+};
 
 const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,60}$/;
 
 interface FieldErrors {
   fullName?: string;
   username?: string;
+  phone?: string;
   job?: string;
   places?: string;
 }
@@ -26,8 +36,19 @@ interface FieldErrors {
 // New account in one page, three steps in the order an admin thinks: who,
 // what job, where. The system makes the temporary password, so nobody types
 // one; it is shown once on the next screen.
+//
+// Phase 5A: people are created from inside the place they belong to, so the
+// page takes presets from the link that opened it:
+//   ?kind=PETROL_STATION|REGISTRATION|MUNICIPALITY  only jobs that work there
+//   ?place=<id>&placeName=<name>                   the place is fixed, not asked
+//   ?back=<path>                                   where cancel / done return to
 export function UserCreatePage({ basePath, standalone = false }: { basePath: string; standalone?: boolean }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const presetKind = searchParams.get('kind') as PlaceKind | null;
+  const presetPlace = searchParams.get('place');
+  const presetPlaceName = searchParams.get('placeName');
+  const backPath = searchParams.get('back') || basePath;
   const options = useUserOptions();
   const create = useCreateUser();
 
@@ -35,11 +56,12 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
-  const [placeIds, setPlaceIds] = useState<string[]>([]);
+  const [placeIds, setPlaceIds] = useState<string[]>(presetPlace ? [presetPlace] : []);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [created, setCreated] = useState<CreatedUser | null>(null);
 
-  const jobs = options.data?.jobs ?? [];
+  const allJobs = options.data?.jobs ?? [];
+  const jobs = presetKind ? allJobs.filter((j) => placeKindOf(j) === presetKind) : allJobs;
   // A supervisor can only give one job: it is shown, not asked.
   const fixedJob = jobs.length === 1 ? jobs[0] : null;
   useEffect(() => {
@@ -47,12 +69,12 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
   }, [fixedJob, jobId]);
 
   const selected = jobs.find((j) => j.id === jobId) ?? null;
-  const kind = selected?.kind ?? null;
-  const places = usePlaceOptions(kind);
+  const kind: PlaceKind = selected ? placeKindOf(selected) : null;
+  const places = usePlaceOptions(presetPlace ? null : kind);
 
   function pickJob(id: string) {
     const next = jobs.find((j) => j.id === id);
-    if (next?.kind !== kind) setPlaceIds([]);
+    if (!presetPlace && (next ? placeKindOf(next) : null) !== kind) setPlaceIds([]);
     setJobId(id);
     setErrors((e) => ({ ...e, job: undefined, places: undefined }));
   }
@@ -63,8 +85,11 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
     if (!USERNAME_PATTERN.test(username.trim())) {
       found.username = 'اسم المستخدم بحروف إنجليزية وأرقام فقط، ثلاثة أحرف على الأقل، دون مسافات.';
     }
+    const phoneCheck = checkLibyanMobile(phone);
+    if (!phoneCheck.ok) found.phone = phoneCheck.message;
     if (!selected) found.job = 'اختر وظيفة الشخص.';
-    else if (selected.kind && placeIds.length === 0) found.places = 'اختر مكان عمل واحدًا على الأقل.';
+    else if (kind && placeIds.length === 0) found.places = 'اختر مكان عمل واحدًا على الأقل.';
+    else if (kind === 'MUNICIPALITY' && placeIds.length !== 1) found.places = 'اختر بلدية واحدة فقط.';
     return found;
   }
 
@@ -79,7 +104,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
         fullName: fullName.trim(),
         phone: phone.trim() || undefined,
         roleId: selected.id,
-        placeIds: selected.kind ? placeIds : [],
+        placeIds: kind ? placeIds : [],
       },
       {
         onSuccess: setCreated,
@@ -97,17 +122,18 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
     setFullName('');
     setUsername('');
     setPhone('');
-    setPlaceIds([]);
+    setPlaceIds(presetPlace ? [presetPlace] : []);
     setErrors({});
     create.reset();
     if (!fixedJob) setJobId(null);
   }
 
   const header = standalone ? (
-    <PageHeader title="حساب جديد" subtitle="موظف جديد في محطتك أو مكتبك" />
+    <PageHeader title="حساب جديد" subtitle={presetPlaceName ? `في ${presetPlaceName}` : 'موظف جديد في محطتك أو مكتبك'} />
   ) : (
     <div>
       <h1 className="text-[24px] font-extrabold text-ink lg:text-xl">حساب جديد</h1>
+      {presetPlaceName && <p className="mt-1 text-[16px] text-ink-soft lg:text-[14px]">في {presetPlaceName}</p>}
     </div>
   );
 
@@ -128,13 +154,13 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
             </p>
             {created.temporaryPassword && <TemporaryPasswordPanel password={created.temporaryPassword} who={created.fullName} />}
             <div className="flex flex-col gap-2.5 lg:flex-row">
-              <PillButton size="field" onClick={() => navigate(`${basePath}/${created.id}`)}>
+              <PillButton size="field" onClick={() => navigate(`${basePath}/${created.id}?back=${encodeURIComponent(backPath)}`)}>
                 فتح صفحة الشخص
               </PillButton>
               <PillButton size="field" variant="secondary" onClick={again}>
                 إضافة حساب آخر
               </PillButton>
-              <PillButton size="field" variant="ghost" onClick={() => navigate(basePath)}>
+              <PillButton size="field" variant="ghost" onClick={() => navigate(backPath)}>
                 العودة إلى القائمة
               </PillButton>
             </div>
@@ -147,7 +173,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
   return (
     <form onSubmit={submit} noValidate className="mx-auto max-w-3xl space-y-4">
       <Link
-        to={basePath}
+        to={backPath}
         className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 lg:text-[14px]"
       >
         <Icon d={ICONS.arrowBack} size={18} />
@@ -175,7 +201,16 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
             autoCapitalize="none"
             spellCheck={false}
           />
-          <TextField label="الهاتف (اختياري)" value={phone} onChange={(e) => setPhone(e.target.value)} ltr inputMode="tel" autoComplete="off" />
+          <TextField
+            label="الهاتف (اختياري)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            error={errors.phone}
+            hint="رقم ليبي من 10 أرقام يبدأ بـ 091 إلى 096، ويُقبل +218."
+            ltr
+            inputMode="tel"
+            autoComplete="off"
+          />
         </div>
       </SectionCard>
 
@@ -203,10 +238,15 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
         title="أين يعمل؟"
         description={selected ? undefined : 'اختر الوظيفة أولًا وسيظهر هنا ما يناسبها.'}
       >
-        {selected && kind ? (
+        {presetPlace ? (
+          <div className="rounded-md bg-surface-alt p-4 text-[17px] font-extrabold text-ink lg:text-[15px]">
+            {presetPlaceName ?? 'المكان المحدّد'}
+          </div>
+        ) : selected && kind ? (
           <PlacePicker
-            noun={kind === 'PETROL_STATION' ? 'محطة' : 'مكتب'}
-            searchLabel={kind === 'PETROL_STATION' ? 'ابحث عن محطة' : 'ابحث عن مكتب تسجيل'}
+            noun={PLACE_NOUN[kind].noun}
+            searchLabel={PLACE_NOUN[kind].label}
+            single={kind === 'MUNICIPALITY'}
             options={places.options}
             loading={places.isLoading}
             selected={placeIds}
@@ -216,7 +256,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
             }}
           />
         ) : selected ? (
-          <Notice kind="info">هذه الوظيفة ترى كل المحطات والمكاتب، فلا حاجة لتحديد مكان عمل.</Notice>
+          <Notice kind="info">هذه الوظيفة ترى كل البلديات والمحطات والمكاتب، فلا حاجة لتحديد مكان عمل.</Notice>
         ) : null}
         {errors.places && (
           <div className="mt-3">
@@ -233,7 +273,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
         <PillButton type="submit" size="field" disabled={create.isPending}>
           {create.isPending ? 'جارٍ الإنشاء…' : 'إنشاء الحساب'}
         </PillButton>
-        <PillButton type="button" size="field" variant="ghost" onClick={() => navigate(basePath)}>
+        <PillButton type="button" size="field" variant="ghost" onClick={() => navigate(backPath)}>
           إلغاء
         </PillButton>
       </div>

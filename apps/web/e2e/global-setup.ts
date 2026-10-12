@@ -54,6 +54,11 @@ export interface Fixtures {
   needsChangeUsername: string;
   needsChangePassword: string;
   sysadminPasswordChanged: boolean;
+  sysadminPassword: string;
+  // Phase 5A: an office manager, and the municipality (سبها) id.
+  officeManagerUsername: string;
+  officeManagerPassword: string;
+  municipalityId: string;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -127,6 +132,26 @@ async function main() {
   // Random digits, not a Date.now()-derived value — identityNumber/plate
   // formats are digits-only, and a time-derived value repeats across runs.
   const randomDigits = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
+  // Phase 5A: owners are checked with the shared rules - an Arabic name and a
+  // national ID with a real birth year (19xx) of an adult. Random Arabic
+  // letters, never digits, make each fixture's name unique.
+  const ARABIC_LETTERS = 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي';
+  const arabicTag = (n: number) =>
+    Array.from({ length: n }, () => ARABIC_LETTERS[Math.floor(Math.random() * ARABIC_LETTERS.length)]).join('');
+  const nationalId = () => `119${randomDigits(9)}`;
+  const chassis = () => {
+    const alphabet = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+    return Array.from({ length: 17 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  };
+  const vehicleFields = () => ({
+    chassisNumber: chassis(),
+    registrationBooklet: `PW${randomDigits(8)}`,
+    make: 'Toyota',
+    model: 'Hilux',
+    color: 'ابيض',
+    manufactureYear: 2020,
+    fuelType: 'PETROL',
+  });
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
   const sysadmin = await login('sysadmin1', SEEDED_PASSWORD);
@@ -193,8 +218,8 @@ async function main() {
       },
       { headers },
     );
-  const ownerIdentityNumber = `1${randomDigits(11)}`;
-  const owner = await registerOwner(`PW Test Owner ${runId}`, ownerIdentityNumber);
+  const ownerIdentityNumber = nationalId();
+  const owner = await registerOwner(`مالك اختبار ${arabicTag(6)}`, ownerIdentityNumber);
   const vehicle = await api.post(
     `${API_BASE}/vehicles`,
     {
@@ -202,10 +227,11 @@ async function main() {
       internalCode: `PW-VEH-${runId}`,
       currentPlate: `5-${randomDigits(7)}`,
       ownerId: owner.data.id,
+      ...vehicleFields(),
     },
     { headers },
   );
-  const cleanOwner = await registerOwner(`PW Clean Owner ${runId}`, `1${randomDigits(11)}`);
+  const cleanOwner = await registerOwner(`مالك نظيف ${arabicTag(6)}`, nationalId());
   // City code 9 — the fill-up test types this plate into the digit boxes.
   const cleanVehicle = await api.post(
     `${API_BASE}/vehicles`,
@@ -213,6 +239,7 @@ async function main() {
       registrationStationId: registrationStation.data.id,
       currentPlate: `9-${randomDigits(7)}`,
       ownerId: cleanOwner.data.id,
+      ...vehicleFields(),
     },
     { headers },
   );
@@ -224,14 +251,16 @@ async function main() {
     { name: deskName, printerModel: 'PW test printer' },
     { headers },
   );
-  const scanOwner = await registerOwner(`PW Scan Owner ${runId}`, `1${randomDigits(11)}`);
+  const scanOwner = await registerOwner(`مالك مسح ${arabicTag(6)}`, nationalId());
   const scanVehicle = await api.post(
     `${API_BASE}/vehicles`,
     {
       registrationStationId: registrationStation.data.id,
       currentPlate: `6-${randomDigits(7)}`,
       ownerId: scanOwner.data.id,
-      model: 'تويوتا هايلكس',
+      ...vehicleFields(),
+      make: 'تويوتا',
+      model: 'هايلكس',
       color: 'أبيض',
     },
     { headers },
@@ -289,8 +318,19 @@ async function main() {
   const supervisorId = await createUser(supervisorUsername, 'station_supervisor');
   await api.post(`${API_BASE}/users/${supervisorId}/station-scope`, { stationId: station.data.id }, { headers });
 
+  // Phase 5A: the municipality manager is confined to سبها (job + place in one step).
   const adminUsername = `pw_admin_${runId}`;
-  await createUser(adminUsername, 'directorate_admin');
+  const adminId = await createUser(adminUsername, null);
+  await api.put(`${API_BASE}/users/${adminId}/job`, { roleId: roleId('directorate_admin'), placeIds: [sabha.id] }, { headers });
+
+  // The office manager of the fixture registration office.
+  const officeManagerUsername = `pw_om_${runId}`;
+  const officeManagerId = await createUser(officeManagerUsername, null);
+  await api.put(
+    `${API_BASE}/users/${officeManagerId}/job`,
+    { roleId: roleId('registration_supervisor'), placeIds: [registrationStation.data.id] },
+    { headers },
+  );
 
   const registrarUsername = `pw_reg_${runId}`;
   const registrarId = await createUser(registrarUsername, 'registration_employee');
@@ -306,6 +346,7 @@ async function main() {
   await activate(supervisorUsername);
   await activate(adminUsername);
   await activate(registrarUsername);
+  await activate(officeManagerUsername);
 
   // The logins above spend most of the 5/min /auth/login budget. Wait out
   // the window once, so the test phase starts with a clean budget.
@@ -337,6 +378,10 @@ async function main() {
     needsChangeUsername,
     needsChangePassword: 'InitialPassword123!',
     sysadminPasswordChanged,
+    sysadminPassword: sysadminPasswordChanged ? TEMP_PASSWORD : SEEDED_PASSWORD,
+    officeManagerUsername,
+    officeManagerPassword: RUN_PASSWORD,
+    municipalityId: sabha.id,
   };
 
   writeFileSync(FIXTURES_PATH, JSON.stringify(fixtures, null, 2));

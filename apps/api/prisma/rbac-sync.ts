@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import {
   PERMISSIONS,
   ROLE_KINDS,
+  MUNICIPALITY_SCOPED_ROLES,
   ROLE_PERMISSIONS,
   UNRESTRICTED_STATION_ACCESS_ROLES,
   type RoleKindKey,
@@ -25,6 +26,8 @@ export interface RbacCatalog {
   rolePermissions: Record<string, string[]>;
   roleKinds: Record<string, RoleKindKey>;
   unrestrictedRoles: ReadonlySet<string>;
+  // Phase 5A: roles confined to their UserMunicipalityScope rows.
+  municipalityScopedRoles?: ReadonlySet<string>;
 }
 
 export const DEFAULT_RBAC_CATALOG: RbacCatalog = {
@@ -32,6 +35,7 @@ export const DEFAULT_RBAC_CATALOG: RbacCatalog = {
   rolePermissions: ROLE_PERMISSIONS,
   roleKinds: ROLE_KINDS,
   unrestrictedRoles: UNRESTRICTED_STATION_ACCESS_ROLES,
+  municipalityScopedRoles: MUNICIPALITY_SCOPED_ROLES,
 };
 
 export interface RbacSyncResult {
@@ -58,10 +62,11 @@ export async function syncRbacCatalog(
   for (const [roleName, permissionKeys] of Object.entries(catalog.rolePermissions)) {
     const unrestrictedStationAccess = catalog.unrestrictedRoles.has(roleName);
     const kind = catalog.roleKinds[roleName] ?? null;
+    const municipalityScoped = catalog.municipalityScopedRoles?.has(roleName) ?? false;
     const role = await prisma.role.upsert({
       where: { name: roleName },
-      create: { name: roleName, unrestrictedStationAccess, kind },
-      update: { unrestrictedStationAccess, kind },
+      create: { name: roleName, unrestrictedStationAccess, kind, municipalityScoped },
+      update: { unrestrictedStationAccess, kind, municipalityScoped },
     });
     rolesByName.set(roleName, role);
 

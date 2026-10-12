@@ -9,6 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { calendarDayToDate, tripoliDay } from '../src/common/utils/grace-stage';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { vehicleBody } from './support/registration-fixtures';
 
 // Registration pivot, phase 4a (launch day for vehicles without a card):
 // stages, typed-plate fill-ups, linking at registration, the after-deadline
@@ -433,7 +434,7 @@ describe('Phase 4a grace period (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/vehicles')
         .set('Authorization', `Bearer ${await as('registrar')}`)
-        .send({ registrationStationId, ownerId, currentPlate: carded.plate.replace('-', ' ') });
+        .send(vehicleBody({ registrationStationId, ownerId, currentPlate: carded.plate.replace('-', ' ') }));
       expect(res.status).toBe(409);
       expect(res.body.message).toBe('VEHICLE_DUPLICATE');
     });
@@ -445,7 +446,7 @@ describe('Phase 4a grace period (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/vehicles')
         .set('Authorization', `Bearer ${await as('registrar')}`)
-        .send({ registrationStationId, ownerId, currentPlate: plateDash });
+        .send(vehicleBody({ registrationStationId, ownerId, currentPlate: plateDash }));
       expect(res.status).toBe(201);
       expect(res.body.linkedFillUps).toBe(before.length);
       vehicleIds.push(res.body.id);
@@ -477,7 +478,7 @@ describe('Phase 4a grace period (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/vehicles')
         .set('Authorization', `Bearer ${await as('registrar')}`)
-        .send({ registrationStationId, ownerId, currentPlate: plate })
+        .send(vehicleBody({ registrationStationId, ownerId, currentPlate: plate }))
         .expect(201);
       expect(res.body.linkedFillUps).toBe(0);
       vehicleIds.push(res.body.id);
@@ -696,7 +697,7 @@ describe('Phase 4a grace period (e2e)', () => {
         const res = await request(app.getHttpServer())
           .post('/api/v1/vehicles')
           .set('Authorization', `Bearer ${await as('registrar')}`)
-          .send({ registrationStationId, ownerId, currentPlate });
+          .send(vehicleBody({ registrationStationId, ownerId, currentPlate }));
         expect({ currentPlate, status: res.status }).toEqual({ currentPlate, status: 400 });
       }
     });
@@ -710,7 +711,7 @@ describe('Phase 4a grace period (e2e)', () => {
         const res = await request(app.getHttpServer())
           .post('/api/v1/vehicles')
           .set('Authorization', `Bearer ${await as('registrar')}`)
-          .send({ registrationStationId, ownerId, currentPlate });
+          .send(vehicleBody({ registrationStationId, ownerId, currentPlate }));
         expect({ currentPlate, status: res.status }).toEqual({ currentPlate, status: 201 });
         vehicleIds.push(res.body.id);
       }
