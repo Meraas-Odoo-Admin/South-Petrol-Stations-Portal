@@ -25,6 +25,11 @@ import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
 import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPage';
 import { SecurityAuthoritiesAdminPage } from './features/admin/SecurityAuthoritiesAdminPage';
 import { RegistrationStationsAdminPage } from './features/admin/RegistrationStationsAdminPage';
+import { RegistrationReportPage } from './features/regreports/RegistrationReportPage';
+import { OfficeEmployeesPage } from './features/regreports/OfficeEmployeesPage';
+import { EmployeeActivityPage } from './features/regreports/EmployeeActivityPage';
+import { CardStockPage } from './features/regreports/CardStockPage';
+import { ReadinessPage } from './features/regreports/ReadinessPage';
 import { useAuth } from './features/auth/AuthProvider';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
@@ -73,6 +78,11 @@ function App() {
               <Route path="/reports/dashboard" element={<DashboardPage />} />
               <Route path="/reports/daily" element={<DailyReportPage />} />
               <Route path="/reports/violations" element={<ViolationsPage />} />
+              <Route path="/reports/registration" element={<RegistrationReportPage />} />
+              <Route path="/reports/registration/offices/:officeId" element={<OfficeEmployeesPage />} />
+              <Route path="/reports/registration/employees/:userId" element={<EmployeeActivityPage />} />
+              <Route path="/reports/card-stock" element={<CardStockPage />} />
+              <Route path="/reports/readiness" element={<ReadinessPage />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
               <Route path="/registration" element={<RegistrationPage />} />
               <Route path="/stations" element={<StationsListPage />} />

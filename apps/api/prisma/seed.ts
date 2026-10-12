@@ -892,6 +892,13 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
       where: { OR: [{ registrationStationId: { in: registrationStationIds } }, { userId: { in: userIds } }] },
     });
     await prisma.station.deleteMany({ where: { id: { in: stationIds } } });
+    // Phase 4c: prints and duplicate catches point at these desks, offices and users.
+    await prisma.cardPrint.deleteMany({
+      where: { OR: [{ registrationStationId: { in: registrationStationIds } }, { printedById: { in: userIds } }] },
+    });
+    await prisma.duplicateCatch.deleteMany({
+      where: { OR: [{ registrationStationId: { in: registrationStationIds } }, { userId: { in: userIds } }] },
+    });
     await prisma.registrationDesk.deleteMany({ where: { registrationStationId: { in: registrationStationIds } } });
     await prisma.registrationStation.deleteMany({ where: { id: { in: registrationStationIds } } });
     await prisma.company.deleteMany({ where: { id: { in: companyIds } } });

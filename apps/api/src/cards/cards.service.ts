@@ -344,12 +344,28 @@ export class CardsService {
       throw new ConflictException('CARD_NOT_ACTIVE');
     }
     const pdf = await this.renderer.renderCardPdf(this.faceData(card), mode);
-    await this.audit.log({
-      userId: actorId,
-      action: 'PRINT_CARD',
-      entityType: 'VehicleCard',
-      entityId: card.id,
-      newValue: { cardNumber: card.cardNumber, mode },
+    // Every print uses up one blank card, so each is recorded (CardPrint) next
+    // to its audit row: the stock reconciliation counts these.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cardPrint.create({
+        data: {
+          registrationStationId: card.registrationStationId,
+          deskId: card.deskId,
+          kind: 'CARD',
+          cardId: card.id,
+          printedById: actorId,
+        },
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'PRINT_CARD',
+          entityType: 'VehicleCard',
+          entityId: card.id,
+          newValue: { cardNumber: card.cardNumber, mode },
+        },
+        tx,
+      );
     });
     return { pdf, cardNumber: card.cardNumber };
   }
@@ -360,7 +376,11 @@ export class CardsService {
     return this.renderer.renderCardPreviewPng(this.faceData(card));
   }
 
-  async testCard(registrationStationId: string, actorId: string): Promise<Buffer> {
+  // A test card (desk set-up, a ribbon change) also uses up a blank, so printing
+  // one is recorded against the desk, like a card print, and counted by the
+  // stock reconciliation. It is recorded when the PDF is produced, the same
+  // moment a card print is: the system cannot see the printer itself.
+  async testCard(registrationStationId: string, deskId: string, actorId: string): Promise<Buffer> {
     const scope = await this.rbac.getRegistrationStationScope(actorId);
     if (scope !== null && !scope.includes(registrationStationId)) {
       throw new ForbiddenException('You do not have access to this registration station.');
@@ -372,7 +392,27 @@ export class CardsService {
     if (!station) {
       throw new NotFoundException('Registration station not found.');
     }
-    return this.renderer.renderTestCardPdf(station.municipality.securityAuthority?.name ?? station.municipality.name);
+    const desk = await this.prisma.registrationDesk.findUnique({ where: { id: deskId } });
+    if (!desk || desk.registrationStationId !== registrationStationId) {
+      throw new NotFoundException('DESK_NOT_AT_THIS_STATION');
+    }
+    const pdf = await this.renderer.renderTestCardPdf(station.municipality.securityAuthority?.name ?? station.municipality.name);
+    await this.prisma.$transaction(async (tx) => {
+      const print = await tx.cardPrint.create({
+        data: { registrationStationId, deskId, kind: 'TEST', cardId: null, printedById: actorId },
+      });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'PRINT_TEST_CARD',
+          entityType: 'RegistrationDesk',
+          entityId: deskId,
+          newValue: { registrationStationId, cardPrintId: print.id },
+        },
+        tx,
+      );
+    });
+    return pdf;
   }
 
   // The pump-side lookup (cards:scan). Returns codes the fill-up screen

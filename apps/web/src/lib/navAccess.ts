@@ -17,6 +17,11 @@ export const NAV_ACCESS = {
   violations: (has: HasPermission) => has('reports:view'),
   changeRequests: (has: HasPermission) => has('vehicles:approve_change'),
   dailyReport: (has: HasPermission) => has('reports:view'),
+  // Phase 4c monitoring reports, each its own permission (registration
+  // employees hold none of them).
+  registrationReports: (has: HasPermission) => has('registration_reports:view'),
+  cardStock: (has: HasPermission) => has('card_stock:read'),
+  readiness: (has: HasPermission) => has('readiness:view'),
   // A supervisor's own staff. Admins manage accounts from the admin area.
   staff: (has: HasPermission) => has('users:manage_staff') && !has('users:manage'),
   stations: (has: HasPermission) => has('stations:read'),

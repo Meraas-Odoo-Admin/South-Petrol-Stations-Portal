@@ -17,6 +17,9 @@ import { StationsModule } from './stations/stations.module';
 import { RegistrationStationsModule } from './registration-stations/registration-stations.module';
 import { CardsModule } from './cards/cards.module';
 import { RegistrationSheetModule } from './registration-sheet/registration-sheet.module';
+import { RegistrationReportsModule } from './registration-reports/registration-reports.module';
+import { CardStockModule } from './card-stock/card-stock.module';
+import { ReadinessModule } from './readiness/readiness.module';
 import { OwnersModule } from './owners/owners.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { VehicleTypesModule } from './vehicle-types/vehicle-types.module';
@@ -53,6 +56,9 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     RegistrationStationsModule,
     CardsModule,
     RegistrationSheetModule,
+    RegistrationReportsModule,
+    CardStockModule,
+    ReadinessModule,
     OwnersModule,
     VehiclesModule,
     VehicleTypesModule,

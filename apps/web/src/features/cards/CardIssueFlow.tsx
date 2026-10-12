@@ -133,8 +133,10 @@ export function CardIssueFlow({
 
   async function printTestCard() {
     setError(null);
+    // A test card is recorded against the desk it is printed at.
+    if (!desk) return;
     try {
-      setFallbackUrl(printPdfBlob(await testCardPdf(registrationStationId)));
+      setFallbackUrl(printPdfBlob(await testCardPdf(registrationStationId, desk.id)));
     } catch (err) {
       setError(cardErrorMessage(err, 'تعذرت طباعة بطاقة الاختبار.'));
     }

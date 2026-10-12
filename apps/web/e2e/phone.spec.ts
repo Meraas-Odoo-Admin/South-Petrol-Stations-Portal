@@ -91,15 +91,15 @@ test.beforeAll(async () => {
       password: fixtures.supervisorPassword,
       routes: ['/fillups/new', '/vehicles', '/stations'],
       mustSee: ['/fillups/new', '/vehicles'],
-      mustNotSee: ['/admin', '/staff', '/registration'],
+      mustNotSee: ['/admin', '/staff', '/registration', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
     },
     {
       key: 'station supervisor',
       username: fixtures.supervisorUsername,
       password: fixtures.supervisorPassword,
-      routes: ['/reports/violations', '/reports/daily', '/staff', '/staff/new', '/fillups/new', '/vehicles'],
-      mustSee: ['/staff', '/reports/violations'],
-      mustNotSee: ['/admin', '/registration'],
+      routes: ['/reports/violations', '/reports/daily', '/reports/readiness', '/staff', '/staff/new', '/fillups/new', '/vehicles'],
+      mustSee: ['/staff', '/reports/violations', '/reports/readiness'],
+      mustNotSee: ['/admin', '/registration', '/reports/card-stock', '/reports/registration'],
     },
     {
       key: 'registration employee',
@@ -107,7 +107,7 @@ test.beforeAll(async () => {
       password: fixtures.registrarPassword,
       routes: ['/registration', '/vehicles'],
       mustSee: ['/registration', '/vehicles'],
-      mustNotSee: ['/admin', '/staff', '/fillups/new'],
+      mustNotSee: ['/admin', '/staff', '/fillups/new', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
     },
     {
       key: 'directorate admin',
@@ -116,6 +116,9 @@ test.beforeAll(async () => {
       routes: [
         '/reports/dashboard',
         '/reports/violations',
+        '/reports/registration',
+        '/reports/card-stock',
+        '/reports/readiness',
         '/vehicles/change-requests',
         '/admin/users',
         '/admin/users/new',
@@ -126,7 +129,7 @@ test.beforeAll(async () => {
         '/admin/audit-log',
         '/stations',
       ],
-      mustSee: ['/admin', '/reports/dashboard'],
+      mustSee: ['/admin', '/reports/dashboard', '/reports/registration', '/reports/card-stock', '/reports/readiness'],
       mustNotSee: ['/staff'],
     },
   ];

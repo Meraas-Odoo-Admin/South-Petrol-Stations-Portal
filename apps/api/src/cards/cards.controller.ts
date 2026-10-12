@@ -38,7 +38,7 @@ export class CardsController {
     @CurrentUser() actor: AuthenticatedUser,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const pdf = await this.cards.testCard(query.registrationStationId, actor.id);
+    const pdf = await this.cards.testCard(query.registrationStationId, query.deskId, actor.id);
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="test-card.pdf"' });
     return new StreamableFile(pdf);
   }

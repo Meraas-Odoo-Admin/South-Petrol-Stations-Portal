@@ -132,6 +132,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
       select: { id: true },
     });
     const allStationIds = createdStationIds.map((s) => s.id);
+    await prisma.duplicateCatch.deleteMany({ where: { registrationStationId: { in: allStationIds } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicle: { registeredById: registrarId } } });
     await prisma.vehicle.deleteMany({ where: { registeredById: registrarId } });
     if (ownerId) await prisma.vehicleOwner.deleteMany({ where: { id: ownerId } });
@@ -263,6 +264,8 @@ describe('Registration stations — scoping boundary (e2e)', () => {
   // ── Duplicate checks ─────────────────────────────────────────────────
 
   it('reports every clashing field and the vehicle it already belongs to — before saving and on save', async () => {
+    const caught = () => prisma.duplicateCatch.count({ where: { registrationStationId: stations.inScope, userId: registrarId } });
+    const caughtBefore = await caught();
     const check = await asRegistrar(
       'get',
       `/vehicles/duplicate-check?currentPlate=${plate}&chassisNumber=${chassis}&registrationBooklet=${booklet}`,
@@ -277,6 +280,8 @@ describe('Registration stations — scoping boundary (e2e)', () => {
 
     const clean = await asRegistrar('get', `/vehicles/duplicate-check?currentPlate=7-${randomDigits(7)}`);
     expect(clean.body.conflicts).toEqual([]);
+    // The as-you-type lookup is not a registration attempt: nothing is recorded.
+    expect(await caught()).toBe(caughtBefore);
 
     const save = await asRegistrar('post', '/vehicles', {
       registrationStationId: stations.inScope,
@@ -288,6 +293,15 @@ describe('Registration stations — scoping boundary (e2e)', () => {
     expect(save.body.details.conflicts).toEqual([
       { field: 'currentPlate', vehicle: { id: vehicleId, internalCode: vehicleInternalCode, currentPlate: plate } },
     ]);
+
+    // A refused registration is a duplicate caught: recorded for the office report, with who and where.
+    expect(await caught()).toBe(caughtBefore + 1);
+    const row = await prisma.duplicateCatch.findFirstOrThrow({
+      where: { registrationStationId: stations.inScope, userId: registrarId },
+      orderBy: { occurredAt: 'desc' },
+    });
+    expect(row.fields).toEqual(['PLATE']);
+    expect(await prisma.auditLog.count({ where: { action: 'DUPLICATE_CAUGHT', entityId: stations.inScope, userId: registrarId } })).toBeGreaterThanOrEqual(1);
   });
 
   // ── Managing registration stations ───────────────────────────────────
