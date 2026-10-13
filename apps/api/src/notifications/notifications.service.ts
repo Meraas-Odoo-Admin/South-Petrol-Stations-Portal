@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { settingChangeNotification } from './setting-sentence';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -33,6 +34,36 @@ export interface ScopeTarget {
 }
 
 export const NOTIFICATION_RETENTION_DAYS = 90;
+
+// Events that are the same thing said again when repeated: a setting or a rule
+// switch changed. These collapse into one row; every other event is its own.
+export const COLLAPSIBLE_KINDS: ReadonlySet<string> = new Set([
+  'SETTING_CHANGED',
+  'RULE_SWITCH_CHANGED',
+]);
+
+interface PresentedRow {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string | null;
+  readAt: Date | null;
+  createdAt: Date;
+  entityId: string | null;
+}
+
+// A row as the bell shows it. Rows written before the plain-sentence wording
+// carry `<setting key>: <before> ← <after>` and are rewritten to the sentence;
+// one whose before and after are equal changed nothing and is dropped (null).
+function presentRow(row: PresentedRow): PresentedRow | null {
+  if (!COLLAPSIBLE_KINDS.has(row.kind)) return row;
+  const legacy = /^(\S+): (.*) ← (.*)$/s.exec(row.body);
+  if (!legacy) return row;
+  const sentence = settingChangeNotification(row.entityId ?? legacy[1]!, legacy[2]!, legacy[3]!);
+  if (!sentence) return null;
+  return { ...row, title: sentence.title, body: sentence.body };
+}
 const PRUNE_EVERY_MS = 60 * 60_000;
 
 type Client = PrismaService | Prisma.TransactionClient;
@@ -49,7 +80,11 @@ export class NotificationsService {
 
   // The active users whose scope covers the target and who hold at least one
   // of the permissions.
-  async recipientsFor(target: ScopeTarget, permissions: string[], exceptUserId?: string): Promise<string[]> {
+  async recipientsFor(
+    target: ScopeTarget,
+    permissions: string[],
+    exceptUserId?: string,
+  ): Promise<string[]> {
     const municipalityIds = new Set<string>();
     if (target.municipalityId) municipalityIds.add(target.municipalityId);
     const candidates = new Set<string>();
@@ -116,7 +151,11 @@ export class NotificationsService {
         archivedAt: null,
         ...(exceptUserId ? { id: { not: exceptUserId } } : {}),
         OR: [
-          { roles: { some: { role: { permissions: { some: { permission: { key: permission } } } } } } },
+          {
+            roles: {
+              some: { role: { permissions: { some: { permission: { key: permission } } } } },
+            },
+          },
           { directPermissions: { some: { permission: { key: permission } } } },
         ],
       },
@@ -124,6 +163,26 @@ export class NotificationsService {
     });
     const recipients = users.map((u) => u.id);
     return this.notifyUsers(recipients, payload, client);
+  }
+
+  // One event, several tiers of recipients (each with its own link): a person in
+  // more than one tier gets ONE row, with the link of the first tier they are in.
+  async notifyScopeOnce(
+    target: ScopeTarget,
+    payload: Omit<NotificationPayload, 'link'>,
+    tiers: Array<{ permissions: string[]; link: string }>,
+    options: { exceptUserId?: string } = {},
+  ): Promise<number> {
+    const taken = new Set<string>();
+    let created = 0;
+    for (const tier of tiers) {
+      const recipients = (
+        await this.recipientsFor(target, tier.permissions, options.exceptUserId)
+      ).filter((id) => !taken.has(id));
+      recipients.forEach((id) => taken.add(id));
+      created += await this.notifyUsers(recipients, { ...payload, link: tier.link });
+    }
+    return created;
   }
 
   async notifyScope(
@@ -138,12 +197,45 @@ export class NotificationsService {
 
   // Direct to named users (a password reset, a decided request). A failure to
   // notify never fails the action that caused it.
-  async notifyUsers(userIds: string[], payload: NotificationPayload, client: Client = this.prisma): Promise<number> {
+  async notifyUsers(
+    userIds: string[],
+    payload: NotificationPayload,
+    client: Client = this.prisma,
+  ): Promise<number> {
     const unique = [...new Set(userIds)];
     if (unique.length === 0) return 0;
     try {
+      // The same SETTING change twice while the first is still unread is ONE
+      // row: its time moves to now, and nobody's bell fills with copies (a
+      // test run that flips a setting five times must not read as five
+      // events). Other events (a low-stock crossing) stay one row each.
+      const collapses = COLLAPSIBLE_KINDS.has(payload.kind);
+      const waiting = !collapses
+        ? []
+        : await client.notification.findMany({
+            where: {
+              userId: { in: unique },
+              readAt: null,
+              kind: payload.kind,
+              title: payload.title,
+              body: payload.body,
+              link: payload.link ?? null,
+              entityType: payload.entityType ?? null,
+              entityId: payload.entityId ?? null,
+            },
+            select: { id: true, userId: true },
+          });
+      if (waiting.length > 0) {
+        await client.notification.updateMany({
+          where: { id: { in: waiting.map((w) => w.id) } },
+          data: { createdAt: new Date() },
+        });
+      }
+      const alreadyWaiting = new Set(waiting.map((w) => w.userId));
+      const toCreate = unique.filter((userId) => !alreadyWaiting.has(userId));
+      if (toCreate.length === 0) return 0;
       const result = await client.notification.createMany({
-        data: unique.map((userId) => ({
+        data: toCreate.map((userId) => ({
           userId,
           kind: payload.kind,
           title: payload.title,
@@ -158,7 +250,9 @@ export class NotificationsService {
       void this.pruneOld();
       return result.count;
     } catch (error) {
-      this.logger.warn(`notification ${payload.kind} could not be written: ${(error as Error).message}`);
+      this.logger.warn(
+        `notification ${payload.kind} could not be written: ${(error as Error).message}`,
+      );
       return 0;
     }
   }
@@ -179,14 +273,22 @@ export class NotificationsService {
 
   // Tell the people who manage the offices a user works at (for example the
   // office manager when an employee asks for a correction).
-  async notifyOfficesOf(userId: string, permissions: string[], payload: NotificationPayload): Promise<number> {
+  async notifyOfficesOf(
+    userId: string,
+    permissions: string[],
+    payload: NotificationPayload,
+  ): Promise<number> {
     const rows = await this.prisma.userRegistrationStationScope.findMany({
       where: { userId },
       select: { registrationStationId: true },
     });
     const recipients = new Set<string>();
     for (const row of rows) {
-      for (const id of await this.recipientsFor({ registrationStationId: row.registrationStationId }, permissions, userId)) {
+      for (const id of await this.recipientsFor(
+        { registrationStationId: row.registrationStationId },
+        permissions,
+        userId,
+      )) {
         recipients.add(id);
       }
     }
@@ -217,10 +319,22 @@ export class NotificationsService {
     };
     const recipients = new Set<string>();
     for (const s of user.stationScope) {
-      (await this.recipientsFor({ stationId: s.stationId }, ['notifications:station_events'], user.id)).forEach((r) => recipients.add(r));
+      (
+        await this.recipientsFor(
+          { stationId: s.stationId },
+          ['notifications:station_events'],
+          user.id,
+        )
+      ).forEach((r) => recipients.add(r));
     }
     for (const o of user.registrationStationScope) {
-      (await this.recipientsFor({ registrationStationId: o.registrationStationId }, ['notifications:office_events'], user.id)).forEach((r) => recipients.add(r));
+      (
+        await this.recipientsFor(
+          { registrationStationId: o.registrationStationId },
+          ['notifications:office_events'],
+          user.id,
+        )
+      ).forEach((r) => recipients.add(r));
     }
     await this.notifyUsers([...recipients], { ...payload, dedupeKey: undefined });
     if (user.municipalityScope.length > 0) {
@@ -234,21 +348,104 @@ export class NotificationsService {
 
   // ── The inbox ────────────────────────────────────────────────────────
 
+  // The bell. Setting and rule-switch events that repeat are shown ONCE, newest,
+  // with how many there were, and the badge counts each distinct unread event
+  // once. Rows written before the plain-sentence wording (`key: a ← b`) are
+  // shown as a sentence too, and a "change" that changed nothing is not shown.
   async list(userId: string, limit = 30) {
-    const [items, unreadCount] = await Promise.all([
+    const select = {
+      id: true,
+      kind: true,
+      title: true,
+      body: true,
+      link: true,
+      readAt: true,
+      createdAt: true,
+      entityId: true,
+    } as const;
+    const [recent, unreadCollapsible, unreadOther] = await Promise.all([
       this.prisma.notification.findMany({
         where: { userId },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: limit,
-        select: { id: true, kind: true, title: true, body: true, link: true, readAt: true, createdAt: true },
+        take: Math.max(limit * 4, 200),
+        select,
       }),
-      this.prisma.notification.count({ where: { userId, readAt: null } }),
+      this.prisma.notification.findMany({
+        where: { userId, readAt: null, kind: { in: [...COLLAPSIBLE_KINDS] } },
+        select,
+        take: 2000,
+      }),
+      this.prisma.notification.count({
+        where: { userId, readAt: null, kind: { notIn: [...COLLAPSIBLE_KINDS] } },
+      }),
     ]);
-    return { unreadCount, items };
+
+    const at = new Map<string, number>();
+    const items: Array<PresentedRow & { count: number }> = [];
+    for (const raw of recent) {
+      const row = presentRow(raw);
+      if (!row) continue; // a legacy "change" that changed nothing
+      if (!COLLAPSIBLE_KINDS.has(row.kind)) {
+        items.push({ ...row, count: 1 });
+        continue;
+      }
+      const key = [row.kind, row.title, row.body, row.link ?? '', row.readAt ? 'r' : 'u'].join('|');
+      const index = at.get(key);
+      if (index !== undefined) {
+        items[index]!.count += 1;
+      } else {
+        at.set(key, items.length);
+        items.push({ ...row, count: 1 });
+      }
+    }
+
+    const distinctUnread = new Set<string>();
+    for (const raw of unreadCollapsible) {
+      const row = presentRow(raw);
+      if (row) distinctUnread.add([row.kind, row.title, row.body, row.link ?? ''].join('|'));
+    }
+    return {
+      unreadCount: distinctUnread.size + unreadOther,
+      items: items.slice(0, limit).map(({ entityId: _entityId, ...rest }) => rest),
+    };
   }
 
+  // Reading one row reads its identical copies too (they are shown as one).
   async markRead(userId: string, id: string) {
-    await this.prisma.notification.updateMany({ where: { id, userId, readAt: null }, data: { readAt: new Date() } });
+    const row = await this.prisma.notification.findFirst({ where: { id, userId } });
+    if (!row) return { ok: true };
+    if (!COLLAPSIBLE_KINDS.has(row.kind)) {
+      await this.prisma.notification.updateMany({
+        where: { id, userId, readAt: null },
+        data: { readAt: new Date() },
+      });
+      return { ok: true };
+    }
+    const shown = presentRow(row);
+    const waiting = await this.prisma.notification.findMany({
+      where: { userId, readAt: null, kind: row.kind },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        body: true,
+        link: true,
+        readAt: true,
+        createdAt: true,
+        entityId: true,
+      },
+    });
+    const same = waiting.filter((w) => {
+      const p = presentRow(w);
+      return (
+        (!p && !shown) ||
+        (p && shown && p.title === shown.title && p.body === shown.body && p.link === shown.link)
+      );
+    });
+    await this.prisma.notification.updateMany({
+      where: { id: { in: [id, ...same.map((w) => w.id)] }, userId, readAt: null },
+      data: { readAt: new Date() },
+    });
     return { ok: true };
   }
 

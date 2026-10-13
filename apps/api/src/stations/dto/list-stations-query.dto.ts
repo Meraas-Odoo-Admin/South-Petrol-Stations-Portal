@@ -1,12 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { StationStatus } from '@prisma/client';
+import { PageQueryDto } from '../../common/dto/page-query.dto';
 
 export const STATION_SORTS = ['code', 'name', 'status', 'company', 'municipality'] as const;
 
 // The petrol-station list: search, filters (municipality, company, status,
 // type, locality, archived) and sorting - done on the server.
-export class ListStationsQueryDto {
+export class ListStationsQueryDto extends PageQueryDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

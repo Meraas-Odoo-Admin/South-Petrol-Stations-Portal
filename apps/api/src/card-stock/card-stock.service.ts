@@ -162,16 +162,24 @@ export class CardStockService {
     const range = resolveReportRange(query, 90);
     const stationIds = await this.visibleStations(actorId, query.registrationStationId);
 
-    const rows = await this.prisma.stockEntry.findMany({
-      where: {
-        registrationStationId: { in: stationIds },
-        occurredAt: { gte: range.start, lt: range.endExclusive },
-      },
-      include: ENTRY_INCLUDE,
-      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-      take: 500,
-    });
-    const originals = rows.filter((r) => r.kind !== 'CORRECTION');
+    // Corrections hang under their entry, so the page is of original entries.
+    const where = {
+      registrationStationId: { in: stationIds },
+      occurredAt: { gte: range.start, lt: range.endExclusive },
+      kind: { not: 'CORRECTION' as const },
+    };
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 25;
+    const [total, originals] = await Promise.all([
+      this.prisma.stockEntry.count({ where }),
+      this.prisma.stockEntry.findMany({
+        where,
+        include: ENTRY_INCLUDE,
+        orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+      }),
+    ]);
     const corrections = await this.prisma.stockEntry.findMany({
       where: { correctsEntryId: { in: originals.map((o) => o.id) } },
       include: ENTRY_INCLUDE,
@@ -184,6 +192,9 @@ export class CardStockService {
 
     return {
       range: { from: range.from, to: range.to },
+      total,
+      skip,
+      take,
       entries: originals.map((o) => {
         const fixes = byOriginal.get(o.id) ?? [];
         const latest = fixes[fixes.length - 1];

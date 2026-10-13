@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { usePageParam } from '../../lib/usePageParam';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
@@ -18,6 +19,7 @@ import {
   OFFICE_STATUS_VARIANT,
   useMunicipalityList,
   useOffice,
+  ACTIVITY_PAGE_SIZE,
   usePlaceActivity,
 } from './placesShared';
 import {
@@ -97,7 +99,8 @@ export function OfficeManagePage() {
   const { officeId } = useParams();
   const queryClient = useQueryClient();
   const office = useOffice(officeId);
-  const activity = usePlaceActivity('registration-stations', officeId);
+  const activityPage = usePageParam(ACTIVITY_PAGE_SIZE);
+  const activity = usePlaceActivity('registration-stations', officeId, activityPage.skip);
   const [values, setValues] = useState<OfficeFormValues>(EMPTY_OFFICE);
   const [errors, setErrors] = useState<ReturnType<typeof validateOffice>>({});
   const [saved, setSaved] = useState(false);
@@ -177,6 +180,7 @@ export function OfficeManagePage() {
 
       <ActivityCard
         activity={activity.data}
+        paging={{ skip: activityPage.skip, setSkip: activityPage.setSkip }}
         loading={activity.isLoading}
         summary={
           activity.data && (

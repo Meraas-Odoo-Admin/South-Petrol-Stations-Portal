@@ -1,3 +1,4 @@
+import { arabicCount } from '@fuel-tracking/shared-types';
 import {
   BadRequestException,
   ConflictException,
@@ -143,12 +144,23 @@ export class FuelStockService {
   private async entriesOf(stationId: string, fuelType: FuelType): Promise<FuelEntryRaw[]> {
     const rows = await this.prisma.fuelStockEntry.findMany({
       where: { stationId, fuelType },
-      select: { id: true, kind: true, liters: true, occurredAt: true, createdAt: true, correctsEntryId: true },
+      select: {
+        id: true,
+        kind: true,
+        liters: true,
+        occurredAt: true,
+        createdAt: true,
+        correctsEntryId: true,
+      },
     });
     return rows.map((r) => ({ ...r, liters: Number(r.liters) }));
   }
 
-  private async dispensesOf(stationId: string, fuelType: FuelType, since: Date): Promise<Dispense[]> {
+  private async dispensesOf(
+    stationId: string,
+    fuelType: FuelType,
+    since: Date,
+  ): Promise<Dispense[]> {
     const rows = await this.prisma.fillUpTransaction.findMany({
       where: { stationId, fuelType, occurredAt: { gt: since } },
       select: { occurredAt: true, quantityLiters: true },
@@ -182,7 +194,13 @@ export class FuelStockService {
         throw new ForbiddenException('You may not see fuel stock.');
       }
       if (!station.showStockToEmployees) {
-        return { stationId, visible: false as const, showToEmployees: false, threshold: null, levels: [] };
+        return {
+          stationId,
+          visible: false as const,
+          showToEmployees: false,
+          threshold: null,
+          levels: [],
+        };
       }
     }
 
@@ -221,7 +239,8 @@ export class FuelStockService {
         // A negative figure is never shown as an amount: the status says the
         // records are wrong, and the supervisor sees the number in `detail`.
         level: level < 0 ? null : level,
-        percentFull: level < 0 || capacity <= 0 ? null : Math.min(100, Math.round((level / capacity) * 100)),
+        percentFull:
+          level < 0 || capacity <= 0 ? null : Math.min(100, Math.round((level / capacity) * 100)),
         status: statusOf(level, threshold),
       };
       if (full) {
@@ -237,7 +256,13 @@ export class FuelStockService {
       }
       levels.push(entry);
     }
-    return { stationId, visible: true as const, showToEmployees: station.showStockToEmployees, threshold, levels };
+    return {
+      stationId,
+      visible: true as const,
+      showToEmployees: station.showStockToEmployees,
+      threshold,
+      levels,
+    };
   }
 
   // The figures of the municipality or system, per station and fuel type: for
@@ -245,7 +270,9 @@ export class FuelStockService {
   // narrowed to their scope.
   async levelsForStations(stationIds: string[]) {
     const threshold = await this.threshold();
-    const storages = await this.prisma.stationFuelStorage.findMany({ where: { stationId: { in: stationIds } } });
+    const storages = await this.prisma.stationFuelStorage.findMany({
+      where: { stationId: { in: stationIds } },
+    });
     const rows: Array<{
       stationId: string;
       fuelType: FuelType;
@@ -268,7 +295,12 @@ export class FuelStockService {
   }
 
   // Fuel reconciliation of one station and fuel type over a period.
-  async reconcile(stationId: string, fuelType: FuelType, from: Date, to: Date): Promise<PeriodReconciliation | null> {
+  async reconcile(
+    stationId: string,
+    fuelType: FuelType,
+    from: Date,
+    to: Date,
+  ): Promise<PeriodReconciliation | null> {
     const storage = await this.prisma.stationFuelStorage.findUnique({
       where: { stationId_fuelType: { stationId, fuelType } },
     });
@@ -286,13 +318,25 @@ export class FuelStockService {
   async listEntries(stationId: string, query: StockEntriesQueryDto, actorId: string) {
     await this.assertInScope(stationId, actorId);
     await this.station(stationId);
-    const rows = await this.prisma.fuelStockEntry.findMany({
-      where: { stationId, ...(query.fuelType ? { fuelType: query.fuelType } : {}) },
-      select: ENTRY_SELECT,
-      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-      take: query.limit ?? 200,
-    });
-    const originals = rows.filter((r) => r.kind !== 'CORRECTION');
+    // Corrections are not rows of their own: each hangs under its delivery. So
+    // the page is of ORIGINAL entries, and the total counts only those.
+    const where = {
+      stationId,
+      kind: { not: 'CORRECTION' as const },
+      ...(query.fuelType ? { fuelType: query.fuelType } : {}),
+    };
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 25;
+    const [total, originals] = await Promise.all([
+      this.prisma.fuelStockEntry.count({ where }),
+      this.prisma.fuelStockEntry.findMany({
+        where,
+        select: ENTRY_SELECT,
+        orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+      }),
+    ]);
     const corrections = await this.prisma.fuelStockEntry.findMany({
       where: { correctsEntryId: { in: originals.map((o) => o.id) } },
       select: ENTRY_SELECT,
@@ -303,6 +347,9 @@ export class FuelStockService {
       byOriginal.set(c.correctsEntryId!, [...(byOriginal.get(c.correctsEntryId!) ?? []), c]);
     }
     return {
+      total,
+      skip,
+      take,
       entries: originals.map((o) => {
         const fixes = byOriginal.get(o.id) ?? [];
         const latest = fixes[fixes.length - 1];
@@ -336,7 +383,12 @@ export class FuelStockService {
 
   // ── writing ──────────────────────────────────────────────────────────
 
-  async configure(stationId: string, fuelType: FuelType, dto: ConfigureStorageDto, actorId: string) {
+  async configure(
+    stationId: string,
+    fuelType: FuelType,
+    dto: ConfigureStorageDto,
+    actorId: string,
+  ) {
     await this.writable(stationId, actorId);
     const openedAt = dto.openedAt ? new Date(dto.openedAt) : new Date();
     if (openedAt.getTime() > Date.now() + FUTURE_TOLERANCE_MS) {
@@ -393,7 +445,10 @@ export class FuelStockService {
           entityType: 'StationFuelStorage',
           entityId: saved.id,
           oldValue: existing
-            ? { capacityLiters: Number(existing.capacityLiters), openingLevelLiters: Number(existing.openingLevelLiters) }
+            ? {
+                capacityLiters: Number(existing.capacityLiters),
+                openingLevelLiters: Number(existing.openingLevelLiters),
+              }
             : null,
           newValue: {
             stationId,
@@ -408,7 +463,12 @@ export class FuelStockService {
       return saved;
     });
     await this.afterChange(stationId, fuelType);
-    return { id: storage.id, fuelType, capacityLiters: dto.capacityLiters, openingLevelLiters: dto.openingLevelLiters };
+    return {
+      id: storage.id,
+      fuelType,
+      capacityLiters: dto.capacityLiters,
+      openingLevelLiters: dto.openingLevelLiters,
+    };
   }
 
   private async requireStorage(stationId: string, fuelType: FuelType) {
@@ -419,7 +479,12 @@ export class FuelStockService {
     return storage;
   }
 
-  async recordDelivery(stationId: string, fuelType: FuelType, dto: RecordDeliveryDto, actorId: string) {
+  async recordDelivery(
+    stationId: string,
+    fuelType: FuelType,
+    dto: RecordDeliveryDto,
+    actorId: string,
+  ) {
     await this.writable(stationId, actorId);
     const storage = await this.requireStorage(stationId, fuelType);
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
@@ -505,7 +570,10 @@ export class FuelStockService {
           action: 'FUEL_DELIVERY_CORRECTION',
           entityType: 'FuelStockEntry',
           entityId: row.id,
-          oldValue: { correctsEntryId: target.id, liters: Number(previous?.liters ?? target.liters) },
+          oldValue: {
+            correctsEntryId: target.id,
+            liters: Number(previous?.liters ?? target.liters),
+          },
           newValue: { liters: dto.liters, reason: dto.reason },
         },
         tx,
@@ -566,7 +634,7 @@ export class FuelStockService {
       {
         kind: 'FUEL_RESET',
         title: `تصفير مخزون ${FUEL_LABELS_AR[fuelType]} في ${station.name}`,
-        body: `المخزون المسجّل قبل التصفير: ${Math.round(previous).toLocaleString('ar-LY')} لتر. السبب: ${dto.reason}`,
+        body: `المخزون المسجّل قبل التصفير: ${arabicCount(Math.round(previous), 'liter')}. السبب: ${dto.reason}`,
         link: `/manage/stations/${stationId}?tab=fuel`,
         entityType: 'Station',
         entityId: stationId,
@@ -627,23 +695,24 @@ export class FuelStockService {
       const managerLink = `/manage/stations/${stationId}?tab=fuel`;
 
       if (decision.alertLow) {
-        const level = Math.round(Math.max(0, current.level.level)).toLocaleString('ar-LY');
         const payload = {
           kind: 'LOW_STOCK',
           title: `مخزون ${fuel} منخفض في ${station.name}`,
-          body: `المتبقي نحو ${level} لتر، أقل من الحد ${Math.round(threshold).toLocaleString('ar-LY')} لتر.`,
+          body: `المتبقي نحو ${arabicCount(Math.round(Math.max(0, current.level.level)), 'liter')}، أقل من الحد ${arabicCount(Math.round(threshold), 'liter')}.`,
           entityType: 'Station',
           entityId: stationId,
         };
-        await this.notifications.notifyScope({ stationId }, ['notifications:station_events'], { ...payload, link });
-        await this.notifications.notifyScope({ stationId }, ['notifications:municipality_events'], {
-          ...payload,
-          link: managerLink,
-        });
-        // Employees are told only when the supervisor lets them see stock.
-        if (station.showStockToEmployees) {
-          await this.notifications.notifyScope({ stationId }, ['fuel_stock:read_visible'], { ...payload, link: '/' });
-        }
+        // One notification per person, however many of these tiers they are in
+        // (a manager who is also scoped to the station is told once): the
+        // supervisor's screen first, then the manager's, then the employees'
+        // (only when the supervisor lets them see stock).
+        await this.notifications.notifyScopeOnce({ stationId }, payload, [
+          { permissions: ['notifications:station_events'], link },
+          { permissions: ['notifications:municipality_events'], link: managerLink },
+          ...(station.showStockToEmployees
+            ? [{ permissions: ['fuel_stock:read_visible'], link: '/' }]
+            : []),
+        ]);
       }
       if (decision.alertNegative) {
         await this.notifications.notifyScope({ stationId }, ['notifications:station_events'], {
@@ -656,7 +725,9 @@ export class FuelStockService {
         });
       }
     } catch (error) {
-      this.logger.warn(`stock alert check failed for ${stationId}/${fuelType}: ${(error as Error).message}`);
+      this.logger.warn(
+        `stock alert check failed for ${stationId}/${fuelType}: ${(error as Error).message}`,
+      );
     }
   }
 }

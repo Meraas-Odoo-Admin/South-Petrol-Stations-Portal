@@ -5,6 +5,8 @@ import { CreateMunicipalityDto } from './dto/create-municipality.dto';
 import { UpdateMunicipalityDto } from './dto/update-municipality.dto';
 import { ListMunicipalitiesQueryDto } from './dto/list-municipalities-query.dto';
 import { ArchiveMunicipalityDto, RestoreDto } from './dto/archive-municipality.dto';
+import { MunicipalityPeopleQueryDto, MunicipalityPlacesQueryDto } from './dto/municipality-lists-query.dto';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { RequireAnyPermission } from '../common/decorators/require-any-permission.decorator';
 import { RbacService } from '../rbac/rbac.service';
@@ -38,6 +40,26 @@ export class MunicipalitiesController {
   @Get(':id/overview')
   overview(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.municipalities.overview(id, actor.id);
+  }
+
+  // The paged lists behind the tabs of a municipality's page: each loads when
+  // its tab is opened, one page at a time.
+  @RequireAnyPermission('municipalities:manage', 'municipalities:set_stage_dates')
+  @Get(':id/places')
+  places(@Param('id') id: string, @Query() query: MunicipalityPlacesQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.municipalities.places(id, actor.id, query);
+  }
+
+  @RequireAnyPermission('municipalities:manage', 'municipalities:set_stage_dates')
+  @Get(':id/people')
+  people(@Param('id') id: string, @Query() query: MunicipalityPeopleQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.municipalities.people(id, actor.id, query);
+  }
+
+  @RequireAnyPermission('municipalities:manage', 'municipalities:set_stage_dates')
+  @Get(':id/activity')
+  activity(@Param('id') id: string, @Query() query: PageQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.municipalities.activity(id, actor.id, query);
   }
 
   @RequirePermission('municipalities:read')

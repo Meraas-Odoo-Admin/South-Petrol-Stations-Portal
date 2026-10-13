@@ -78,12 +78,19 @@ export function useFuelStock(stationId: string | undefined, enabled = true) {
   });
 }
 
-export function useFuelEntries(stationId: string | undefined, enabled: boolean) {
+export const FUEL_ENTRIES_PAGE_SIZE = 25;
+
+// One page of the delivery / reset log (newest first) and the total.
+export function useFuelEntries(stationId: string | undefined, enabled: boolean, skip = 0) {
   return useQuery({
-    queryKey: ['fuel-stock', stationId, 'entries'],
+    queryKey: ['fuel-stock', stationId, 'entries', skip],
     enabled: Boolean(stationId) && enabled,
+    placeholderData: (prev) => prev,
     queryFn: async () =>
-      (await apiClient.get<{ entries: FuelEntry[] }>(`/stations/${stationId}/fuel-stock/entries`, { params: { limit: 60 } })).data
-        .entries,
+      (
+        await apiClient.get<{ entries: FuelEntry[]; total: number }>(`/stations/${stationId}/fuel-stock/entries`, {
+          params: { skip, take: FUEL_ENTRIES_PAGE_SIZE },
+        })
+      ).data,
   });
 }

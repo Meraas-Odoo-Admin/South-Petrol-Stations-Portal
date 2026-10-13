@@ -1,13 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, Matches } from 'class-validator';
 import { FuelType } from '@prisma/client';
+import { PageQueryDto } from '../../common/dto/page-query.dto';
 
 // Item 13: expanded beyond the original stationId/date pair — driverId
 // (round 6: ownerId) and fuelType are new filter dimensions, not just the
 // existing two applying live (that was item 12, already done separately).
 // Both are optional and intersect with the existing station/date filters,
 // same AND-of-filters pattern as ViolationsQueryDto.
-export class DailyReportQueryDto {
+export class DailyReportQueryDto extends PageQueryDto {
   // Required unless the caller holds reports:view_all_stations — enforced
   // in ReportsService, not here, since it depends on who's asking.
   @ApiProperty({ required: false })

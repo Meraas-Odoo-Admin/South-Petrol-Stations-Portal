@@ -6,6 +6,7 @@ import { Dialog } from '../../components/design/Dialog';
 import { TextAreaField, TextField } from '../../components/design/TextField';
 import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
+import { Pagination } from '../../components/Pagination';
 import { formatWhen } from '../users/format';
 
 // ── shapes the places screens read ─────────────────────────────────────
@@ -79,6 +80,9 @@ export const OFFICE_STATUS_VARIANT: Record<OfficeStatus, 'ok' | 'accent' | 'dang
 };
 
 export interface PlaceActivity {
+  total?: number;
+  skip?: number;
+  take?: number;
   fillUpsLast30Days?: number;
   vehiclesLast30Days?: number;
   cardsLast30Days?: number;
@@ -168,11 +172,15 @@ export function useOffice(id: string | undefined) {
   });
 }
 
-export function usePlaceActivity(kind: 'stations' | 'registration-stations', id: string | undefined) {
+export const ACTIVITY_PAGE_SIZE = 25;
+
+export function usePlaceActivity(kind: 'stations' | 'registration-stations', id: string | undefined, skip = 0) {
   return useQuery({
-    queryKey: [kind, 'activity', id],
+    queryKey: [kind, 'activity', id, skip],
     enabled: Boolean(id),
-    queryFn: async () => (await apiClient.get<PlaceActivity>(`/${kind}/${id}/activity`)).data,
+    placeholderData: (prev) => prev,
+    queryFn: async () =>
+      (await apiClient.get<PlaceActivity>(`/${kind}/${id}/activity`, { params: { skip, take: ACTIVITY_PAGE_SIZE } })).data,
   });
 }
 
@@ -280,10 +288,13 @@ export function ActivityCard({
   activity,
   loading,
   summary,
+  paging,
 }: {
   activity: PlaceActivity | undefined;
   loading: boolean;
   summary?: ReactNode;
+  /** The page of the log being shown, and how to move (the page is in the address). */
+  paging?: { skip: number; setSkip: (skip: number) => void };
 }) {
   return (
     <SectionCard title="النشاط" description="آخر ما جرى هنا، بأسماء من نفّذه.">
@@ -304,6 +315,17 @@ export function ActivityCard({
             </li>
           ))}
         </ul>
+      )}
+      {paging && activity && (
+        <div className="-mx-4 -mb-4 mt-2 lg:-mx-5 lg:-mb-5">
+          <Pagination
+            skip={paging.skip}
+            take={ACTIVITY_PAGE_SIZE}
+            total={activity.total ?? activity.items.length}
+            onSkipChange={paging.setSkip}
+            testId="activity-pager"
+          />
+        </div>
       )}
     </SectionCard>
   );

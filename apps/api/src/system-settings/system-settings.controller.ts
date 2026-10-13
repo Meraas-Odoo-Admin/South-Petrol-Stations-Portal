@@ -22,6 +22,7 @@ import { RequirePermission } from '../common/decorators/require-permission.decor
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { NotificationsService } from '../notifications/notifications.service';
+import { settingChangeNotification } from '../notifications/setting-sentence';
 
 // Admin panel, item 7. CLAUDE.md rule 4: tunable business numbers come from
 // SystemSetting, read at request time — this is the screen that actually
@@ -144,19 +145,22 @@ export class SystemSettingsController {
 
       return updated;
     });
-    // Another super admin is told that a rule switch or a setting changed.
-    await this.notifications.notifyPermissionHolders(
-      'notifications:system_events',
-      {
-        kind: key.startsWith('fillup.rule.') ? 'RULE_SWITCH_CHANGED' : 'SETTING_CHANGED',
-        title: key.startsWith('fillup.rule.') ? 'تغيّر مفتاح قاعدة تعبئة' : 'تغيّر إعداد من إعدادات المنظومة',
-        body: `${key}: ${before.value} ← ${dto.value}`,
-        link: '/admin/settings',
-        entityType: 'SystemSetting',
-        entityId: key,
-      },
-      actor.id,
-    );
+    // Another super admin is told that a rule switch or a setting changed, in
+    // one plain sentence (never the key or the raw values). A save that changed
+    // nothing tells nobody.
+    const sentence = settingChangeNotification(key, before.value, dto.value);
+    if (sentence) {
+      await this.notifications.notifyPermissionHolders(
+        'notifications:system_events',
+        {
+          ...sentence,
+          link: '/admin/settings',
+          entityType: 'SystemSetting',
+          entityId: key,
+        },
+        actor.id,
+      );
+    }
     return result;
   }
 }

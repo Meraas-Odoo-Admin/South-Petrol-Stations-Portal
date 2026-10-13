@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LookupSearch, useLookup } from '../../lib/useLookup';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { OwnerSearchSelect } from '../../components/OwnerSearchSelect';
@@ -46,11 +47,8 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState<{ requiresApproval: boolean } | null>(null);
 
-  const { data: vehicleTypes } = useQuery({
-    queryKey: ['vehicle-types'],
-    queryFn: async () => (await apiClient.get<VehicleTypeOption[]>('/vehicle-types')).data,
-    enabled: changeType === 'VEHICLE_TYPE_CHANGE',
-  });
+  const typeLookup = useLookup<VehicleTypeOption>('/vehicle-types', 'vehicle-types', changeType === 'VEHICLE_TYPE_CHANGE');
+  const vehicleTypes = typeLookup.items;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -101,16 +99,19 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
             className={inputClass}
           />
         ) : changeType === 'VEHICLE_TYPE_CHANGE' ? (
-          <select value={requestedValue} onChange={(e) => setRequestedValue(e.target.value)} className={inputClass}>
-            <option value="">— اختر —</option>
-            {vehicleTypes
-              ?.filter((t) => t.isActive)
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
+          <div>
+            <select value={requestedValue} onChange={(e) => setRequestedValue(e.target.value)} className={inputClass}>
+              <option value="">— اختر —</option>
+              {vehicleTypes
+                ?.filter((t) => t.isActive)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+            </select>
+            <LookupSearch id="cr-type-search" q={typeLookup.q} onChange={typeLookup.setQ} capped={typeLookup.capped} />
+          </div>
         ) : changeType === 'PLATE_CHANGE' ? (
           <input
             value={requestedValue}

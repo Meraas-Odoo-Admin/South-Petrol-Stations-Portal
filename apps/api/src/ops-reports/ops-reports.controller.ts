@@ -6,7 +6,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { OpsReportsService } from './ops-reports.service';
 import { OpsReportExportQueryDto, OpsReportQueryDto } from './dto/ops-report-query.dto';
-import { tableToCsv, type OpsReport } from './ops-report-types';
+import { pageReport, tableToCsv, type OpsReport } from './ops-report-types';
 
 // The role reports of phase 5B. One endpoint per report, each behind its own
 // permission, plus a CSV export of any one table of it (the same rows, the
@@ -15,6 +15,10 @@ import { tableToCsv, type OpsReport } from './ops-report-types';
 @Controller('ops-reports')
 export class OpsReportsController {
   constructor(private readonly reports: OpsReportsService) {}
+
+  private paged(report: OpsReport, query: OpsReportQueryDto): OpsReport {
+    return pageReport(report, query);
+  }
 
   private csv(report: OpsReport, query: OpsReportExportQueryDto, res: Response): StreamableFile {
     const table = report.tables.find((t) => t.id === query.table);
@@ -29,7 +33,7 @@ export class OpsReportsController {
   @RequirePermission('registration_reports:own_day')
   @Get('my-day')
   myDay(@Query() query: OpsReportQueryDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.reports.myDay(query, actor.id);
+    return this.reports.myDay(query, actor.id).then((r) => this.paged(r, query));
   }
 
   @RequirePermission('registration_reports:own_day')
@@ -61,7 +65,7 @@ export class OpsReportsController {
   @RequirePermission('registration_reports:view')
   @Get('office')
   office(@Query() query: OpsReportQueryDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.reports.office(query, actor.id);
+    return this.reports.office(query, actor.id).then((r) => this.paged(r, query));
   }
 
   @RequirePermission('registration_reports:view')
@@ -77,7 +81,7 @@ export class OpsReportsController {
   @RequirePermission('reports:view')
   @Get('station')
   station(@Query() query: OpsReportQueryDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.reports.station(query, actor.id);
+    return this.reports.station(query, actor.id).then((r) => this.paged(r, query));
   }
 
   @RequirePermission('reports:view')
@@ -93,7 +97,7 @@ export class OpsReportsController {
   @RequirePermission('reports:municipality')
   @Get('municipality')
   municipality(@Query() query: OpsReportQueryDto, @CurrentUser() actor: AuthenticatedUser) {
-    return this.reports.municipality(query, actor.id);
+    return this.reports.municipality(query, actor.id).then((r) => this.paged(r, query));
   }
 
   @RequirePermission('reports:municipality')
@@ -115,7 +119,7 @@ export class OpsReportsController {
   @RequirePermission('reports:cross_municipality')
   @Get('summary')
   summary(@Query() query: OpsReportQueryDto) {
-    return this.reports.summary(query);
+    return this.reports.summary(query).then((r) => this.paged(r, query));
   }
 
   @RequirePermission('reports:cross_municipality')

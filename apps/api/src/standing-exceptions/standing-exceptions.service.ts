@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PICKER_LIMIT } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateStandingExceptionDto } from './dto/create-standing-exception.dto';
@@ -112,6 +113,8 @@ export class StandingExceptionsService {
         revokedBy: { select: { id: true, fullName: true, username: true } },
       },
       orderBy: { grantedAt: 'desc' },
+      // A lookup of one owner's or vehicle's grants: never more than this.
+      take: PICKER_LIMIT,
     });
   }
 }

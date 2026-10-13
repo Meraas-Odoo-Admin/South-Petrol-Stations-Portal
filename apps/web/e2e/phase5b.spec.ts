@@ -25,6 +25,19 @@ async function shots(page: Page, name: string) {
   await page.setViewportSize({ width: 1280, height: 900 });
 }
 
+// One report table is shown at a time (UX round): a chooser lists them. Open the
+// one asked for if it is not the first.
+async function showTable(page: Page, id: string) {
+  // Wait for the report to arrive (its first table), then pick the one asked for
+  // (retried: the page may still be settling when the first click lands).
+  await page.locator('[data-testid^="ops-table-"]').first().waitFor();
+  await expect(async () => {
+    const chooser = page.getByTestId(`ops-report-${id}`);
+    if (await chooser.count()) await chooser.click();
+    await expect(page.getByTestId(`ops-table-${id}`)).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -204,7 +217,7 @@ test('station employee: sees the level while shown, and nothing once hidden', as
   // Their only report is their own shift.
   await second.page.getByRole('link', { name: 'التقارير' }).first().click();
   await expect(second.page).toHaveURL(/\/reports/);
-  await expect(second.page.getByTestId('ops-table-totals')).toBeVisible();
+  await showTable(second.page, 'totals');
   await shots(second.page, '23-employee-shift-report');
   await second.context.close();
 });
@@ -225,7 +238,7 @@ test('supervisor: the bell, the station reports with a CSV export, and the perso
 
   await page.getByRole('link', { name: 'التقارير' }).first().click();
   await expect(page).toHaveURL(/\/reports/);
-  await expect(page.getByTestId('ops-table-storage')).toBeVisible();
+  await showTable(page, 'storage');
   await shots(page, '31-supervisor-station-reports');
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('ops-export-storage').click()]);
   expect(download.suggestedFilename()).toMatch(/\.csv$/);
@@ -261,6 +274,8 @@ test('municipality manager: the summary row, the readiness panel, a station and 
   await readinessPdf.saveAs(path.join(SHOTS, 'readiness-panel.pdf'));
 
   // A station: overview, staff, fuel and stock, reports.
+  // The list is paged (25 a page): search for the one wanted.
+  await page.locator('#pl-search').fill(fixtures.stationName);
   await page.getByRole('link', { name: fixtures.stationName }).first().click();
   await expect(page.getByTestId('tab-overview')).toBeVisible();
   await shots(page, '41-station-overview');
@@ -270,7 +285,7 @@ test('municipality manager: the summary row, the readiness panel, a station and 
   await expect(page.getByTestId('fuel-deliver-DIESEL')).toHaveCount(0);
   await shots(page, '42-station-fuel-tab-manager');
   await page.getByTestId('tab-reports').click();
-  await expect(page.getByTestId('ops-table-days')).toBeVisible();
+  await showTable(page, 'days');
   await shots(page, '43-station-reports-tab');
 
   // The supervisor's own page: the active switch, and the permissions grouped
@@ -284,10 +299,14 @@ test('municipality manager: the summary row, the readiness panel, a station and 
   await expect(page.getByTestId('permission-locked-fuel_stock:manage')).toContainText('من الوظيفة');
   await shots(page, '49b-person-permissions-locked');
   await navigateInApp(page, '/manage');
+  // The list is paged (25 a page): search for the one wanted.
+  await page.locator('#pl-search').fill(fixtures.stationName);
   await page.getByRole('link', { name: fixtures.stationName }).first().click();
 
   // An office: overview, staff, cards and stock, desks and printers.
   await navigateInApp(page, '/manage');
+  // The list is paged (25 a page): search for the one wanted.
+  await page.locator('#pl-search').fill(fixtures.registrationStationName);
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByTestId('tab-overview')).toBeVisible();
   await shots(page, '44-office-overview');
@@ -304,12 +323,12 @@ test('municipality manager: the summary row, the readiness panel, a station and 
 
   // The role reports: the municipality's.
   await navigateInApp(page, '/reports?report=municipality');
-  await expect(page.getByTestId('ops-table-fuel-reconciliation')).toBeVisible();
+  await showTable(page, 'fuel-reconciliation');
   await shots(page, '47-municipality-reports');
 
   // The office report's PDF.
   await navigateInApp(page, '/reports?report=office');
-  await expect(page.getByTestId('ops-table-office')).toBeVisible();
+  await showTable(page, 'office');
   const [officePdf] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'تنزيل PDF' }).click(),
@@ -334,7 +353,7 @@ test('office manager and registration employee: their office, their day, their b
   await om.page.getByTestId('tab-cards').click();
   await shots(om.page, '51-my-office-cards');
   await om.page.getByRole('link', { name: 'التقارير' }).first().click();
-  await expect(om.page.getByTestId('ops-table-employees')).toBeVisible();
+  await showTable(om.page, 'employees');
   await shots(om.page, '52-office-reports');
   await om.page.locator('[data-testid="notification-bell"]:visible').click();
   await shots(om.page, '53-office-manager-bell');
@@ -343,7 +362,7 @@ test('office manager and registration employee: their office, their day, their b
   const reg = await newPage(browser);
   await loginAs(reg.page, fixtures.registrarUsername, fixtures.registrarPassword);
   await reg.page.getByRole('link', { name: 'التقارير' }).first().click();
-  await expect(reg.page.getByTestId('ops-table-summary')).toBeVisible();
+  await showTable(reg.page, 'summary');
   await shots(reg.page, '54-registration-employee-day');
   await reg.page.locator('[data-testid="notification-bell"]:visible').click();
   await expect(reg.page.getByTestId('notification-panel')).toBeVisible();
@@ -362,7 +381,7 @@ test('super admin: one municipality with its summary and reports, the comparison
   await shots(page, '60-municipality-summary-readiness');
 
   await navigateInApp(page, '/reports?report=summary');
-  await expect(page.getByTestId('ops-table-municipalities')).toBeVisible();
+  await showTable(page, 'municipalities');
   await shots(page, '61-cross-municipality-summary');
 
   await navigateInApp(page, '/admin/settings');

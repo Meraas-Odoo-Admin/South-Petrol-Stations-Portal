@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDate } from '../../lib/dateFormat';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../auth/AuthProvider';
@@ -180,8 +181,8 @@ export function StandingExceptionsSection({
                 </div>
                 <p className="text-ink-soft">السبب: {entry.reason}</p>
                 <p className="text-[13px] lg:text-[12px] text-ink-faint">
-                  مُنح بواسطة {entry.grantedBy.fullName} — {new Date(entry.grantedAt).toLocaleDateString('ar')}
-                  {entry.expiresAt && ` — ينتهي في ${new Date(entry.expiresAt).toLocaleDateString('ar')}`}
+                  مُنح بواسطة {entry.grantedBy.fullName} — <LtrText>{formatDate(entry.grantedAt)}</LtrText>
+                  {entry.expiresAt && <> — ينتهي في <LtrText>{formatDate(entry.expiresAt)}</LtrText></>}
                 </p>
                 {canManage && (
                   <PillButton

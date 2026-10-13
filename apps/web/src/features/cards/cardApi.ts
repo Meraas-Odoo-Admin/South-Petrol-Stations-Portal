@@ -114,8 +114,14 @@ export async function fetchPdf(request: () => Promise<{ data: Blob }>): Promise<
   return (await request()).data;
 }
 
-export function printCardPdf(cardId: string, mode: 'full' | 'black' = 'full'): Promise<Blob> {
-  return fetchPdf(() => apiClient.post<Blob>(`/cards/${cardId}/print`, { mode }, { responseType: 'blob' }));
+// `where` is the office and desk the employee prints at. A card first issued
+// at another office is reprinted from here: the print is counted at this office.
+export function printCardPdf(
+  cardId: string,
+  mode: 'full' | 'black' = 'full',
+  where: { registrationStationId?: string; deskId?: string } = {},
+): Promise<Blob> {
+  return fetchPdf(() => apiClient.post<Blob>(`/cards/${cardId}/print`, { mode, ...where }, { responseType: 'blob' }));
 }
 
 // A test card uses up a blank, so it is printed (and recorded) at a desk.

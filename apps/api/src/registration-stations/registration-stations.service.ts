@@ -6,6 +6,7 @@ import { RbacService } from '../rbac/rbac.service';
 import { CreateRegistrationStationDto } from './dto/create-registration-station.dto';
 import { UpdateRegistrationStationDto } from './dto/update-registration-station.dto';
 import { ListRegistrationStationsQueryDto } from './dto/list-registration-stations-query.dto';
+import { PICKER_LIMIT, pageOf } from '../common/dto/page-query.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 
 // Registration pivot, phase 2: police-station registration desks — the
@@ -95,7 +96,23 @@ export class RegistrationStationsService {
 
   // Phase 5A: archived offices leave the daily lists; a holder of
   // registration_stations:manage reaches them under the "archived" filter.
+  // The PICKER list (at most PICKER_LIMIT offices); findPage() is for screens.
   async findAll(userId: string, query: ListRegistrationStationsQueryDto = {}) {
+    const { where, orderBy } = await this.listQuery(userId, query);
+    return this.prisma.registrationStation.findMany({ where, include: this.include, orderBy, take: PICKER_LIMIT });
+  }
+
+  async findPage(userId: string, query: ListRegistrationStationsQueryDto = {}) {
+    const { where, orderBy } = await this.listQuery(userId, query);
+    const { skip, take } = pageOf(query);
+    const [total, items] = await Promise.all([
+      this.prisma.registrationStation.count({ where }),
+      this.prisma.registrationStation.findMany({ where, include: this.include, orderBy, skip, take }),
+    ]);
+    return { total, skip, take, items };
+  }
+
+  private async listQuery(userId: string, query: ListRegistrationStationsQueryDto) {
     const scope = await this.rbac.getRegistrationStationScope(userId);
     const permissions = await this.rbac.getPermissionsForUser(userId);
     const archived = permissions.has('registration_stations:manage') ? query.archived : undefined;
@@ -124,11 +141,7 @@ export class RegistrationStationsService {
           : query.sort === 'municipality'
             ? [{ municipality: { name: dir } }, { internalCode: 'asc' }]
             : [{ internalCode: dir }];
-    return this.prisma.registrationStation.findMany({
-      where: { AND: and },
-      include: this.include,
-      orderBy,
-    });
+    return { where: { AND: and } satisfies Prisma.RegistrationStationWhereInput, orderBy };
   }
 
   async findOne(id: string, userId: string) {
@@ -170,20 +183,27 @@ export class RegistrationStationsService {
   }
 
   // The office's own page: audit entries about it, and its recent output.
-  async activity(id: string, userId: string) {
+  async activity(id: string, userId: string, query: { skip?: number; take?: number } = {}) {
     await this.findOne(id, userId);
+    const { skip, take } = pageOf(query);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [rows, vehicles, cards] = await Promise.all([
+    const where = { entityType: 'RegistrationStation', entityId: id };
+    const [total, rows, vehicles, cards] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
       this.prisma.auditLog.findMany({
-        where: { entityType: 'RegistrationStation', entityId: id },
-        orderBy: { createdAt: 'desc' },
-        take: 30,
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
         include: { user: { select: { fullName: true } } },
       }),
       this.prisma.vehicle.count({ where: { registeredAtRegistrationStationId: id, createdAt: { gte: since } } }),
       this.prisma.vehicleCard.count({ where: { registrationStationId: id, issuedAt: { gte: since } } }),
     ]);
     return {
+      total,
+      skip,
+      take,
       vehiclesLast30Days: vehicles,
       cardsLast30Days: cards,
       items: rows.map((r) => ({

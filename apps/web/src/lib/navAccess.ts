@@ -47,3 +47,38 @@ export const NAV_ACCESS = {
 } as const;
 
 export type NavKey = keyof typeof NAV_ACCESS;
+
+// Every destination of the side menu, the phone bar and the phone sheet. The
+// layout builds its items from these paths; keeping them here lets one pure
+// function decide which item is current, and a unit test walk the whole list.
+export const NAV_PATHS = [
+  '/',
+  '/reports/dashboard',
+  '/fillups/new',
+  '/registration',
+  '/vehicles',
+  '/reports/violations',
+  '/vehicles/change-requests',
+  '/reports',
+  '/reports/daily',
+  '/manage',
+  '/my-station',
+  '/my-office',
+  '/stations',
+  '/admin',
+] as const;
+
+// Exactly one item is current for an address: the LONGEST item path that is the
+// address itself or a parent of it, segment by segment (so «التقارير» is not
+// lit on /reports/daily, and /vehicles/change-requests is not «المركبات»).
+// «/» is current only on «/». Returns null for an address with no item (such as
+// /change-password), never two items.
+export function activeNavPath(paths: readonly string[], pathname: string): string | null {
+  const clean = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  let best: string | null = null;
+  for (const path of paths) {
+    const matches = path === '/' ? clean === '/' : clean === path || clean.startsWith(`${path}/`);
+    if (matches && (best === null || path.length > best.length)) best = path;
+  }
+  return best;
+}

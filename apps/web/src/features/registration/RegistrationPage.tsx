@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { LookupSearch, useLookup } from '../../lib/useLookup';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
@@ -321,11 +322,8 @@ export function RegistrationPage() {
   const fullPlate = plate ? `${plate}${plateN ? 'N' : ''}` : '';
   const color = colorChoice === VEHICLE_COLOR_OTHER ? colorOther : colorChoice;
 
-  const { data: vehicleTypes } = useQuery({
-    queryKey: ['vehicle-types'],
-    queryFn: async () =>
-      (await apiClient.get<{ id: string; name: string; isActive: boolean }[]>('/vehicle-types')).data,
-  });
+  const typeLookup = useLookup<{ id: string; name: string; isActive: boolean }>('/vehicle-types', 'vehicle-types');
+  const vehicleTypes = typeLookup.items;
 
   const checks = useMemo(
     () => ({
@@ -928,6 +926,7 @@ export function RegistrationPage() {
                       </option>
                     ))}
                 </select>
+                <LookupSearch id="reg-type-search" q={typeLookup.q} onChange={typeLookup.setQ} capped={typeLookup.capped} />
               </div>
             </div>
 

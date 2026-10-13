@@ -22,6 +22,10 @@ export function useTab(tabs: TabDef[]): [string, (key: string) => void] {
         (prev) => {
           const next = new URLSearchParams(prev);
           next.set('tab', key);
+          // A new tab starts on its first page, without the old tab's page or
+          // report-table choice.
+          next.delete('page');
+          next.delete('table');
           return next;
         },
         { replace: true },

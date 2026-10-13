@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { RegistrationStationStatus } from '@prisma/client';
 import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { PageQueryDto } from '../../common/dto/page-query.dto';
 
 export const REGISTRATION_STATION_SORTS = ['code', 'name', 'status', 'municipality'] as const;
 
 // The registration-office list: search, filters and sorting - on the server.
-export class ListRegistrationStationsQueryDto {
+export class ListRegistrationStationsQueryDto extends PageQueryDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

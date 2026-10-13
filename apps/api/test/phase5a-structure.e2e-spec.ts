@@ -441,10 +441,15 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
 
     it('overview shows their municipality and nothing of another', async () => {
       const res = await get('mm1', `/municipalities/${m1}/overview`).expect(200);
-      expect(res.body.stations.map((s: { id: string }) => s.id)).toEqual(expect.arrayContaining([station.s1a, station.s1b]));
-      expect(res.body.stations.map((s: { id: string }) => s.id)).not.toContain(station.s2);
+      // The overview is counts; the lists are paged (places, people, activity).
+      expect(res.body.counts.stations).toBeGreaterThanOrEqual(2);
       expect(res.body.people.total).toBeGreaterThan(0);
-      expect(res.body).toHaveProperty('activity');
+      const places = await get('mm1', `/municipalities/${m1}/places?take=100`).expect(200);
+      const ids = places.body.items.map((s: { id: string }) => s.id);
+      expect(ids).toEqual(expect.arrayContaining([station.s1a, station.s1b]));
+      expect(ids).not.toContain(station.s2);
+      await get('mm1', `/municipalities/${m2}/places`).expect(403);
+      await get('mm1', `/municipalities/${m1}/activity`).expect(200);
     });
   });
 

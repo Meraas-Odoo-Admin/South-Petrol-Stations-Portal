@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PICKER_LIMIT } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateVehicleTypeDto } from './dto/create-vehicle-type.dto';
@@ -33,8 +34,8 @@ export class VehicleTypesService {
     return vehicleType;
   }
 
-  findAll() {
-    return this.prisma.vehicleType.findMany({ orderBy: { name: 'asc' } });
+  findAll(q?: string) {
+    return this.prisma.vehicleType.findMany({ where: q?.trim() ? { name: { contains: q.trim(), mode: 'insensitive' as const } } : undefined, orderBy: { name: 'asc' }, take: PICKER_LIMIT });
   }
 
   async findOne(id: string) {

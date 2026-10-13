@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Query, Res, StreamableFile } from '@nestjs/common';
+import { EmployeesQueryDto } from './dto/employees-query.dto';
 import type { Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { RegistrationReportsService } from './registration-reports.service';
@@ -43,7 +44,7 @@ export class RegistrationReportsController {
 
   @RequirePermission('registration_reports:view')
   @Get('offices/:officeId/employees')
-  employees(@Param('officeId') officeId: string, @Query() query: DateRangeQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+  employees(@Param('officeId') officeId: string, @Query() query: EmployeesQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.reports.employees(officeId, query, actor.id);
   }
 

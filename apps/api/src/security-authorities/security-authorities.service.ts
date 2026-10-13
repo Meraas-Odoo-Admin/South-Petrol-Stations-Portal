@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PICKER_LIMIT } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { UpdateSecurityAuthorityDto } from './dto/update-security-authority.dto';
@@ -38,8 +39,8 @@ export class SecurityAuthoritiesService {
     }
   }
 
-  findAll() {
-    return this.prisma.securityAuthority.findMany({ orderBy: { name: 'asc' }, include: this.include });
+  findAll(q?: string) {
+    return this.prisma.securityAuthority.findMany({ where: q?.trim() ? { name: { contains: q.trim(), mode: 'insensitive' as const } } : undefined, orderBy: { name: 'asc' }, include: this.include, take: PICKER_LIMIT });
   }
 
   async findOne(id: string) {

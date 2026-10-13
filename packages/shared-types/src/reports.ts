@@ -30,6 +30,10 @@ export interface DailyReportResponse {
   // the same station+date scope with owner/fuelType filters NOT applied,
   // so the line can say how much the optional filters narrowed the set.
   totalBeforeFilters: number;
+  // The rows are ONE PAGE (skip/take); this is how many match in all, and the
+  // per-fuel-type counts of ALL of them (the chart does not read the page).
+  rowsTotal?: number;
+  byFuelType?: Array<{ fuelType: FuelType; count: number; liters: number }>;
   rows: FillUpHistoryEntry[];
 }
 

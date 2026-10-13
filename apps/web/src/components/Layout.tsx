@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../features/auth/AuthProvider';
 import { apiClient } from '../lib/apiClient';
@@ -8,7 +8,7 @@ import { APP_NAME } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
 import { OnboardingTour } from './OnboardingTour';
-import { NAV_ACCESS } from '../lib/navAccess';
+import { NAV_ACCESS, activeNavPath } from '../lib/navAccess';
 import { NotificationBell } from './NotificationBell';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
@@ -34,6 +34,7 @@ interface NavItem {
 export function Layout() {
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const stationName = user?.stationScope[0]?.name;
@@ -133,6 +134,12 @@ export function Layout() {
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
+  // One current item for the address, the same on the side menu, the phone bar
+  // and the phone sheet (lib/navAccess.ts: the longest matching path).
+  const activeTo = activeNavPath(
+    navItems.map((i) => i.to),
+    pathname,
+  );
 
   // Bottom bar: the four things done most often, per 2a — capped at 4,
   // "بحث" always occupies the last available slot and deep-links into the
@@ -192,15 +199,13 @@ export function Layout() {
         </div>
         <nav className="flex-1 space-y-0.5 px-3">
           {navItems.map((item) => (
-            <NavLink
+            <Link
               key={item.to}
               to={item.to}
-              end={item.to === '/' || item.to === '/vehicles' || item.to === '/stations'}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] lg:text-[12.5px] font-bold transition ${
-                  isActive ? 'bg-primary text-white shadow-sm' : 'text-ink-soft hover:bg-surface-alt'
-                }`
-              }
+              aria-current={item.to === activeTo ? 'page' : undefined}
+              className={`flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] lg:text-[12.5px] font-bold transition ${
+                item.to === activeTo ? 'bg-primary text-white shadow-sm' : 'text-ink-soft hover:bg-surface-alt'
+              }`}
             >
               {item.icon}
               <span className="flex-1">{item.label}</span>
@@ -209,7 +214,7 @@ export function Layout() {
                   {item.badge}
                 </span>
               )}
-            </NavLink>
+            </Link>
           ))}
         </nav>
         {/* Round 14: this used to be two bare text links side by side — the
@@ -305,18 +310,16 @@ export function Layout() {
         style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {bottomBarItems.map((item) => (
-          <NavLink
+          <Link
             key={item.to}
             to={item.to}
-            end={item.to === '/vehicles'}
             // The bar shows one short word, but the link keeps its full name for
             // screen readers and voice control (the visible word is part of it).
             aria-label={item.shortLabel ? item.label : undefined}
-            className={({ isActive }) =>
-              `relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight ${
-                isActive ? 'text-primary' : 'text-ink-soft'
-              }`
-            }
+            aria-current={item.to === activeTo ? 'page' : undefined}
+            className={`relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight ${
+              item.to === activeTo ? 'text-primary' : 'text-ink-soft'
+            }`}
           >
             {item.icon}
             <span className="max-w-full whitespace-nowrap">{item.shortLabel ?? item.label}</span>
@@ -325,7 +328,7 @@ export function Layout() {
                 {item.badge}
               </span>
             )}
-          </NavLink>
+          </Link>
         ))}
         {showSearchTab && (
           <button
@@ -370,7 +373,7 @@ export function Layout() {
             </div>
 
             {sheetGroups.map((group) => (
-              <NavGroup key={group.title || 'home'} title={group.title} items={group.items} onNavigate={setSheetOpen} />
+              <NavGroup key={group.title || 'home'} title={group.title} items={group.items} activeTo={activeTo} onNavigate={setSheetOpen} />
             ))}
 
             <div className="mt-3 grid grid-cols-2 gap-2 border-t border-surface-alt pt-3">
@@ -400,30 +403,38 @@ export function Layout() {
   );
 }
 
-function NavGroup({ title, items, onNavigate }: { title: string; items: NavItem[]; onNavigate: (open: boolean) => void }) {
+function NavGroup({
+  title,
+  items,
+  activeTo,
+  onNavigate,
+}: {
+  title: string;
+  items: NavItem[];
+  activeTo: string | null;
+  onNavigate: (open: boolean) => void;
+}) {
   if (items.length === 0) return null;
   return (
     <div className="mb-3">
       {title && <p className="mb-1 px-3.5 text-[13px] lg:text-[12px] font-extrabold uppercase tracking-wide text-ink-faint">{title}</p>}
       <div className="space-y-0.5">
         {items.map((item) => (
-          <NavLink
+          <Link
             key={item.to}
             to={item.to}
-            end={item.to === '/' || item.to === '/vehicles' || item.to === '/stations'}
             onClick={() => onNavigate(false)}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] lg:text-[12.5px] font-bold ${
-                isActive ? 'bg-primary-100 text-primary' : 'text-ink hover:bg-surface-alt'
-              }`
-            }
+            aria-current={item.to === activeTo ? 'page' : undefined}
+            className={`flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] lg:text-[12.5px] font-bold ${
+              item.to === activeTo ? 'bg-primary-100 text-primary' : 'text-ink hover:bg-surface-alt'
+            }`}
           >
             {item.icon}
             <span className="flex-1">{item.label}</span>
             {!!item.badge && (
               <span className="rounded-full bg-accent px-1.5 py-0.5 text-[13px] lg:text-[12px] font-extrabold text-ink">{item.badge}</span>
             )}
-          </NavLink>
+          </Link>
         ))}
       </div>
     </div>

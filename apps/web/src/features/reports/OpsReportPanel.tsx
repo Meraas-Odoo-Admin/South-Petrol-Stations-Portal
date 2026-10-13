@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { FUEL_TYPE_LABELS } from '../../lib/labels';
 import { FieldLabel } from '../../components/design/TextField';
 import { ErrorNote, Loading, PdfButton, RangeBar, useRange } from '../regreports/common';
 import { OpsTableView, type OpsReport } from './OpsReportView';
+import { usePageParam } from '../../lib/usePageParam';
+import { PAGE } from './OpsReportView';
 
 // One report of phase 5B with its filters: a date range (Tripoli days) and the
 // few filters that report has. Every filter goes to the API, which checks it
@@ -89,9 +92,11 @@ export function OpsReportPanel({
   const [employeeId, setEmployeeId] = useState('');
   const [identification, setIdentification] = useState('');
   const [cardReason, setCardReason] = useState('');
-  // Employees are learned from the rows the report returns, and remembered, so
-  // choosing one does not remove the others from the list.
-  const employees = useRef(new Map<string, string>());
+  // One report table is shown at a time (UX round): a chooser above lists them,
+  // the chosen one is in the address (?table=; ?report= already names the report), and its page is (?page=).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const chosenTable = searchParams.get('table');
+  const { skip, setSkip } = usePageParam(PAGE);
 
   const params: Record<string, string | undefined> = {
     ...(HAS_RANGE[report] ? range : {}),
@@ -103,6 +108,8 @@ export function OpsReportPanel({
     identification: identification || undefined,
     cardReason: cardReason || undefined,
   };
+  // The report's own figures and tables are fetched with the filters only (first
+  // page of every table, for the chooser); each table then pages itself.
 
   const query = useQuery({
     queryKey: ['ops-report', report, params],
@@ -113,24 +120,17 @@ export function OpsReportPanel({
   });
   const data = query.data;
 
-  useEffect(() => {
-    if (!data) return;
-    for (const table of data.tables) {
-      if (table.id !== 'employees') continue;
-      for (const row of table.rows) {
-        const id = row.employeeId;
-        const name = row.employee;
-        if (typeof id === 'string' && typeof name === 'string') employees.current.set(id, name);
-      }
-    }
-  }, [data]);
+  // The people the report can be narrowed to: the complete list from the
+  // server, so choosing one does not remove the others.
+  const employeeChoices: Array<[string, string]> = (data?.employees ?? []).map((e) => [e.id, e.name]);
 
   const showStation = !fixedStationId && (report === 'station' || report === 'municipality') && (data?.subject.length ?? 0) > 1;
   const stationOptions: Array<[string, string]> = (data?.subject ?? []).map((s) => [s.id, s.name]);
   const showFuel = report === 'station' || report === 'municipality';
-  const showEmployee = (report === 'station' || report === 'office') && employees.current.size > 0;
+  const showEmployee = (report === 'station' || report === 'office') && employeeChoices.length > 0;
   const showMunicipality = report === 'municipality' && !fixedMunicipalityId && (data?.municipalities?.length ?? 0) > 1;
   const subject = fixedStationId || fixedOfficeId ? undefined : data?.subject.map((s) => s.name).join('، ');
+  const shownTable = data?.tables.find((t) => t.id === chosenTable) ?? data?.tables[0];
 
   return (
     <div>
@@ -185,7 +185,7 @@ export function OpsReportPanel({
                   label="الموظف"
                   value={employeeId}
                   onChange={setEmployeeId}
-                  options={[...employees.current.entries()]}
+                  options={employeeChoices}
                   allLabel="كل الموظفين"
                 />
               )}
@@ -214,9 +214,47 @@ export function OpsReportPanel({
               )}
             </div>
           )}
-          {data.tables.map((table) => (
-            <OpsTableView key={table.id} table={table} reportName={report} query={params} />
-          ))}
+          {data.tables.length > 1 && (
+            <div role="tablist" aria-label="اختر التقرير" className="mb-4 flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible" data-testid="ops-report-chooser">
+              {data.tables.map((table) => {
+                const active = table.id === shownTable?.id;
+                return (
+                  <button
+                    key={table.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    data-testid={`ops-report-${table.id}`}
+                    onClick={() =>
+                      setSearchParams(
+                        (prev) => {
+                          const next = new URLSearchParams(prev);
+                          next.set('table', table.id);
+                          next.delete('page');
+                          return next;
+                        },
+                        { replace: true },
+                      )
+                    }
+                    className={`min-h-[44px] shrink-0 rounded-full px-4 text-[15px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-[40px] lg:text-[13px] ${
+                      active ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft hover:bg-primary-100 hover:text-primary'
+                    }`}
+                  >
+                    {table.title}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {shownTable && (
+            <OpsTableView
+              key={shownTable.id}
+              table={shownTable}
+              reportName={report}
+              query={params}
+              page={{ skip, setSkip }}
+            />
+          )}
         </>
       )}
     </div>

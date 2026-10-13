@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { usePageParam } from '../../lib/usePageParam';
+import { Pagination } from '../../components/Pagination';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiClient } from '../../lib/apiClient';
@@ -18,6 +20,7 @@ import {
   litersText,
   STOCK_STATUS_TEXT,
   STOCK_STATUS_VARIANT,
+  FUEL_ENTRIES_PAGE_SIZE,
   useFuelEntries,
   useFuelStock,
   type FuelEntry,
@@ -491,7 +494,8 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
   const canRead = hasPermission('fuel_stock:read');
   const queryClient = useQueryClient();
   const stock = useFuelStock(stationId);
-  const entries = useFuelEntries(stationId, canRead);
+  const entriesPage = usePageParam(FUEL_ENTRIES_PAGE_SIZE);
+  const entries = useFuelEntries(stationId, canRead, entriesPage.skip);
   const [dialog, setDialog] = useState<
     | { kind: 'setup' | 'deliver' | 'reset'; level: FuelLevel }
     | { kind: 'correct'; entry: FuelEntry }
@@ -519,7 +523,7 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
     return <Notice kind="error">تعذّر تحميل مخزون الوقود. تأكد من الاتصال ثم أعد المحاولة.</Notice>;
   }
   const data = stock.data;
-  const deliveries = (entries.data ?? []).filter((e) => e.kind === 'DELIVERY' || e.kind === 'RESET');
+  const deliveries = (entries.data?.entries ?? []).filter((e) => e.kind === 'DELIVERY' || e.kind === 'RESET');
 
   return (
     <div className="space-y-4" data-testid="fuel-stock-panel">
@@ -637,6 +641,15 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
               ))}
             </ul>
           )}
+          <div className="-mx-4 -mb-4 mt-2 lg:-mx-5 lg:-mb-5">
+            <Pagination
+              skip={entriesPage.skip}
+              take={FUEL_ENTRIES_PAGE_SIZE}
+              total={entries.data?.total ?? 0}
+              onSkipChange={entriesPage.setSkip}
+              testId="fuel-entries-pager"
+            />
+          </div>
         </SectionCard>
       )}
 

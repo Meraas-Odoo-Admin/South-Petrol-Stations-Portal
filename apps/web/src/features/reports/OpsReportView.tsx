@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { downloadBlob } from '../../lib/download';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
+import { Pagination } from '../../components/Pagination';
 import { dayLabel, stamp } from '../regreports/common';
 
 // One screen component for every phase-5B report: the API returns named
@@ -25,6 +27,10 @@ export interface OpsTable {
   columns: OpsColumn[];
   rows: Array<Record<string, OpsCell>>;
   flagKey?: string;
+  /** Rows are one page of `total`; the server pages and sorts. */
+  total?: number;
+  skip?: number;
+  take?: number;
 }
 export interface OpsReport {
   report: string;
@@ -32,11 +38,12 @@ export interface OpsReport {
   range: { from: string; to: string };
   subject: Array<{ id: string; name: string }>;
   municipalities?: Array<{ id: string; name: string }>;
+  employees?: Array<{ id: string; name: string }>;
   tables: OpsTable[];
 }
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
-const PAGE = 25;
+export const PAGE = 25;
 
 const GOOD = ['سليم', 'في المسار', 'فعّال', 'مفعّلة', 'لا أحد بلا بطاقة'];
 const BAD = ['غير مبرَّر', 'بطاقات غير مبرَّرة', 'فات الموعد', 'معرّض للتأخر', 'بيانات تحتاج مراجعة', 'فارغ', 'يحتاج مراجعة'];
@@ -65,41 +72,46 @@ function renderCell(column: OpsColumn, value: OpsCell) {
   }
 }
 
-function sortRows(rows: OpsTable['rows'], key: string | null, dir: 'asc' | 'desc') {
-  if (!key) return rows;
-  const factor = dir === 'asc' ? 1 : -1;
-  return [...rows].sort((a, b) => {
-    const x = a[key] ?? null;
-    const y = b[key] ?? null;
-    if (x === y) return 0;
-    if (x === null) return 1;
-    if (y === null) return -1;
-    if (typeof x === 'number' && typeof y === 'number') return (x - y) * factor;
-    return String(x).localeCompare(String(y), 'ar') * factor;
-  });
-}
-
 export function OpsTableView({
   table,
   reportName,
   query,
+  page,
 }: {
   table: OpsTable;
   reportName: string;
   query: Record<string, string | undefined>;
+  /** Where the page number lives. Omitted: kept in the component. */
+  page?: { skip: number; setSkip: (skip: number) => void };
 }) {
   const [sort, setSort] = useState<string | null>(null);
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [failed, setFailed] = useState(false);
-  // A long table shows its first rows and a button for the rest: on a phone a
-  // few hundred stations would otherwise be a page of thousands of pixels. The
-  // CSV always has every row.
-  const [limit, setLimit] = useState(PAGE);
-  const sorted = useMemo(() => sortRows(table.rows, sort, dir), [table.rows, sort, dir]);
-  const rows = sorted.slice(0, limit);
-  const hidden = sorted.length - rows.length;
+  const [localSkip, setLocalSkip] = useState(0);
+  const skip = page?.skip ?? localSkip;
+  const setSkip = page?.setSkip ?? setLocalSkip;
+
+  // The first page in the report's own order arrives with the report; any other
+  // page or order is asked of the server (sorted and paged there), one page at a
+  // time, so a table of hundreds of rows never reaches the browser at once.
+  const first = skip === 0 && sort === null;
+  const paged = useQuery({
+    queryKey: ['ops-report-table', reportName, query, table.id, skip, sort, dir],
+    enabled: !first,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      const res = await apiClient.get<OpsReport>(`/ops-reports/${reportName}`, {
+        params: { ...query, table: table.id, skip, take: PAGE, sort: sort ?? undefined, dir: sort ? dir : undefined },
+      });
+      return res.data.tables.find((t) => t.id === table.id) ?? null;
+    },
+  });
+  const shown = first ? table : (paged.data ?? table);
+  const rows = shown.rows;
+  const total = shown.total ?? table.total ?? rows.length;
 
   function toggle(key: string) {
+    setSkip(0);
     if (sort === key) setDir(dir === 'desc' ? 'asc' : 'desc');
     else {
       setSort(key);
@@ -133,7 +145,7 @@ export function OpsTableView({
           <h3 className="text-[18px] font-extrabold text-primary-dark lg:text-[15px]">{table.title}</h3>
           {table.note && <p className="mt-0.5 text-[14px] leading-[1.7] text-ink-soft lg:text-[12px]">{table.note}</p>}
         </div>
-        {table.rows.length > 0 && (
+        {total > 0 && (
           <PillButton size="field" variant="secondary" data-testid={`ops-export-${table.id}`} onClick={exportCsv}>
             تنزيل CSV
           </PillButton>
@@ -144,7 +156,12 @@ export function OpsTableView({
           تعذّر تنزيل الملف. حاول مرة أخرى.
         </p>
       )}
-      {table.rows.length === 0 ? (
+      {paged.isError && (
+        <p role="alert" className="px-4 pt-3 text-[15px] font-bold text-danger-dark lg:text-[13px]">
+          تعذّر تحميل هذه الصفحة. حاول مرة أخرى.
+        </p>
+      )}
+      {total === 0 ? (
         <p className="px-4 py-6 text-center text-[16px] text-ink-soft lg:text-[14px]">لا توجد بيانات في هذه الفترة.</p>
       ) : (
         <>
@@ -156,7 +173,7 @@ export function OpsTableView({
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
                   {table.columns.map((c) => (
                     <div key={c.key} className={c.type === 'text' && table.columns.indexOf(c) === 0 ? 'col-span-2' : ''}>
-                      <dt className="text-[15px] lg:text-[13px] text-ink-soft">{c.label}</dt>
+                      <dt className="text-[15px] text-ink-soft lg:text-[13px]">{c.label}</dt>
                       <dd className="text-[16px] font-bold text-ink">{renderCell(c, row[c.key] ?? null)}</dd>
                     </div>
                   ))}
@@ -174,7 +191,7 @@ export function OpsTableView({
                       key={c.key}
                       scope="col"
                       aria-sort={sort === c.key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      className="px-3 py-2 text-start text-[15px] lg:text-[13px] font-extrabold text-ink"
+                      className="px-3 py-2 text-start text-[15px] font-extrabold text-ink lg:text-[13px]"
                     >
                       <button
                         type="button"
@@ -182,7 +199,7 @@ export function OpsTableView({
                         className="inline-flex min-h-[32px] items-center gap-1 rounded hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       >
                         {c.label}
-                        <span aria-hidden="true" className="text-[13px] lg:text-[12px] text-ink-soft">
+                        <span aria-hidden="true" className="text-[13px] text-ink-soft lg:text-[12px]">
                           {sort === c.key ? (dir === 'asc' ? '▲' : '▼') : '↕'}
                         </span>
                       </button>
@@ -203,13 +220,7 @@ export function OpsTableView({
               </tbody>
             </table>
           </div>
-          {hidden > 0 && (
-            <div className="border-t border-line p-3 text-center">
-              <PillButton size="field" variant="secondary" data-testid={`ops-more-${table.id}`} onClick={() => setLimit(limit + PAGE)}>
-                عرض المزيد ({nf.format(hidden)} صفًا متبقيًا)
-              </PillButton>
-            </div>
-          )}
+          <Pagination skip={skip} take={PAGE} total={total} onSkipChange={setSkip} alwaysShow testId={`ops-pager-${table.id}`} />
         </>
       )}
     </Card>

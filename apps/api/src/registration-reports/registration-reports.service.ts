@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { EmployeesQueryDto } from './dto/employees-query.dto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -196,7 +197,7 @@ export class RegistrationReportsService {
 
   // ── one office's employees ───────────────────────────────────────────
 
-  async employees(officeId: string, query: DateRangeQueryDto, actorId: string) {
+  async employees(officeId: string, query: EmployeesQueryDto, actorId: string) {
     const range = resolveReportRange(query, 30);
     const scope = await this.scope(actorId);
     if (scope !== null && !scope.includes(officeId)) {
@@ -205,20 +206,29 @@ export class RegistrationReportsService {
     const office = await this.prisma.registrationStation.findUnique({ where: { id: officeId }, select: { id: true, name: true } });
     if (!office) throw new NotFoundException('Registration station not found.');
 
-    const users = await this.prisma.user.findMany({
-      where: { registrationStationScope: { some: { registrationStationId: officeId } } },
-      select: {
-        id: true,
-        username: true,
-        fullName: true,
-        isActive: true,
-        lastLoginAt: true,
-        roles: { select: { role: { select: { name: true } } } },
-      },
-      orderBy: { fullName: 'asc' },
-    });
+    // One page of the office's people (the figures below are for that page).
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 25;
+    const where = { registrationStationScope: { some: { registrationStationId: officeId } } };
+    const [total, users] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          username: true,
+          fullName: true,
+          isActive: true,
+          lastLoginAt: true,
+          roles: { select: { role: { select: { name: true } } } },
+        },
+        orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+        skip,
+        take,
+      }),
+    ]);
     const userIds = users.map((u) => u.id);
-    if (userIds.length === 0) return { range: { from: range.from, to: range.to }, office, employees: [] };
+    if (userIds.length === 0) return { range: { from: range.from, to: range.to }, office, total, skip, take, employees: [] };
 
     const inRange = { gte: range.start, lt: range.endExclusive };
     const [vehicles, cards, failed, reprints, tests, corrections] = await Promise.all([
@@ -268,6 +278,9 @@ export class RegistrationReportsService {
     return {
       range: { from: range.from, to: range.to },
       office,
+      total,
+      skip,
+      take,
       employees: users.map((u) => ({
         id: u.id,
         username: u.username,

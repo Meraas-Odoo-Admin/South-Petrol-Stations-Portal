@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ListRegistrationStationsQueryDto } from './dto/list-registration-stations-query.dto';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import { RestoreDto } from '../municipalities/dto/archive-municipality.dto';
 import { RegistrationStationsService } from './registration-stations.service';
 import { CreateRegistrationStationDto } from './dto/create-registration-station.dto';
@@ -24,14 +25,17 @@ export class RegistrationStationsController {
   // municipality manager sees every office of their municipality.
   @RequirePermission('registration_stations:read')
   @Get()
+  // With skip/take: one page and the total. Without: the picker list (at most 200).
   findAll(@Query() query: ListRegistrationStationsQueryDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.registrationStations.findAll(user.id, query);
+    return query.skip !== undefined || query.take !== undefined
+      ? this.registrationStations.findPage(user.id, query)
+      : this.registrationStations.findAll(user.id, query);
   }
 
   @RequirePermission('registration_stations:read')
   @Get(':id/activity')
-  activity(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.registrationStations.activity(id, user.id);
+  activity(@Param('id') id: string, @Query() query: PageQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.registrationStations.activity(id, user.id, query);
   }
 
   @RequirePermission('registration_stations:read')

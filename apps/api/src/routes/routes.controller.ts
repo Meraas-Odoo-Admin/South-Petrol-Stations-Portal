@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { LookupQueryDto } from '../common/dto/lookup-query.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { RoutesService } from './routes.service';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -20,8 +21,8 @@ export class RoutesController {
 
   @RequirePermission('routes:read')
   @Get()
-  findAll() {
-    return this.routes.findAll();
+  findAll(@Query() query: LookupQueryDto) {
+    return this.routes.findAll(query.q);
   }
 
   @RequirePermission('routes:read')

@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CardsService } from './cards.service';
 import { IssueCardDto } from './dto/issue-card.dto';
-import { PrintCardDto } from './dto/print-card.dto';
+import { PrintCardDto, PrintLocationDto } from './dto/print-card.dto';
 import { CancelCardDto } from './dto/cancel-card.dto';
 import { TestCardQueryDto } from './dto/test-card-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
@@ -68,15 +68,20 @@ export class CardsController {
     @CurrentUser() actor: AuthenticatedUser,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { pdf, cardNumber } = await this.cards.print(id, dto.mode ?? 'full', actor.id);
+    const { pdf, cardNumber } = await this.cards.print(
+      id,
+      dto.mode ?? 'full',
+      { registrationStationId: dto.registrationStationId, deskId: dto.deskId },
+      actor.id,
+    );
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="card-${cardNumber}.pdf"` });
     return new StreamableFile(pdf);
   }
 
   @RequirePermission('cards:issue')
   @Post('cards/:id/failed-print')
-  failedPrint(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
-    return this.cards.failedPrint(id, actor.id);
+  failedPrint(@Param('id') id: string, @Body() dto: PrintLocationDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.cards.failedPrint(id, dto, actor.id);
   }
 
   @RequirePermission('cards:cancel')
