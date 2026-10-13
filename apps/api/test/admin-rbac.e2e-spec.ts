@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // Item 4 (RBAC gating on every new admin endpoint from this round, tested
 // against the actual permission grants, not assumed). Mirrors the
@@ -17,6 +18,8 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 // seed.ts's grants change, THIS FILE must be updated to match — there is
 // no shared source of truth between them (same tradeoff already accepted
 // elsewhere in this test suite).
+let municipalityIdE2e: string;
+
 describe('Admin panel RBAC (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -88,8 +91,15 @@ describe('Admin panel RBAC (e2e)', () => {
     prisma = moduleRef.get(PrismaService);
 
     company = await prisma.company.create({ data: { name: `E2E ARB Company ${runId}` } });
+    municipalityIdE2e = (await createMunicipality(prisma, `E2E ARB Municipality ${runId}`)).id;
     station = await prisma.station.create({
-      data: { internalCode: `E2E-ARB-A-${runId}`, stationNumber: '1', name: 'E2E ARB Station', companyId: company.id },
+      data: {
+        internalCode: `E2E-ARB-A-${runId}`,
+        stationNumber: '1',
+        name: 'E2E ARB Station',
+        companyId: company.id,
+        municipalityId: municipalityIdE2e,
+      },
     });
 
     settingKey = `e2e.arb.test.setting.${runId}`;
@@ -131,7 +141,7 @@ describe('Admin panel RBAC (e2e)', () => {
         await prisma.userStationScope.create({ data: { userId: user.id, stationId: station.id } });
       }
     }
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const allUserIds = Object.values(userIds);
@@ -148,6 +158,7 @@ describe('Admin panel RBAC (e2e)', () => {
     await prisma.stationFuelAvailability.deleteMany({ where: { stationId: station.id } });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.company.delete({ where: { id: company.id } });
+    await deleteMunicipalities(prisma, [municipalityIdE2e]);
     await app.close();
   });
 
@@ -242,6 +253,7 @@ describe('Admin panel RBAC (e2e)', () => {
         stationNumber: '99',
         name: `E2E ARB new station (${role})`,
         companyId: company.id,
+        municipalityId: municipalityIdE2e,
       });
     if (hasPermission) {
       expect(res.status).toBe(201);

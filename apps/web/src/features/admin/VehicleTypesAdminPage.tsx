@@ -55,11 +55,11 @@ export function VehicleTypesAdminPage() {
         <Card className="p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-[11.5px] text-ink-soft">اسم النوع</label>
+              <label className="mb-1 block text-[13px] lg:text-[12px] text-ink-soft">اسم النوع</label>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="h-9 w-56 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                className="h-9 w-56 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
             <PillButton disabled={!newName.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
@@ -87,9 +87,9 @@ export function VehicleTypesAdminPage() {
 
         {data && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-[12.5px]">
+            <table className="w-full min-w-[480px] text-[13px] lg:text-[12.5px]">
               <thead>
-                <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">الاسم</th>
                   <th className="px-[18px] py-2.5 text-start">الحالة</th>
                   <th className="px-[18px] py-2.5 text-start"></th>
@@ -106,7 +106,7 @@ export function VehicleTypesAdminPage() {
                             updateMutation.mutate({ id: type.id, name: e.target.value });
                           }
                         }}
-                        className="h-8 w-full max-w-xs rounded-sm bg-surface-alt px-2.5 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                        className="h-8 w-full max-w-xs rounded-sm bg-surface-alt px-2.5 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                       />
                     </td>
                     <td className="px-[18px] py-3">

@@ -16,7 +16,11 @@
     "prisma:seed": "node ../../scripts/refresh.mjs && prisma db seed",
     "plates:report": "ts-node --transpile-only prisma/plates-report.ts",
     "dev:reset-test-users": "ts-node --transpile-only prisma/reset-test-users.ts",
-    "dev:seed-activity": "ts-node --transpile-only prisma/seed-dev-activity.ts"
+    "dev:seed-activity": "ts-node --transpile-only prisma/seed-dev-activity.ts",
+    "stations:import": "ts-node --transpile-only prisma/import-stations.ts",
+    "stations:clean-non-sabha": "ts-node --transpile-only prisma/clean-non-sabha.ts",
+    "golive:clean": "ts-node --transpile-only prisma/golive-clean.ts",
+    "bootstrap:prod": "ts-node --transpile-only prisma/bootstrap-prod.ts"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

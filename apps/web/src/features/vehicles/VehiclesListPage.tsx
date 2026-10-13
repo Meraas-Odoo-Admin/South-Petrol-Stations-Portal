@@ -134,7 +134,7 @@ export function VehiclesListPage() {
   const filtered = data;
 
   const selectClass =
-    'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   return (
     <div>
@@ -191,7 +191,7 @@ export function VehiclesListPage() {
             }}
             placeholder="ابحث برقم اللوحة أو الرمز الداخلي أو الشاسيه أو اسم/رقم هوية المالك"
             dir="ltr"
-            className="h-9 w-full rounded-sm bg-surface pl-3 pr-9 text-end text-[12.5px] text-ink shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-accent"
+            className="h-9 w-full rounded-sm bg-surface pl-3 pr-9 text-end text-[13px] lg:text-[12.5px] text-ink shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </div>
         {/* Round 14: the "usage type" filter was removed alongside the
@@ -265,17 +265,17 @@ export function VehiclesListPage() {
         </select>
       </div>
 
-      {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
-      {isError && <p className="text-[13px] text-danger">تعذر تحميل قائمة المركبات.</p>}
+      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل قائمة المركبات.</p>}
 
       {filtered && (
         <>
           {/* Desktop table (5a) */}
           <Card className="hidden sm:block">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-[12.5px]">
+              <table className="w-full min-w-[720px] text-[13px] lg:text-[12.5px]">
                 <thead>
-                  <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                  <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                     <th className="px-[18px] py-2.5 text-start">المركبة</th>
                     <th className="px-[18px] py-2.5 text-start">رقم اللوحة</th>
                     <th className="px-[18px] py-2.5 text-start">نوع المركبة</th>
@@ -298,7 +298,7 @@ export function VehiclesListPage() {
                               <span className="block font-bold text-primary group-hover:underline">
                                 {vehicle.internalCode}
                               </span>
-                              <span className="block text-[11px] text-ink-faint">{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'طراز غير محدَّد'}</span>
+                              <span className="block text-[13px] lg:text-[12px] text-ink-faint">{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'طراز غير محدَّد'}</span>
                             </span>
                           </Link>
                         </td>
@@ -307,7 +307,7 @@ export function VehiclesListPage() {
                           {pending && (
                             <div className="mt-1 flex flex-col gap-0.5">
                               <StatusPill variant="accent">{CHANGE_NOT_YET_EFFECTIVE}</StatusPill>
-                              <span className="text-[11px] text-ink-soft">{pending.reason}</span>
+                              <span className="text-[13px] lg:text-[12px] text-ink-soft">{pending.reason}</span>
                             </div>
                           )}
                         </td>
@@ -316,7 +316,7 @@ export function VehiclesListPage() {
                           {vehicle.owner ? (
                             <>
                               {vehicle.owner.fullName}
-                              <span className="ms-1.5 text-[11px] text-ink-faint">
+                              <span className="ms-1.5 text-[13px] lg:text-[12px] text-ink-faint">
                                 ({identityTypeLabel(vehicle.owner.identityType)})
                               </span>
                             </>
@@ -329,7 +329,7 @@ export function VehiclesListPage() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="p-6 text-center text-[13px] text-ink-soft">
+                      <td colSpan={4} className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">
                         لا توجد مركبات مطابقة
                       </td>
                     </tr>
@@ -357,29 +357,29 @@ export function VehiclesListPage() {
                       <VehicleBrandLogo model={vehicle.make} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[14px] font-extrabold text-ink">{vehicle.internalCode}</span>
+                          <span className="truncate text-[16px] lg:text-[14px] font-extrabold text-ink">{vehicle.internalCode}</span>
                           {pending && <StatusPill variant="accent">{CHANGE_NOT_YET_EFFECTIVE}</StatusPill>}
                         </div>
-                        <div className="text-[13px] font-bold text-ink-soft">
+                        <div className="text-[15px] lg:text-[13px] font-bold text-ink-soft">
                           <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>
                         </div>
                       </div>
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-[11.5px] text-ink-faint">
+                    <div className="mt-2 flex items-center gap-2 text-[13px] lg:text-[12px] text-ink-faint">
                       <span>{vehicle.vehicleType?.name ?? '—'}</span>
                       <span>·</span>
                       <span>{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || '—'}</span>
                     </div>
-                    <div className="mt-1.5 text-[11.5px] text-ink-soft">
+                    <div className="mt-1.5 text-[13px] lg:text-[12px] text-ink-soft">
                       المالك: {vehicle.owner ? vehicle.owner.fullName : '—'}
                     </div>
-                    {pending && <p className="mt-2 text-[11.5px] text-ink-soft">{pending.reason}</p>}
+                    {pending && <p className="mt-2 text-[13px] lg:text-[12px] text-ink-soft">{pending.reason}</p>}
                   </Card>
                 </Link>
               );
             })}
             {filtered.length === 0 && (
-              <Card className="p-6 text-center text-[13px] text-ink-soft">لا توجد مركبات مطابقة</Card>
+              <Card className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">لا توجد مركبات مطابقة</Card>
             )}
           </div>
 

@@ -44,3 +44,6 @@ Claude outputs/
 # local config. Anchored to the root so apps/web/.impeccable/design.json (the
 # design sidecar, which IS committed) is not caught.
 /.impeccable/
+
+# Phase 5C: real client data (names + phone numbers) — never committed.
+data/private/

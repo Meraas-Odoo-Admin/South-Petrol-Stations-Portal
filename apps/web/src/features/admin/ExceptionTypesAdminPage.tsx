@@ -69,23 +69,23 @@ export function ExceptionTypesAdminPage() {
         <Card className="p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-[11.5px] text-ink-soft">المفتاح (غير قابل للتغيير لاحقًا)</label>
+              <label className="mb-1 block text-[13px] lg:text-[12px] text-ink-soft">المفتاح (غير قابل للتغيير لاحقًا)</label>
               <input
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
                 dir="ltr"
-                className="h-9 w-48 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                className="h-9 w-48 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11.5px] text-ink-soft">الاسم المعروض بالعربية</label>
+              <label className="mb-1 block text-[13px] lg:text-[12px] text-ink-soft">الاسم المعروض بالعربية</label>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="h-9 w-56 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                className="h-9 w-56 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
-            <label className="flex items-center gap-2 text-[12.5px] text-ink-soft">
+            <label className="flex items-center gap-2 text-[13px] lg:text-[12.5px] text-ink-soft">
               <input
                 type="checkbox"
                 checked={newRequiresProof}
@@ -118,9 +118,9 @@ export function ExceptionTypesAdminPage() {
 
         {data && (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-[12.5px]">
+          <table className="w-full min-w-[620px] text-[13px] lg:text-[12.5px]">
             <thead>
-              <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+              <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                 <th className="px-[18px] py-2.5 text-start">المفتاح</th>
                 <th className="px-[18px] py-2.5 text-start">الاسم</th>
                 <th className="px-[18px] py-2.5 text-start">يتطلب إثباتًا</th>
@@ -142,7 +142,7 @@ export function ExceptionTypesAdminPage() {
                           updateMutation.mutate({ id: type.id, name: e.target.value });
                         }
                       }}
-                      className="h-8 w-full max-w-xs rounded-sm bg-surface-alt px-2.5 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                      className="h-8 w-full max-w-xs rounded-sm bg-surface-alt px-2.5 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                     />
                   </td>
                   <td className="px-[18px] py-3">

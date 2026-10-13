@@ -60,7 +60,7 @@ export function Tabs({
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 && (
-              <span className="rounded-full bg-accent-dark px-2 text-[13px] font-extrabold leading-5 text-white">{tab.count}</span>
+              <span className="rounded-full bg-accent px-2 text-[15px] lg:text-[13px] font-extrabold leading-5 text-ink">{tab.count}</span>
             )}
           </button>
         );

@@ -71,11 +71,11 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
   });
 
   const inputClass =
-    'h-10 w-72 rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-10 w-72 rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   if (applied) {
     return (
-      <div className="rounded-sm border-s-4 border-ok bg-ok-100 p-3.5 text-[13px] font-bold text-ok">
+      <div className="rounded-sm border-s-4 border-ok bg-ok-100 p-3.5 text-[15px] lg:text-[13px] font-bold text-ok">
         {applied.requiresApproval
           ? 'تم إرسال الطلب — بانتظار اعتماد المشرف. القيمة الحالية تبقى سارية حتى الاعتماد.'
           : 'تم تحديث القيمة مباشرة (لم تكن موجودة من قبل).'}
@@ -89,7 +89,7 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">{label} الجديد</label>
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">{label} الجديد</label>
         {changeType === 'OWNER_CHANGE' ? (
           <OwnerSearchSelect
             value={requestedValue}
@@ -134,7 +134,7 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
           />
         )}
         {changeType === 'CHASSIS_CHANGE' && (
-          <label className="mt-2 flex items-center gap-2 text-[12px] text-ink">
+          <label className="mt-2 flex items-center gap-2 text-[13px] lg:text-[12px] text-ink">
             <input
               type="checkbox"
               checked={chassisNonStandard}
@@ -145,7 +145,7 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
         )}
       </div>
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">السبب</label>
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">السبب</label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -154,12 +154,12 @@ export function ChangeRequestForm({ vehicleId, changeType, label, onDone }: Chan
         />
       </div>
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">
           رقم/مرجع الإثبات <span className="text-danger">*</span>
         </label>
         <input value={proofReference} onChange={(e) => setProofReference(e.target.value)} className={inputClass} />
       </div>
-      {error && <p className="text-[12px] text-danger">{error}</p>}
+      {error && <p className="text-[13px] lg:text-[12px] text-danger">{error}</p>}
       <div className="flex gap-2 pt-1">
         <PillButton
           onClick={() => {

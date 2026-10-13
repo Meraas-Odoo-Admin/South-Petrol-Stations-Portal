@@ -164,10 +164,10 @@ export function MunicipalitiesAdminPage() {
         {rows.length > 0 && (
           <>
             <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full text-[14px]">
+              <table className="w-full text-[16px] lg:text-[14px]">
                 <caption className="sr-only">البلديات</caption>
                 <thead>
-                  <tr className="bg-surface-alt text-[12px] font-bold text-ink-soft">
+                  <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                     {sortHeader('name', 'البلدية')}
                     <th scope="col" className="px-[18px] py-2.5 text-start">رمز البطاقات</th>
                     {sortHeader('status', 'الحالة')}
@@ -205,7 +205,7 @@ export function MunicipalitiesAdminPage() {
                       <td className="px-[18px] py-3 text-ink">{m.officeCount ?? 0}</td>
                       <td className="px-[18px] py-3 text-ink-soft">{m.securityAuthority?.name ?? '—'}</td>
                       <td className="px-[18px] py-3">
-                        <Link to={`/admin/municipalities/${m.id}`} className="rounded-full bg-surface-alt px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:text-primary">
+                        <Link to={`/admin/municipalities/${m.id}`} className="rounded-full bg-surface-alt px-3 py-1.5 text-[15px] lg:text-[13px] font-bold text-ink-soft hover:text-primary">
                           فتح
                         </Link>
                       </td>

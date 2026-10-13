@@ -160,17 +160,17 @@ export function StandingExceptionsSection({
       />
 
       <div className="p-4">
-        {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+        {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
 
         {data && data.length === 0 && !showGrantForm && (
-          <p className="text-[13px] text-ink-soft">لا توجد استثناءات دائمة سارية.</p>
+          <p className="text-[15px] lg:text-[13px] text-ink-soft">لا توجد استثناءات دائمة سارية.</p>
         )}
 
         {data && data.length > 0 && (
           <ul className="mb-3 space-y-2">
             {data.map((entry) => (
-              <li key={entry.id} className="rounded-sm bg-accent-100 p-3.5 text-[12.5px]">
-                <p className="mb-1.5 font-bold text-accent-dark">النطاق: {describeEntryScope(entry)}</p>
+              <li key={entry.id} className="rounded-sm bg-accent-100 p-3.5 text-[13px] lg:text-[12.5px]">
+                <p className="mb-1.5 font-bold text-accent-ink">النطاق: {describeEntryScope(entry)}</p>
                 <div className="mb-1.5 flex flex-wrap gap-1.5">
                   {entry.rules.map((rule) => (
                     <StatusPill key={rule} variant="accent">
@@ -179,7 +179,7 @@ export function StandingExceptionsSection({
                   ))}
                 </div>
                 <p className="text-ink-soft">السبب: {entry.reason}</p>
-                <p className="text-[11px] text-ink-faint">
+                <p className="text-[13px] lg:text-[12px] text-ink-faint">
                   مُنح بواسطة {entry.grantedBy.fullName} — {new Date(entry.grantedAt).toLocaleDateString('ar')}
                   {entry.expiresAt && ` — ينتهي في ${new Date(entry.expiresAt).toLocaleDateString('ar')}`}
                 </p>
@@ -203,7 +203,7 @@ export function StandingExceptionsSection({
           <Card className="border border-line p-4">
             {(effectiveOwnerId && effectiveVehicleId) && (
               <div className="mb-4">
-                <p className="mb-2 text-[13px] font-bold text-ink">على مَن يُطبَّق؟</p>
+                <p className="mb-2 text-[15px] lg:text-[13px] font-bold text-ink">على مَن يُطبَّق؟</p>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
@@ -212,10 +212,10 @@ export function StandingExceptionsSection({
                       scope === 'owner_and_vehicle' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
                     }`}
                   >
-                    <span className={`text-[12px] font-extrabold ${scope === 'owner_and_vehicle' ? 'text-primary-dark' : 'text-ink-soft'}`}>
+                    <span className={`text-[13px] lg:text-[12px] font-extrabold ${scope === 'owner_and_vehicle' ? 'text-primary-dark' : 'text-ink-soft'}`}>
                       المالك ومركبة معيّنة
                     </span>
-                    <span className={`text-[10px] ${scope === 'owner_and_vehicle' ? 'text-primary-dark' : 'text-ink-faint'}`}>الأضيق نطاقًا</span>
+                    <span className={`text-[13px] lg:text-[12px] ${scope === 'owner_and_vehicle' ? 'text-primary-dark' : 'text-ink-faint'}`}>الأضيق نطاقًا</span>
                   </button>
                   <button
                     type="button"
@@ -224,8 +224,8 @@ export function StandingExceptionsSection({
                       scope === 'owner_only' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
                     }`}
                   >
-                    <span className={`text-[12px] font-bold ${scope === 'owner_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>المالك وحده</span>
-                    <span className={`text-[10px] ${scope === 'owner_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>كل مركباته</span>
+                    <span className={`text-[13px] lg:text-[12px] font-bold ${scope === 'owner_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>المالك وحده</span>
+                    <span className={`text-[13px] lg:text-[12px] ${scope === 'owner_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>كل مركباته</span>
                   </button>
                   <button
                     type="button"
@@ -234,18 +234,18 @@ export function StandingExceptionsSection({
                       scope === 'vehicle_only' ? 'border-2 border-primary bg-primary-100' : 'bg-surface-alt'
                     }`}
                   >
-                    <span className={`text-[12px] font-bold ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>المركبة وحدها</span>
-                    <span className={`text-[10px] ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>أي مالك</span>
+                    <span className={`text-[13px] lg:text-[12px] font-bold ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-soft'}`}>المركبة وحدها</span>
+                    <span className={`text-[13px] lg:text-[12px] ${scope === 'vehicle_only' ? 'text-primary-dark' : 'text-ink-faint'}`}>أي مالك</span>
                   </button>
                 </div>
-                <div className="mt-2.5 rounded-sm bg-primary-100 px-3 py-2.5 text-[12px] font-semibold text-primary-dark">
+                <div className="mt-2.5 rounded-sm bg-primary-100 px-3 py-2.5 text-[13px] lg:text-[12px] font-semibold text-primary-dark">
                   {scopeSentence}
                 </div>
               </div>
             )}
 
             <div className="mb-4">
-              <p className="mb-2 text-[13px] font-bold text-ink">أي قاعدة يشملها الاستثناء؟</p>
+              <p className="mb-2 text-[15px] lg:text-[13px] font-bold text-ink">أي قاعدة يشملها الاستثناء؟</p>
               <div className="flex flex-col gap-2">
                 {STANDING_EXCEPTION_RULES.map((rule) => {
                   const checked = selectedRules.includes(rule);
@@ -269,7 +269,7 @@ export function StandingExceptionsSection({
                           </svg>
                         )}
                       </span>
-                      <span className="text-[13px] font-semibold text-ink">{RULE_VIOLATION_MESSAGES[rule] ?? rule}</span>
+                      <span className="text-[15px] lg:text-[13px] font-semibold text-ink">{RULE_VIOLATION_MESSAGES[rule] ?? rule}</span>
                     </button>
                   );
                 })}
@@ -277,34 +277,34 @@ export function StandingExceptionsSection({
             </div>
 
             <div className="mb-4">
-              <label className="mb-1.5 block text-[13px] font-bold text-ink">سبب المنح — مطلوب</label>
+              <label className="mb-1.5 block text-[15px] lg:text-[13px] font-bold text-ink">سبب المنح — مطلوب</label>
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
-                className="w-full rounded-sm border border-primary bg-primary-100 px-3.5 py-2.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full rounded-sm border border-primary bg-primary-100 px-3.5 py-2.5 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              <p className="mt-1.5 text-[11px] text-ink-soft">اذكر الأمر أو التكليف الذي يستند إليه الاستثناء — يُقرأ لاحقًا في المراجعة.</p>
+              <p className="mt-1.5 text-[13px] lg:text-[12px] text-ink-soft">اذكر الأمر أو التكليف الذي يستند إليه الاستثناء — يُقرأ لاحقًا في المراجعة.</p>
             </div>
 
             <div className="mb-4">
-              <label className="mb-1.5 block text-[13px] font-bold text-ink">تاريخ الانتهاء</label>
+              <label className="mb-1.5 block text-[15px] lg:text-[13px] font-bold text-ink">تاريخ الانتهاء</label>
               <div className="flex items-center gap-2">
                 <DateField value={expiresAt} onChange={setExpiresAt} disabled={noExpiry} className="flex-1" />
                 <button
                   type="button"
                   onClick={() => setNoExpiry((s) => !s)}
-                  className={`h-11 shrink-0 rounded-sm px-4 text-[12.5px] font-bold ${
+                  className={`h-11 shrink-0 rounded-sm px-4 text-[13px] lg:text-[12.5px] font-bold ${
                     noExpiry ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
                   }`}
                 >
                   بلا تاريخ انتهاء
                 </button>
               </div>
-              <p className="mt-1.5 text-[11px] text-ink-soft">يُفضَّل تحديد تاريخ. الاستثناء بلا نهاية يظهر في تقرير المراجعة الشهري.</p>
+              <p className="mt-1.5 text-[13px] lg:text-[12px] text-ink-soft">يُفضَّل تحديد تاريخ. الاستثناء بلا نهاية يظهر في تقرير المراجعة الشهري.</p>
             </div>
 
-            {formError && <p className="mb-3 text-[12px] text-danger">{formError}</p>}
+            {formError && <p className="mb-3 text-[13px] lg:text-[12px] text-danger">{formError}</p>}
             <div className="flex gap-2">
               <PillButton onClick={submitGrant} disabled={grantMutation.isPending} className="flex-1">
                 {grantMutation.isPending ? '...جارٍ الحفظ' : 'منح الاستثناء'}

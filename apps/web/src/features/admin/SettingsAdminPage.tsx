@@ -88,7 +88,7 @@ export function SettingsAdminPage() {
     <div>
       <div className="mb-4">
         <div className="text-[15px] font-extrabold text-ink">إعدادات المنظومة</div>
-        <div className="mt-1 text-[11.5px] text-ink-soft">تُنفَّذ هذه الأرقام على التعبئات القادمة فقط — لا يوجد أي تخزين مؤقت للقيم.</div>
+        <div className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">تُنفَّذ هذه الأرقام على التعبئات القادمة فقط — لا يوجد أي تخزين مؤقت للقيم.</div>
       </div>
 
       {isLoading && <p className="text-sm text-ink-soft">...جارٍ التحميل</p>}
@@ -100,8 +100,8 @@ export function SettingsAdminPage() {
           <RuleSwitchesCard settings={data} />
           {byKey.get('fillup.week_window_mode') && (
             <Card className="p-4">
-              <span className="text-[12.5px] font-bold text-ink">{systemSettingLabel('fillup.week_window_mode').label}</span>
-              <p className="mt-1 text-[11px] leading-[1.6] text-ink-soft">
+              <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">{systemSettingLabel('fillup.week_window_mode').label}</span>
+              <p className="mt-1 text-[13px] lg:text-[12px] leading-[1.6] text-ink-soft">
                 {systemSettingLabel('fillup.week_window_mode').description}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -115,13 +115,13 @@ export function SettingsAdminPage() {
                     }`}
                   >
                     <div
-                      className={`text-[13px] font-extrabold ${
+                      className={`text-[15px] lg:text-[13px] font-extrabold ${
                         weekWindowMode === mode.value ? 'text-primary-dark' : 'text-ink-soft'
                       }`}
                     >
                       {mode.label}
                     </div>
-                    <div className="text-[10.5px] text-ink-faint">{mode.hint}</div>
+                    <div className="text-[13px] lg:text-[12px] text-ink-faint">{mode.hint}</div>
                   </button>
                 ))}
               </div>
@@ -137,12 +137,12 @@ export function SettingsAdminPage() {
 
           {byKey.get('fillup.week_start_day') && (
             <Card className="p-4">
-              <span className="text-[12.5px] font-bold text-ink">{systemSettingLabel('fillup.week_start_day').label}</span>
-              <p className="mt-1 text-[11px] leading-[1.6] text-ink-soft">
+              <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">{systemSettingLabel('fillup.week_start_day').label}</span>
+              <p className="mt-1 text-[13px] lg:text-[12px] leading-[1.6] text-ink-soft">
                 {systemSettingLabel('fillup.week_start_day').description}
               </p>
               {weekWindowMode !== 'fixed' && (
-                <p className="mt-1.5 text-[11px] font-bold text-accent-dark">
+                <p className="mt-1.5 text-[13px] lg:text-[12px] font-bold text-accent-ink">
                   غير مُستخدم حاليًا — طريقة الحساب الحالية "متجدد" تتجاهل هذا الإعداد.
                 </p>
               )}
@@ -152,7 +152,7 @@ export function SettingsAdminPage() {
                     key={day.value}
                     type="button"
                     onClick={() => stage('fillup.week_start_day', day.value)}
-                    className={`rounded-sm py-2.5 text-center text-[13px] font-bold ${
+                    className={`rounded-sm py-2.5 text-center text-[15px] lg:text-[13px] font-bold ${
                       weekStartDay === day.value ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
                     }`}
                   >
@@ -187,7 +187,7 @@ export function SettingsAdminPage() {
 
           {priceSettings.length > 0 && (
             <div>
-              <p className="mb-2 text-[12.5px] font-bold text-ink">أسعار الوقود (لكل لتر)</p>
+              <p className="mb-2 text-[13px] lg:text-[12.5px] font-bold text-ink">أسعار الوقود (لكل لتر)</p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {priceSettings.map((setting) => (
                   <StepperSettingCard
@@ -239,7 +239,7 @@ function SaveRow({
       <PillButton size="sm" disabled={!dirty || pending} onClick={onSave}>
         حفظ
       </PillButton>
-      {saved && <span className="text-[11px] font-bold text-ok">تم الحفظ</span>}
+      {saved && <span className="text-[13px] lg:text-[12px] font-bold text-ok">تم الحفظ</span>}
     </div>
   );
 }
@@ -285,8 +285,8 @@ function StepperSettingCard({
 
   return (
     <Card className="p-4">
-      <span className="text-[12.5px] font-bold text-ink">{label}</span>
-      {description && <p className="mt-1 text-[11px] leading-[1.6] text-ink-soft">{description}</p>}
+      <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">{label}</span>
+      {description && <p className="mt-1 text-[13px] lg:text-[12px] leading-[1.6] text-ink-soft">{description}</p>}
 
       <div className="mt-3 flex items-center justify-center gap-3">
         <button
@@ -311,7 +311,7 @@ function StepperSettingCard({
       </div>
 
       {showImpact && dirty && impactQuery.data?.noLongerViolating != null && (
-        <div className="mt-3 rounded-sm bg-accent-100 px-3 py-2.5 text-[11.5px] font-semibold leading-[1.7] text-accent-dark">
+        <div className="mt-3 rounded-sm bg-accent-100 px-3 py-2.5 text-[13px] lg:text-[12px] font-semibold leading-[1.7] text-accent-ink">
           القيمة الحالية {setting.value}، رفعها إلى {current} يعني أن {impactQuery.data.noLongerViolating} تعبئة كانت
           ستحتاج استثناءً بسبب هذه القاعدة لن تحتاجه بعد الآن.
         </div>
@@ -321,7 +321,7 @@ function StepperSettingCard({
         <PillButton size="sm" disabled={!dirty || pending} onClick={() => onSave(current)}>
           حفظ
         </PillButton>
-        {saved && <span className="text-[11px] font-bold text-ok">تم الحفظ</span>}
+        {saved && <span className="text-[13px] lg:text-[12px] font-bold text-ok">تم الحفظ</span>}
       </div>
     </Card>
   );
@@ -412,14 +412,14 @@ function AddSettingCard({
   });
 
   const inputClass =
-    'h-10 w-full rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-10 w-full rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   if (!open) {
     return (
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-16 w-full items-center justify-center rounded-md border-2 border-dashed border-line text-[13px] font-bold text-ink-soft hover:border-accent hover:text-accent-dark"
+        className="flex h-16 w-full items-center justify-center rounded-md border-2 border-dashed border-line text-[15px] lg:text-[13px] font-bold text-ink-soft hover:border-accent hover:text-accent-ink"
       >
         + إضافة قاعدة رقمية جديدة
       </button>
@@ -435,10 +435,10 @@ function AddSettingCard({
 
   return (
     <Card className="p-4">
-      <p className="mb-3 text-[12.5px] font-bold text-ink">إضافة قاعدة رقمية جديدة</p>
+      <p className="mb-3 text-[13px] lg:text-[12.5px] font-bold text-ink">إضافة قاعدة رقمية جديدة</p>
 
       <div className="mb-3">
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">نوع القاعدة</label>
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">نوع القاعدة</label>
         <select value={kind} onChange={(e) => setKind(e.target.value as TemplateKind)} className={inputClass}>
           {availableKinds.map((k) => (
             <option key={k} value={k}>
@@ -450,7 +450,7 @@ function AddSettingCard({
 
       {kind === 'fuel_price' && (
         <div className="mb-3">
-          <label className="mb-1 block text-[11px] font-bold text-ink-soft">نوع الوقود</label>
+          <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">نوع الوقود</label>
           <select value={fuelType} onChange={(e) => setFuelType(e.target.value)} className={inputClass}>
             {fuelTypeOptions.map((ft) => (
               <option key={ft} value={ft}>
@@ -463,7 +463,7 @@ function AddSettingCard({
 
       {kind === 'usage_max_liters' && (
         <div className="mb-3">
-          <label className="mb-1 block text-[11px] font-bold text-ink-soft">نوع استخدام المركبة</label>
+          <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">نوع استخدام المركبة</label>
           <select value={usageType} onChange={(e) => setUsageType(e.target.value)} className={inputClass}>
             {usageTypeOptions.map((ut) => (
               <option key={ut} value={ut}>
@@ -476,7 +476,7 @@ function AddSettingCard({
 
       {kind !== 'custom' ? (
         <div className="mb-3">
-          <label className="mb-1 block text-[11px] font-bold text-ink-soft">القيمة</label>
+          <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">القيمة</label>
           <div className="flex items-center justify-center gap-3">
             <button
               type="button"
@@ -501,30 +501,30 @@ function AddSettingCard({
         </div>
       ) : (
         <div className="space-y-2.5">
-          <p className="rounded-sm bg-accent-100 px-3 py-2 text-[11px] leading-[1.6] text-accent-dark">
+          <p className="rounded-sm bg-accent-100 px-3 py-2 text-[13px] lg:text-[12px] leading-[1.6] text-accent-ink">
             هذا المسار مخصَّص لحالات لا يغطّيها القالبان أعلاه — يتطلب معرفة بصيغة مفاتيح الإعدادات.
           </p>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">المفتاح (مثال: fillup.new_rule)</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المفتاح (مثال: fillup.new_rule)</label>
             <input value={customKey} onChange={(e) => setCustomKey(e.target.value)} dir="ltr" className={inputClass} />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">القيمة</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">القيمة</label>
             <input value={customValue} onChange={(e) => setCustomValue(e.target.value)} dir="ltr" className={inputClass} />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">الوصف (اختياري)</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">الوصف (اختياري)</label>
             <input value={customDescription} onChange={(e) => setCustomDescription(e.target.value)} className={inputClass} />
           </div>
         </div>
       )}
 
-      <p className="mt-3 rounded-sm bg-accent-100 px-3 py-2 text-[11px] leading-[1.6] text-accent-dark">
+      <p className="mt-3 rounded-sm bg-accent-100 px-3 py-2 text-[13px] lg:text-[12px] leading-[1.6] text-accent-ink">
         تنبيه: هذا يُنشئ الصف في قاعدة البيانات فقط — لا يبدأ بالتأثير على قواعد التعبئة إلا بعد ربطه برمجيًا في محرك
         القواعد (ليس تلقائيًا).
       </p>
 
-      {error && <p className="mt-2 text-[12px] text-danger">{error}</p>}
+      {error && <p className="mt-2 text-[13px] lg:text-[12px] text-danger">{error}</p>}
       <div className="mt-3 flex gap-2">
         <PillButton
           size="sm"

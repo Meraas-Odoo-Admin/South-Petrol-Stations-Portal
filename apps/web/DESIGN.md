@@ -6,7 +6,9 @@ colors:
   petrol-teal-deep: "#0A4841"
   petrol-teal-tint: "#E3EFEC"
   gauge-amber: "#E8A53D"
+  gauge-amber-mid: "#C98A22"
   gauge-amber-deep: "#B97A1A"
+  gauge-amber-ink: "#7A4F0B"
   gauge-amber-tint: "#FBEDD4"
   violation-red: "#C1462D"
   violation-red-deep: "#8F3120"
@@ -122,7 +124,7 @@ rounded:
 components:
   button-primary:
     backgroundColor: "{colors.gauge-amber}"
-    textColor: "{colors.surface-white}"
+    textColor: "{colors.ink}"
     typography: "{typography.title}"
     rounded: "{rounded.full}"
     height: "36px"
@@ -235,7 +237,9 @@ A warm, low-saturation field with one deep teal and one amber, plus a status set
 - **Petrol Teal** (#0D5C52): Brand and structure. The active navigation pill, the splash and theme color, headings of brand weight. Deep variant **Petrol Teal Deep** (#0A4841) for pressed states and brand text on tint. **Petrol Teal Tint** (#E3EFEC) for hover washes and quiet brand fills.
 
 ### Secondary
-- **Gauge Amber** (#E8A53D): The call to action. The primary pill button (as an amber gradient with a soft amber glow), navigation badges, the focus ring. **Gauge Amber Deep** (#B97A1A) is its text-on-tint and gradient end. **Gauge Amber Tint** (#FBEDD4) fills pending and needs-your-decision states.
+- **Gauge Amber Ink** (#7A4F0B): amber-family TEXT, on white or on Gauge Amber Tint (6.2:1 on the tint). Gauge Amber Deep is no longer used as text colour (3.1:1 on the tint, 3.9:1 on white); it stays a fill and a border colour.
+- **Gauge Amber Mid** (#C98A22): the far end of the amber button gradient, so Ink text keeps its contrast across the whole button.
+- **Gauge Amber** (#E8A53D): The call to action. The primary pill button (as an amber gradient with a soft amber glow), navigation badges, the focus ring. **Gauge Amber Deep** (#B97A1A) is a fill and border colour (chart series, outlines); text uses Gauge Amber Ink. **Gauge Amber Tint** (#FBEDD4) fills pending and needs-your-decision states.
 
 ### Status
 - **Violation Red** (#C1462D): A rule that was actually broken, and irreversible actions such as cancelling a card or deactivating an account. Deep variant **Violation Red Deep** (#8F3120) for text on tint; **Violation Red Tint** (#FBE6E0) for hover and alert fills. Routine states (inactive, empty, optional) never use red.
@@ -252,6 +256,8 @@ A warm, low-saturation field with one deep teal and one amber, plus a status set
 
 ### Named Rules
 **The Meaning-Fixed Rule.** Each hue carries one meaning: teal is structure and brand, amber is the next action, green is approved, red is broken or irreversible. Never borrow a hue for decoration.
+
+**The Text-on-Amber Rule (Phase 5C).** Text on an amber fill is Ink; amber-family text on white or on the tint is Gauge Amber Ink. Anything under 4.5:1 (3:1 for large text) is a defect.
 
 **The One Needle Rule.** There is at most one amber primary action per screen region. If two things are amber, neither is the call to action.
 
@@ -275,7 +281,7 @@ A warm, low-saturation field with one deep teal and one amber, plus a status set
 
 ### Scale for screens built from Phase 4b onward
 
-Phone and desktop have their own sizes, set per role. Older screens keep the ramp above and are not retrofitted yet.
+Phone and desktop have their own sizes, set per role. Phase 5C brought every older screen to this scale: phone body 16px and nothing below 13px, desktop body 14px and nothing below 12px (the `lg` breakpoint is the switch).
 
 | Role | Phone | Desktop |
 |---|---|---|
@@ -322,7 +328,7 @@ Soft and rounded, never sharp. Three corner sizes: 10px for fields and chips, 16
 
 ### Buttons
 - **Shape:** Full pill (9999px). Medium is 36px tall, small is 32px.
-- **Primary:** Amber gradient fill (Gauge Amber to Gauge Amber Deep) with white bold text and the Action Glow shadow. One per region.
+- **Primary:** Amber gradient fill (Gauge Amber to Gauge Amber Mid) with **Ink** (#132524) bold text and the Action Glow shadow. One per region. Phase 5C: the label is never white (white on amber is about 2:1); Ink on the whole gradient is 5.4:1 or better, which is why the gradient ends at Amber Mid (#C98A22) and not at Amber Deep (Ink on Amber Deep is 4.4:1).
 - **Secondary:** Mist Green fill, Ink Soft text.
 - **Ghost:** No fill, Ink Soft text; Mist Green wash on hover.
 - **Danger:** Outlined Violation Red pill with red text; Violation Red Tint on hover. Never solid red as a default state. Reserved for broken-rule responses and irreversible actions.
@@ -353,7 +359,7 @@ Individual rounded cards: an 11px label on top and a 28px mono figure end-aligne
 
 ### Navigation
 - **Style:** Full-pill items, 12.5px bold text, an icon at the start and an optional badge at the end.
-- **States:** Ink Soft at rest, Mist Green wash on hover, Petrol Teal fill with white text and Rest shadow when active. Badges are small Gauge Amber pills with white figures.
+- **States:** Ink Soft at rest, Mist Green wash on hover, Petrol Teal fill with white text and Rest shadow when active. Badges are small Gauge Amber pills with **Ink** figures (white on amber is about 2:1).
 - **Mobile:** Collapsed top bar plus a bottom bar of four destinations; a top-dropping sheet carries the rest.
 
 ### Inline Notices

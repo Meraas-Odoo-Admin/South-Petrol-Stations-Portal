@@ -110,7 +110,7 @@ describe('Vehicle cards (e2e)', () => {
     for (const key of ['registrar', 'supervisor'] as const) {
       await prisma.userRegistrationStationScope.create({ data: { userId: userIds[key], registrationStationId: stationId } });
     }
-  }, 60_000);
+  });
 
   afterAll(async () => {
     const ids = Object.values(userIds);
@@ -300,7 +300,7 @@ describe('Vehicle cards (e2e)', () => {
     for (const row of recorded) {
       expect(row).toMatchObject({ kind: 'CARD', registrationStationId: stationId, deskId, printedById: userIds.registrar });
     }
-  }, 60_000);
+  });
 
   it('a replaced card can no longer be printed', async () => {
     const registrar = await as('registrar');
@@ -338,7 +338,7 @@ describe('Vehicle cards (e2e)', () => {
     await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=not-a-desk`).expect(404);
     await registrar.get(`/cards/test-card?registrationStationId=${otherStationId}&deskId=${deskId}`).expect(403);
     expect(await prisma.cardPrint.count({ where: { registrationStationId: stationId, kind: 'TEST' } })).toBe(before + 1);
-  }, 60_000);
+  });
 
   // ── Failed print ───────────────────────────────────────────────────
 

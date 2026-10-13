@@ -40,7 +40,6 @@ describe('Municipality foundation (e2e)', () => {
   let stationA: { id: string };
   let stationB: { id: string };
   let stationMoving: { id: string };
-  let stationNoMunicipality: { id: string };
   let stationPreparing: { id: string };
   let stationOutOfScope: { id: string };
   const vehicleIds: string[] = [];
@@ -83,7 +82,7 @@ describe('Municipality foundation (e2e)', () => {
     muniPreparing = await createMunicipality(prisma, `E2E MF Preparing ${runId}`, 'PREPARING');
 
     let stationNumber = 0;
-    const createStation = (label: string, municipalityId: string | null) =>
+    const createStation = (label: string, municipalityId: string) =>
       prisma.station.create({
         data: {
           internalCode: `E2E-MF-${label}-${runId}`,
@@ -96,7 +95,6 @@ describe('Municipality foundation (e2e)', () => {
     stationA = await createStation('A', muniA.id);
     stationB = await createStation('B', muniB.id);
     stationMoving = await createStation('MOVING', muniA.id);
-    stationNoMunicipality = await createStation('NOMUNI', null);
     stationPreparing = await createStation('PREP', muniPreparing.id);
     stationOutOfScope = await createStation('OUTSCOPE', muniA.id);
 
@@ -145,14 +143,14 @@ describe('Municipality foundation (e2e)', () => {
     const recorder = await createUser(usernameRecorder);
     recorderUserId = recorder.id;
     await prisma.userRole.create({ data: { userId: recorder.id, roleId: recorderRole.id } });
-    for (const station of [stationA, stationB, stationMoving, stationNoMunicipality, stationPreparing]) {
+    for (const station of [stationA, stationB, stationMoving, stationPreparing]) {
       await prisma.userStationScope.create({ data: { userId: recorder.id, stationId: station.id } });
     }
 
     const admin = await createUser(usernameAdmin);
     adminUserId = admin.id;
     await prisma.userRole.create({ data: { userId: admin.id, roleId: adminRole.id } });
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const userIds = [recorderUserId, adminUserId];
@@ -271,13 +269,6 @@ describe('Municipality foundation (e2e)', () => {
   // ── Refusals ──────────────────────────────────────────────────────────
 
   describe('stations that cannot take fill-ups', () => {
-    it('refuses a fill-up at a station with no municipality, and records nothing', async () => {
-      const res = await submit(vehicle(2), stationNoMunicipality.id, 409);
-      expect(res.body.message).toBe('STATION_HAS_NO_MUNICIPALITY');
-      await preview(vehicle(2), stationNoMunicipality.id, 409);
-      expect(await prisma.fillUpTransaction.count({ where: { vehicleId: vehicle(2) } })).toBe(0);
-    });
-
     it('refuses a fill-up in a PREPARING municipality — exception mode included', async () => {
       const res = await submit(vehicle(2), stationPreparing.id, 409);
       expect(res.body.message).toBe('MUNICIPALITY_NOT_LIVE');
@@ -318,7 +309,7 @@ describe('Municipality foundation (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
       const ids = list.body.map((s: { id: string }) => s.id);
-      expect(ids).toEqual(expect.arrayContaining([stationA.id, stationB.id, stationNoMunicipality.id]));
+      expect(ids).toEqual(expect.arrayContaining([stationA.id, stationB.id]));
       expect(ids).not.toContain(stationPreparing.id);
 
       await request(app.getHttpServer())

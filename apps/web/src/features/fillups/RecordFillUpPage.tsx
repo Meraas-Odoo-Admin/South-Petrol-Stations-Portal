@@ -59,7 +59,7 @@ export function TriggerDetail({ trigger }: { trigger: RuleTriggerDetail | null }
     return null;
   }
   return (
-    <p className="text-[12px] text-ink-soft">
+    <p className="text-[13px] lg:text-[12px] text-ink-soft">
       بسبب تعبئة سابقة لنفس مالك المركبة{' '}
       <LtrText>
         {trigger.vehicleCurrentPlate ? formatLicensePlate(trigger.vehicleCurrentPlate) : trigger.vehicleInternalCode}
@@ -100,19 +100,19 @@ function RuleReviewChecks({
       {rejection ? (
         <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-danger-100 px-3 py-1.5">
           <span className="h-2 w-2 rounded-full bg-danger" />
-          <span className="text-[11px] font-bold text-danger-dark">تعذر تسجيل التعبئة</span>
+          <span className="text-[13px] lg:text-[12px] font-bold text-danger-dark">تعذر تسجيل التعبئة</span>
         </div>
       ) : (
         <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-ok-100 px-3 py-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1f7a5c" strokeWidth="3">
             <path d="M20 6L9 17l-5-5" />
           </svg>
-          <span className="text-[11px] font-bold text-ok">مراجعة القواعد</span>
+          <span className="text-[13px] lg:text-[12px] font-bold text-ok">مراجعة القواعد</span>
         </div>
       )}
 
-      {isLoading && <p className="text-[12.5px] text-ink-soft">...جارٍ فحص القواعد</p>}
-      {isError && <p className="text-[12.5px] text-danger">{errorMessage ?? 'تعذر تحميل مراجعة القواعد.'}</p>}
+      {isLoading && <p className="text-[13px] lg:text-[12.5px] text-ink-soft">...جارٍ فحص القواعد</p>}
+      {isError && <p className="text-[13px] lg:text-[12.5px] text-danger">{errorMessage ?? 'تعذر تحميل مراجعة القواعد.'}</p>}
 
       {checks && (
         <div className="space-y-2">
@@ -129,18 +129,18 @@ function RuleReviewChecks({
                 className={`rounded-sm px-3 py-2.5 ${failed ? 'bg-danger-100' : 'bg-ok-100'}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`text-[12.5px] font-bold ${failed ? 'text-danger-dark' : 'text-ok'}`}>
+                  <span className={`text-[13px] lg:text-[12.5px] font-bold ${failed ? 'text-danger-dark' : 'text-ok'}`}>
                     {RULE_CHECK_LABELS[check.reason]}
                   </span>
-                  <span className={`text-[11px] font-bold ${failed ? 'text-danger-dark' : 'text-ok'}`}>
+                  <span className={`text-[13px] lg:text-[12px] font-bold ${failed ? 'text-danger-dark' : 'text-ok'}`}>
                     {failed ? 'مرفوض' : 'مقبول'}
                   </span>
                 </div>
-                <p className={`mt-0.5 text-[11.5px] ${failed ? 'text-danger-dark' : 'text-ink-soft'}`}>
+                <p className={`mt-0.5 text-[13px] lg:text-[12px] ${failed ? 'text-danger-dark' : 'text-ink-soft'}`}>
                   {describeRuleCheck(check)}
                 </p>
                 {failed && rejection?.reason === check.reason && (
-                  <p className="mt-1 text-[12px] font-semibold text-danger-dark">
+                  <p className="mt-1 text-[13px] lg:text-[12px] font-semibold text-danger-dark">
                     {RULE_VIOLATION_MESSAGES[check.reason]}
                   </p>
                 )}
@@ -177,10 +177,10 @@ function ExceptionFormFields({
   idSuffix?: string;
   submitError?: string | null;
 }) {
-  const fieldLabelClass = 'mb-1 block text-[11px] font-bold text-ink-soft';
-  const fieldErrorClass = 'mt-1 text-[12px] text-danger';
+  const fieldLabelClass = 'mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft';
+  const fieldErrorClass = 'mt-1 text-[13px] lg:text-[12px] text-danger';
   const textInputClass =
-    'h-11 w-full rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+    'h-11 w-full rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
 
   return (
     <form onSubmit={exceptionForm.handleSubmit(onSubmit)} className="space-y-3">
@@ -234,7 +234,7 @@ function ExceptionFormFields({
         </div>
       )}
 
-      {submitError && <p className="text-[13px] text-danger">{submitError}</p>}
+      {submitError && <p className="text-[15px] lg:text-[13px] text-danger">{submitError}</p>}
 
       <div className="flex gap-2 pt-1">
         <PillButton
@@ -275,17 +275,17 @@ function DayListRail({
         <KpiCard label="لترات اليوم" value={data?.totalLiters ?? '—'} />
         <KpiCard label="تعبئات اليوم" value={data?.totalFillUps ?? '—'} />
       </div>
-      {highlightStationName && <p className="mt-2 text-[11px] text-ink-faint">{highlightStationName}</p>}
+      {highlightStationName && <p className="mt-2 text-[13px] lg:text-[12px] text-ink-faint">{highlightStationName}</p>}
 
       <div className="mt-3.5 border-t border-surface-alt pt-3.5">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-bold text-ink-soft">تعبئات محطتك اليوم</span>
-          <a href="/reports/daily" className="text-[11px] font-bold text-accent-dark hover:underline">
+          <span className="text-[13px] lg:text-[12px] font-bold text-ink-soft">تعبئات محطتك اليوم</span>
+          <a href="/reports/daily" className="text-[13px] lg:text-[12px] font-bold text-accent-ink hover:underline">
             التقرير الكامل
           </a>
         </div>
 
-        {isLoading && <p className="text-[12px] text-ink-soft">...جارٍ التحميل</p>}
+        {isLoading && <p className="text-[13px] lg:text-[12px] text-ink-soft">...جارٍ التحميل</p>}
 
         {data && (
           <ul className="space-y-2">
@@ -293,14 +293,14 @@ function DayListRail({
               <li
                 key={row.id}
                 data-testid={i === 0 ? 'day-list-newest-row' : undefined}
-                className={`rounded-sm p-2.5 text-[11.5px] ${i === 0 ? 'bg-ok-100' : 'bg-surface-alt'}`}
+                className={`rounded-sm p-2.5 text-[13px] lg:text-[12px] ${i === 0 ? 'bg-ok-100' : 'bg-surface-alt'}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-ink">
                     <FillUpPlate vehicle={row.vehicle} typedPlate={row.typedPlate} />
                   </span>
                   {i === 0 ? (
-                    <span className="text-[10.5px] font-bold text-ok">الآن</span>
+                    <span className="text-[13px] lg:text-[12px] font-bold text-ok">الآن</span>
                   ) : (
                     <CodeText>{new Date(row.occurredAt).toLocaleTimeString('en-GB')}</CodeText>
                   )}
@@ -313,7 +313,7 @@ function DayListRail({
                 </div>
               </li>
             ))}
-            {data.rows.length === 0 && <li className="text-[12px] text-ink-soft">لا توجد تعبئات بعد اليوم</li>}
+            {data.rows.length === 0 && <li className="text-[13px] lg:text-[12px] text-ink-soft">لا توجد تعبئات بعد اليوم</li>}
           </ul>
         )}
       </div>
@@ -435,7 +435,7 @@ type MobileStep = 'plate' | 'match' | 'fuel' | 'review' | 'exception';
 
 const MOBILE_STEP_TITLES: Record<MobileStep, string> = {
   plate: 'رقم اللوحة',
-  match: 'مطابقة فورية',
+  match: 'تأكيد المركبة',
   fuel: 'الوقود والكمية',
   review: 'المراجعة وفحص القواعد',
   exception: 'تسجيل استثناء',
@@ -1067,10 +1067,10 @@ export function RecordFillUpPage() {
     }
   }
 
-  const fieldLabelClass = 'mb-1 block text-[11px] font-bold text-ink-soft';
-  const fieldErrorClass = 'mt-1 text-[12px] text-danger';
+  const fieldLabelClass = 'mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft';
+  const fieldErrorClass = 'mt-1 text-[13px] lg:text-[12px] text-danger';
   const textInputClass =
-    'h-11 w-full rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+    'h-11 w-full rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
 
   // Artboard 4d: a dedicated confirmation screen (checkmark, headline,
   // immutability note, transaction-summary card, "تعبئة جديدة"/"عرض
@@ -1130,7 +1130,7 @@ export function RecordFillUpPage() {
                 : 'سُجِّل كاستثناء — بانتظار اعتماد المشرف'
               : 'تم تسجيل التعبئة'}
           </h1>
-          <p className="mt-2.5 text-[13px] leading-[1.8] text-ink-soft">
+          <p className="mt-2.5 text-[15px] lg:text-[13px] leading-[1.8] text-ink-soft">
             {success.isException ? (
               success.isApproved ? (
                 'اعتُمدت هذه التعبئة تلقائيًا عند تسجيلها — لا يمكن تعديلها أو حذفها بعد الآن.'
@@ -1146,53 +1146,69 @@ export function RecordFillUpPage() {
           </p>
 
           <Card className="mt-6 w-full p-[18px] text-start sm:mt-0">
+            <div className="border-b border-surface-alt pb-4 text-center">
+              <PlateFigure plate={success.vehicleLabel} />
+              <p className="mt-3 text-[28px] font-extrabold text-ink lg:text-[20px]">
+                {fuelTypeLabel(success.fuelType)} · <LtrText>{success.quantityLiters}</LtrText> لتر
+              </p>
+            </div>
             <div className="flex justify-between border-b border-surface-alt py-2.5">
-              <span className="text-[12.5px] text-ink-soft">المركبة</span>
-              <span className="text-[12.5px] font-bold text-ink">
+              <span className="text-[13px] lg:text-[12.5px] text-ink-soft">المركبة</span>
+              <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">
                 <LtrText>{success.vehicleLabel}</LtrText>
               </span>
             </div>
             <div className="flex justify-between border-b border-surface-alt py-2.5">
-              <span className="text-[12.5px] text-ink-soft">المالك</span>
-              <span className="text-[12.5px] font-bold text-ink">{success.ownerLabel}</span>
+              <span className="text-[13px] lg:text-[12.5px] text-ink-soft">المالك</span>
+              <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">{success.ownerLabel}</span>
             </div>
             <div className="flex justify-between border-b border-surface-alt py-2.5">
-              <span className="text-[12.5px] text-ink-soft">الوقود والكمية</span>
-              <span className="text-[12.5px] font-bold text-ink">
+              <span className="text-[13px] lg:text-[12.5px] text-ink-soft">الوقود والكمية</span>
+              <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">
                 {fuelTypeLabel(success.fuelType)} · <LtrText>{success.quantityLiters}</LtrText> لتر
               </span>
             </div>
             <div className="flex justify-between py-2.5">
-              <span className="text-[12.5px] text-ink-soft">الوقت</span>
-              <span className="text-[12.5px] font-bold text-ink">
-                <LtrText>{new Date(success.occurredAt).toLocaleString('ar')}</LtrText>
+              <span className="text-[13px] lg:text-[12.5px] text-ink-soft">الوقت</span>
+              <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">
+                <LtrText>
+                  {new Date(success.occurredAt).toLocaleString('en-GB', {
+                    timeZone: 'Africa/Tripoli',
+                    hour12: false,
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </LtrText>
               </span>
             </div>
           </Card>
 
           {success.unregistered && (
-            <p className="mt-4 w-full rounded-sm bg-accent-100 p-3 text-[12.5px] font-bold text-accent-dark" data-testid="fillup-success-unregistered">
+            <p className="mt-4 w-full rounded-sm bg-accent-100 p-3 text-[13px] lg:text-[12.5px] font-bold text-accent-ink" data-testid="fillup-success-unregistered">
               سُجِّلت على لوحة غير مسجلة. ستُربط بالمركبة تلقائيًا عند تسجيلها.
             </p>
           )}
           {success.isOverride && (
-            <p className="mt-4 w-full rounded-sm bg-danger-100 p-3 text-[12.5px] font-bold text-danger" data-testid="fillup-success-override">
+            <p className="mt-4 w-full rounded-sm bg-danger-100 p-3 text-[13px] lg:text-[12.5px] font-bold text-danger" data-testid="fillup-success-override">
               سُجِّلت بتفويض طارئ وستظهر كاستثناء في التقارير.
             </p>
           )}
           {success.awareness && <AwarenessBlock awareness={success.awareness} />}
           <PrintRegistrationSheetButton stationId={success.stationId} className="mt-3" />
 
-          <div className="mt-6 flex w-full flex-col gap-2.5">
-            <PillButton onClick={resetAll} className="h-[52px] w-full text-[15px]">
+          <ThumbBar>
+            <PillButton onClick={resetAll} className="h-14 w-full text-[18px] lg:h-[52px] lg:text-[15px]">
               تعبئة جديدة
             </PillButton>
             {canViewReports && (
-              <PillButton variant="ghost" onClick={() => navigate('/reports/daily')} className="h-11 w-full text-[13px]">
+              <PillButton variant="ghost" onClick={() => navigate('/reports/daily')} className="mt-1 h-11 w-full text-[15px] lg:text-[13px]">
                 عرض تعبئات اليوم
               </PillButton>
             )}
-          </div>
+          </ThumbBar>
         </div>
       </div>
     );
@@ -1228,7 +1244,7 @@ export function RecordFillUpPage() {
               type="button"
               data-testid="fillup-mobile-back"
               onClick={mobileBack}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-alt text-ink-soft"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-alt text-ink-soft"
               aria-label="رجوع"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1236,7 +1252,7 @@ export function RecordFillUpPage() {
               </svg>
             </button>
           )}
-          <h1 className="text-[15px] font-extrabold text-ink">{MOBILE_STEP_TITLES[mobileStep]}</h1>
+          <h1 className="text-[24px] font-extrabold text-ink lg:text-[20px]">{MOBILE_STEP_TITLES[mobileStep]}</h1>
         </div>
         <div className="mb-4 flex gap-1.5">
           {[1, 2, 3].map((segment) => (
@@ -1266,7 +1282,7 @@ export function RecordFillUpPage() {
             )}
             {plateEntryMode === 'scan' ? (
               canViewAllStations && !fillUpForm.watch('stationId') ? (
-                <p className="text-center text-[12.5px] text-ink-soft">اختر المحطة أولًا، ثم امسح بطاقة المركبة.</p>
+                <p className="text-center text-[13px] lg:text-[12.5px] text-ink-soft">اختر المحطة أولًا، ثم امسح بطاقة المركبة.</p>
               ) : (
                 <QrScanPanel
                   variant="inline"
@@ -1284,7 +1300,7 @@ export function RecordFillUpPage() {
               )
             ) : !showManualSearchMobile ? (
               <>
-                <p className="mb-3 text-center text-[12px] text-ink-soft">اقرأ رقم اللوحة واكتبه</p>
+                <p className="mb-3 text-center text-[13px] lg:text-[12px] text-ink-soft">اقرأ رقم اللوحة واكتبه</p>
                 <DigitBoxInput
                   groups={PLATE_DIGIT_GROUPS}
                   separator="-"
@@ -1318,7 +1334,7 @@ export function RecordFillUpPage() {
                     comment for why that used to make results vanish
                     mid-typing). */}
                 {plateSearchWorthwhile && plateLookupQuery.isFetching && !matchedVehicle && (
-                  <p className="mt-3 text-center text-[12px] text-ink-soft">...جارٍ البحث</p>
+                  <p className="mt-3 text-center text-[13px] lg:text-[12px] text-ink-soft">...جارٍ البحث</p>
                 )}
                 {plateLiveCandidates.length > 0 && (
                   <div className="mt-3 overflow-hidden rounded-sm border border-line" data-testid="fillup-mobile-plate-live-results">
@@ -1348,7 +1364,7 @@ export function RecordFillUpPage() {
                               setSelectedVehicleLabel(formatLicensePlate(vehicle.currentPlate));
                               setMobileStep('match');
                             }}
-                            className="flex w-full items-center gap-2.5 bg-surface-alt px-3 py-2.5 text-start text-[13px] font-bold text-ink hover:bg-surface"
+                            className="flex w-full items-center gap-2.5 bg-surface-alt px-3 py-2.5 text-start text-[15px] lg:text-[13px] font-bold text-ink hover:bg-surface"
                           >
                             {/* Round 18: "helps the person make sure it's
                                 the same vehicle they're looking for" — the
@@ -1358,7 +1374,7 @@ export function RecordFillUpPage() {
                             <VehicleBrandLogo model={vehicle.model} size={28} />
                             <span className="min-w-0">
                               <LtrText>{formatLicensePlate(vehicle.currentPlate)}</LtrText>
-                              <span className="ms-1.5 text-[11px] font-normal text-ink-faint">{vehicle.internalCode}</span>
+                              <span className="ms-1.5 text-[13px] lg:text-[12px] font-normal text-ink-faint">{vehicle.internalCode}</span>
                             </span>
                           </button>
                         </li>
@@ -1405,7 +1421,7 @@ export function RecordFillUpPage() {
                   </PillButton>
                 )}
                 {cameraUnavailableHint && (
-                  <p className="mt-1.5 text-center text-[11px] font-bold text-accent-dark">
+                  <p className="mt-1.5 text-center text-[13px] lg:text-[12px] font-bold text-accent-ink">
                     يمكنك تجربة المسح مرة أخرى بعد السماح بإذن الكاميرا من إعدادات الجهاز.
                   </p>
                 )}
@@ -1416,7 +1432,7 @@ export function RecordFillUpPage() {
                   type="button"
                   data-testid="fillup-mobile-manual-search-toggle"
                   onClick={() => setShowManualSearchMobile(true)}
-                  className="mt-4 block w-full text-center text-[11.5px] font-bold text-accent-dark"
+                  className="mt-4 block w-full text-center text-[13px] lg:text-[12px] font-bold text-accent-ink"
                 >
                   أو ابحث برقم الكتيب أو الشاسيه
                 </button>
@@ -1434,7 +1450,7 @@ export function RecordFillUpPage() {
                 <button
                   type="button"
                   onClick={() => setShowManualSearchMobile(false)}
-                  className="mt-3 block w-full text-center text-[11.5px] font-bold text-ink-soft"
+                  className="mt-3 block w-full text-center text-[13px] lg:text-[12px] font-bold text-ink-soft"
                 >
                   الرجوع لإدخال رقم اللوحة
                 </button>
@@ -1464,14 +1480,14 @@ export function RecordFillUpPage() {
 
         {mobileStep === 'match' && !vehicleSelected && unregisteredPlate && (
           <Card className="p-5 text-center" data-testid="fillup-unregistered-confirm">
-            <p className="text-[12px] font-bold text-ink-soft">هل هذه هي اللوحة التي أمامك؟</p>
+            <p className="text-[13px] lg:text-[12px] font-bold text-ink-soft">هل هذه هي اللوحة التي أمامك؟</p>
             <p className="mt-3 text-[44px] font-black leading-none text-ink" data-testid="fillup-unregistered-plate">
               <LtrText>{formatLicensePlate(unregisteredPlate)}</LtrText>
             </p>
-            <p className="mt-3 inline-block rounded-sm bg-accent-100 px-3 py-1 text-[13px] font-bold text-accent-dark">
+            <p className="mt-3 inline-block rounded-sm bg-accent-100 px-3 py-1 text-[15px] lg:text-[13px] font-bold text-accent-ink">
               مركبة غير مسجلة
             </p>
-            <p className="mt-2 text-[12px] leading-[1.8] text-ink-soft">
+            <p className="mt-2 text-[13px] lg:text-[12px] leading-[1.8] text-ink-soft">
               تُسجَّل التعبئة على اللوحة كما كُتبت، وتُحتسب الفواصل والحدود الأسبوعية على هذه اللوحة في هذه البلدية. لا
               يوجد مالك لتطبيق قواعد المالك.
             </p>
@@ -1487,9 +1503,14 @@ export function RecordFillUpPage() {
               />
             )}
             {overrideOn && <OverrideNotice onCancel={() => setOverrideOn(false)} />}
+          </Card>
+        )}
+
+        {mobileStep === 'match' && !vehicleSelected && unregisteredPlate && (
+          <ThumbBar>
             <PillButton
               data-testid="fillup-unregistered-confirm-yes"
-              className="mt-5 h-14 w-full text-[16px]"
+              className="h-14 w-full text-[18px] lg:text-[16px]"
               disabled={!!activeCardRequired && !overrideOn}
               onClick={() => setMobileStep('fuel')}
             >
@@ -1504,50 +1525,57 @@ export function RecordFillUpPage() {
                 setPlateValue('');
                 setMobileStep('plate');
               }}
-              className="mt-3 block w-full text-center text-[12px] font-bold text-ink-soft"
+              className="mt-1 block h-11 w-full text-center text-[16px] font-bold text-ink-soft lg:text-[13px]"
             >
               تصحيح الرقم
             </button>
-          </Card>
+          </ThumbBar>
         )}
 
         {mobileStep === 'match' && vehicleSelected && scannedCard?.vehicle.id !== vehicleSelected && (
-          <Card className="p-4">
-            <VehiclePreviewCard vehicleId={vehicleSelected} idSuffix="-mobile" />
-            {activeCardRequired && !overrideOn && (
-              <CardRequiredPanel
-                info={activeCardRequired}
-                canOverride={canOverride}
-                onOverride={(reason) => {
-                  setOverrideReason(reason);
-                  setOverrideOn(true);
+          <>
+            <Card className="p-4">
+              {selectedVehicleLabel && <PlateFigure plate={selectedVehicleLabel} caption="هذه هي اللوحة؟" />}
+              <div className={selectedVehicleLabel ? 'mt-4' : ''}>
+                <VehiclePreviewCard vehicleId={vehicleSelected} idSuffix="-mobile" />
+              </div>
+              {activeCardRequired && !overrideOn && (
+                <CardRequiredPanel
+                  info={activeCardRequired}
+                  canOverride={canOverride}
+                  onOverride={(reason) => {
+                    setOverrideReason(reason);
+                    setOverrideOn(true);
+                    setCardRequired(null);
+                  }}
+                />
+              )}
+              {overrideOn && <OverrideNotice onCancel={() => setOverrideOn(false)} />}
+            </Card>
+            <ThumbBar>
+              <PillButton
+                data-testid="fillup-mobile-continue-to-fuel"
+                className="h-14 w-full text-[18px] lg:h-12 lg:text-[14px]"
+                disabled={!!activeCardRequired && !overrideOn}
+                onClick={() => setMobileStep('fuel')}
+              >
+                نعم، متابعة إلى الوقود
+              </PillButton>
+              <button
+                type="button"
+                onClick={() => {
+                  fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
                   setCardRequired(null);
+                  setOverrideOn(false);
+                  setPlateValue('');
+                  setMobileStep('plate');
                 }}
-              />
-            )}
-            {overrideOn && <OverrideNotice onCancel={() => setOverrideOn(false)} />}
-            <PillButton
-              data-testid="fillup-mobile-continue-to-fuel"
-              className="mt-4 h-12 w-full text-[14px]"
-              disabled={!!activeCardRequired && !overrideOn}
-              onClick={() => setMobileStep('fuel')}
-            >
-              متابعة إلى الوقود
-            </PillButton>
-            <button
-              type="button"
-              onClick={() => {
-                fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
-                setCardRequired(null);
-                setOverrideOn(false);
-                setPlateValue('');
-                setMobileStep('plate');
-              }}
-              className="mt-2 block w-full text-center text-[11.5px] font-bold text-ink-soft"
-            >
-              تصحيح الرقم
-            </button>
-          </Card>
+                className="mt-1 block h-11 w-full text-center text-[16px] font-bold text-ink-soft lg:h-9 lg:text-[13px]"
+              >
+                تصحيح الرقم
+              </button>
+            </ThumbBar>
+          </>
         )}
 
         {mobileStep === 'fuel' && (
@@ -1564,9 +1592,9 @@ export function RecordFillUpPage() {
                       fillUpForm.setValue('fuelType', ft.value, { shouldValidate: true });
                       applyAmount(amountLyd, ft.value);
                     }}
-                    className={`h-11 flex-1 rounded-sm text-[13px] font-bold transition ${
+                    className={`h-11 flex-1 rounded-sm text-[15px] lg:text-[13px] font-bold transition ${
                       selected
-                        ? 'bg-accent text-white shadow-[0_6px_16px_-6px_rgba(232,165,61,.6)]'
+                        ? 'bg-accent text-ink shadow-[0_6px_16px_-6px_rgba(232,165,61,.6)]'
                         : 'bg-surface-alt text-ink-soft'
                     }`}
                   >
@@ -1595,18 +1623,19 @@ export function RecordFillUpPage() {
               const price = fuelPrices?.[fuelType];
               return (
                 <>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
                     <input
                       type="number"
                       step="0.01"
                       data-testid="fillup-amount-input-mobile"
+                      data-figure="large"
                       value={amountLyd}
                       onChange={(e) => applyAmount(e.target.value, fuelType)}
                       dir="ltr"
                       disabled={!price}
-                      className="w-28 rounded-sm bg-transparent font-mono text-[30px] font-extrabold text-primary-dark focus:outline-none disabled:opacity-50"
+                      className="w-full rounded-sm bg-transparent text-center font-mono text-[48px] font-extrabold leading-tight text-primary-dark focus:outline-none disabled:opacity-50 lg:w-28 lg:text-start lg:text-[30px]"
                     />
-                    <div className="flex flex-1 justify-end gap-1.5">
+                    <div className="flex flex-1 justify-center gap-2 lg:justify-end lg:gap-1.5">
                       {AMOUNT_QUICK_PICKS.map((amount) => {
                         const selected = amountLyd === amount;
                         return (
@@ -1614,7 +1643,7 @@ export function RecordFillUpPage() {
                             key={amount}
                             type="button"
                             onClick={() => applyAmount(amount, fuelType)}
-                            className={`h-10 w-12 rounded-sm font-mono text-[13px] font-bold ${
+                            className={`h-12 w-14 rounded-sm font-mono text-[18px] font-bold lg:h-10 lg:w-12 lg:text-[12px] ${
                               selected ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
                             }`}
                           >
@@ -1624,7 +1653,7 @@ export function RecordFillUpPage() {
                       })}
                     </div>
                   </div>
-                  {!price && <p className="mt-1.5 text-[11px] text-ink-faint">...جارٍ تحميل سعر الوقود</p>}
+                  {!price && <p className="mt-1.5 text-[13px] lg:text-[12px] text-ink-faint">...جارٍ تحميل سعر الوقود</p>}
                 </>
               );
             })()}
@@ -1635,24 +1664,29 @@ export function RecordFillUpPage() {
               const quantity = fillUpForm.watch('quantityLiters');
               if (!quantity) return null;
               return (
-                <div className="mt-3 flex items-center justify-between rounded-sm bg-surface-alt px-3 py-2.5">
-                  <span className="text-[11px] font-bold text-ink-soft">الكمية المقدَّرة</span>
-                  <span className="text-[14px] font-extrabold text-ink" data-testid="fillup-estimated-liters-mobile">
+                <div className="mt-3 flex items-center justify-between rounded-sm bg-surface-alt px-3 py-3">
+                  <span className="text-[16px] font-bold text-ink-soft lg:text-[13px]">الكمية المقدَّرة</span>
+                  <span className="text-[26px] font-extrabold text-ink lg:text-[16px]" data-testid="fillup-estimated-liters-mobile">
                     <LtrText>{quantity}</LtrText> لتر
                   </span>
                 </div>
               );
             })()}
 
+          </Card>
+        )}
+
+        {mobileStep === 'fuel' && (
+          <ThumbBar>
             <PillButton
               data-testid="fillup-mobile-continue-to-review"
-              className="mt-4 h-12 w-full text-[14px]"
+              className="h-14 w-full text-[18px] lg:h-12 lg:text-[14px]"
               disabled={!fillUpForm.watch('quantityLiters') || !!fillUpForm.formState.errors.quantityLiters}
               onClick={() => setMobileStep('review')}
             >
               متابعة إلى المراجعة
             </PillButton>
-          </Card>
+          </ThumbBar>
         )}
 
         {mobileStep === 'review' && (
@@ -1662,6 +1696,19 @@ export function RecordFillUpPage() {
                 data-testid="rule-review-card-mobile"
                 className={`p-3.5 ${effectiveRejection ? 'border-t-4 border-danger' : ''}`}
               >
+                <div className="mb-3 border-b border-surface-alt pb-3" data-testid="fillup-review-summary">
+                  {(selectedVehicleLabel || unregisteredPlate) && (
+                    <PlateFigure plate={selectedVehicleLabel || formatLicensePlate(unregisteredPlate ?? '')} />
+                  )}
+                  <p className="mt-2 text-center text-[24px] font-extrabold text-ink lg:text-[18px]">
+                    {fuelTypeLabel(fillUpForm.watch('fuelType'))} · <LtrText>{fillUpForm.watch('quantityLiters')}</LtrText> لتر
+                  </p>
+                  {amountLyd && (
+                    <p className="text-center text-[18px] font-bold text-ink-soft lg:text-[14px]">
+                      <LtrText>{amountLyd}</LtrText> د.ل
+                    </p>
+                  )}
+                </div>
                 <RuleReviewChecks
                   checks={rulePreviewQuery.data?.checks}
                   isLoading={rulePreviewQuery.isLoading}
@@ -1671,7 +1718,7 @@ export function RecordFillUpPage() {
                   idSuffix="-mobile"
                 />
                 {rulePreviewQuery.data && rulePreviewQuery.data.skippedRules.length > 0 && (
-                  <p className="mt-3 rounded-sm bg-accent-100 p-3 text-[14px] leading-[1.7] text-accent-dark" data-testid="fillup-skipped-rules">
+                  <p className="mt-3 rounded-sm bg-accent-100 p-3 text-[16px] lg:text-[14px] leading-[1.7] text-accent-ink" data-testid="fillup-skipped-rules">
                     {rulePreviewQuery.data.skippedReason === 'INSTITUTION_OWNER'
                       ? 'مركبة تابعة لجهة أو مؤسسة — تُطبَّق عليها قواعد المركبة وحدها، ولا تُجمع مع مركبات الجهة الأخرى'
                       : 'مركبة غير مسجلة — لا يوجد مالك، فلا تُطبَّق قواعد المالك'}{' '}
@@ -1679,29 +1726,31 @@ export function RecordFillUpPage() {
                   </p>
                 )}
                 {fuelMismatch && vehicleFuelType && (
-                  <p role="alert" className="mt-3 rounded-sm bg-accent-100 p-3 text-[14px] font-bold leading-[1.7] text-ink" data-testid="fillup-fuel-mismatch-review">
+                  <p role="alert" className="mt-3 rounded-sm bg-accent-100 p-3 text-[16px] lg:text-[14px] font-bold leading-[1.7] text-ink" data-testid="fillup-fuel-mismatch-review">
                     تنبيه: المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[vehicleFuelType]} والوقود المختار مختلف. سيُسجَّل التنبيه للمشرف.
                   </p>
                 )}
                 {rulePreviewQuery.data && (rulePreviewQuery.data.disabledRules?.length ?? 0) > 0 && (
-                  <p className="mt-3 text-[13px] leading-[1.7] text-ink-soft" data-testid="fillup-disabled-rules">
+                  <p className="mt-3 text-[15px] lg:text-[13px] leading-[1.7] text-ink-soft" data-testid="fillup-disabled-rules">
                     قواعد غير مفعّلة حاليًا ولا تُطبَّق: {rulePreviewQuery.data.disabledRules!.map((r) => RULE_CHECK_LABELS[r]).join('، ')}.
                   </p>
                 )}
               </Card>
 
-              {submitError && <p className="text-[13px] text-danger">{submitError}</p>}
+              {submitError && <p className="text-[15px] lg:text-[13px] text-danger">{submitError}</p>}
 
               {!rejection && (
-                <PillButton
-                  type="submit"
-                  data-testid="fillup-submit-mobile"
-                  disabled={fillUpForm.formState.isSubmitting || rulePreviewQuery.isLoading}
-                  size="md"
-                  className="h-14 w-full text-[15px]"
-                >
-                  {fillUpForm.formState.isSubmitting ? '...جارٍ التسجيل' : 'تسجيل التعبئة'}
-                </PillButton>
+                <ThumbBar>
+                  <PillButton
+                    type="submit"
+                    data-testid="fillup-submit-mobile"
+                    disabled={fillUpForm.formState.isSubmitting || rulePreviewQuery.isLoading}
+                    size="md"
+                    className="h-14 w-full text-[18px] lg:text-[15px]"
+                  >
+                    {fillUpForm.formState.isSubmitting ? '...جارٍ التسجيل' : 'تسجيل التعبئة'}
+                  </PillButton>
+                </ThumbBar>
               )}
             </form>
 
@@ -1720,7 +1769,7 @@ export function RecordFillUpPage() {
 
         {mobileStep === 'exception' && (
           <Card className="p-4" data-testid="fillup-rejection-mobile">
-            <p className="mb-3 text-[13px] font-bold text-ink">تسجيل استثناء لهذه التعبئة</p>
+            <p className="mb-3 text-[15px] lg:text-[13px] font-bold text-ink">تسجيل استثناء لهذه التعبئة</p>
             <ExceptionFormFields
               exceptionForm={exceptionForm}
               exceptionTypes={exceptionTypes}
@@ -1732,6 +1781,34 @@ export function RecordFillUpPage() {
           </Card>
         )}
       </div>
+    </div>
+  );
+}
+
+// Phase 5C: the one action of a step sits at the bottom of the phone, just
+// above the navigation bar, where a thumb already is - not in the middle of the
+// screen under the content. On a desktop it is simply the next block. The
+// spacer keeps the last of the content clear of it.
+function ThumbBar({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <div className="h-28 lg:hidden" aria-hidden="true" />
+      <div className="fixed inset-x-0 bottom-[calc(58px+env(safe-area-inset-bottom))] z-20 border-t border-surface-alt bg-paper/95 px-3.5 pb-2.5 pt-2.5 backdrop-blur lg:static lg:z-auto lg:mt-3 lg:border-0 lg:bg-transparent lg:p-0">
+        <div className="mx-auto w-full max-w-xl">{children}</div>
+      </div>
+    </>
+  );
+}
+
+// The plate the person is about to fill for: the biggest thing on the screen,
+// left-to-right, so it can be read from an arm's length in sun.
+function PlateFigure({ plate, caption }: { plate: string; caption?: string }) {
+  return (
+    <div className="text-center" data-testid="fillup-plate-figure">
+      {caption && <p className="text-[16px] font-bold text-ink-soft lg:text-[14px]">{caption}</p>}
+      <p className="mt-1 text-[44px] font-black leading-none text-ink lg:text-[36px]">
+        <LtrText>{plate}</LtrText>
+      </p>
     </div>
   );
 }
@@ -1755,26 +1832,28 @@ function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onC
     .join(' — ');
   return (
     <Card className="p-5 text-center" data-testid="fillup-scan-confirm">
-      <p className="text-[12px] font-bold text-ink-soft">هل هذه هي المركبة التي أمامك؟</p>
+      <p className="text-[13px] lg:text-[12px] font-bold text-ink-soft">هل هذه هي المركبة التي أمامك؟</p>
       <p className="mt-3 text-[44px] font-black leading-none text-ink" data-testid="fillup-scan-confirm-plate">
         <LtrText>{formatLicensePlate(card.vehicle.currentPlate)}</LtrText>
       </p>
       {makeLine && <p className="mt-3 text-[18px] font-bold text-ink">{makeLine}</p>}
-      {card.vehicle.vehicleType && <p className="mt-1 text-[12.5px] text-ink-soft">{card.vehicle.vehicleType.name}</p>}
+      {card.vehicle.vehicleType && <p className="mt-1 text-[13px] lg:text-[12.5px] text-ink-soft">{card.vehicle.vehicleType.name}</p>}
       {card.needsReissue && (
         <div className="mt-4 rounded-sm bg-accent-100 p-3" data-testid="fillup-scan-needs-reissue">
-          <p className="text-[13px] font-bold text-accent-dark">يجب تجديد هذه البطاقة</p>
-          <p className="mt-1 text-[12px] text-ink-soft">
+          <p className="text-[15px] lg:text-[13px] font-bold text-accent-ink">يجب تجديد هذه البطاقة</p>
+          <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">
             تغيّرت بيانات المركبة منذ طباعتها. التعبئة مسموحة، واطلب من المالك مراجعة مكتب التسجيل لاستلام بطاقة محدَّثة.
           </p>
         </div>
       )}
-      <PillButton data-testid="fillup-scan-confirm-yes" className="mt-5 h-14 w-full text-[16px]" onClick={onConfirm}>
-        نعم، هذه هي المركبة
-      </PillButton>
-      <button type="button" onClick={onReject} className="mt-3 block w-full text-center text-[12px] font-bold text-ink-soft">
-        ليست هذه المركبة — مسح مرة أخرى
-      </button>
+      <ThumbBar>
+        <PillButton data-testid="fillup-scan-confirm-yes" className="h-14 w-full text-[18px] lg:text-[16px]" onClick={onConfirm}>
+          نعم، هذه هي المركبة
+        </PillButton>
+        <button type="button" onClick={onReject} className="mt-1 block h-11 w-full text-center text-[16px] font-bold text-ink-soft lg:text-[13px]">
+          ليست هذه المركبة — مسح مرة أخرى
+        </button>
+      </ThumbBar>
     </Card>
   );
 }
@@ -1789,14 +1868,14 @@ function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onC
 export function NotRegisteredNotice({ onRecord }: { onRecord?: () => void }) {
   return (
     <div className="mt-3 rounded-sm bg-accent-100 p-3 text-center" data-testid="fillup-not-registered">
-      <p className="text-[13px] font-bold text-accent-dark">هذه المركبة غير مسجّلة في المنظومة</p>
-      <p className="mt-1 text-[12px] text-ink-soft">
+      <p className="text-[15px] lg:text-[13px] font-bold text-accent-ink">هذه المركبة غير مسجّلة في المنظومة</p>
+      <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">
         لا يمكن تسجيل المركبة من محطة الوقود — يتم ذلك في أحد مكاتب التسجيل.
       </p>
       {onRecord && (
         <PillButton
           data-testid="fillup-record-unregistered"
-          className="mt-3 h-11 w-full text-[13px]"
+          className="mt-3 h-11 w-full text-[15px] lg:text-[13px]"
           onClick={onRecord}
         >
           تسجيل التعبئة كمركبة غير مسجلة
@@ -1826,12 +1905,12 @@ function cardRequiredFrom(error: AxiosError<unknown>): CardRequiredInfo | null {
 
 function RegistrationStationList({ stations }: { stations: RegistrationStationInfo[] }) {
   if (stations.length === 0) {
-    return <p className="mt-2 text-[12px] text-ink-soft">لا توجد مكاتب تسجيل فعّالة حاليًا — راجع المشرف.</p>;
+    return <p className="mt-2 text-[13px] lg:text-[12px] text-ink-soft">لا توجد مكاتب تسجيل فعّالة حاليًا — راجع المشرف.</p>;
   }
   return (
     <ul className="mt-2 space-y-2 text-start" data-testid="registration-stations-list">
       {stations.map((st) => (
-        <li key={st.id} className="rounded-sm bg-surface p-2.5 text-[12.5px]">
+        <li key={st.id} className="rounded-sm bg-surface p-2.5 text-[13px] lg:text-[12.5px]">
           <p className="font-bold text-ink">{st.name}</p>
           {st.address && <p className="text-ink-soft">{st.address}</p>}
           {st.workingHours && <p className="text-ink-soft">{st.workingHours}</p>}
@@ -1857,8 +1936,8 @@ function CardRequiredPanel({
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-4 rounded-sm border-t-4 border-danger bg-danger-100 p-3 text-start" data-testid="fillup-card-required">
-      <p className="text-[14px] font-extrabold text-danger">لا يمكن تعبئة هذه المركبة بدون بطاقة فعّالة</p>
-      <p className="mt-1.5 text-[12.5px] leading-[1.8] text-ink">
+      <p className="text-[16px] lg:text-[14px] font-extrabold text-danger">لا يمكن تعبئة هذه المركبة بدون بطاقة فعّالة</p>
+      <p className="mt-1.5 text-[13px] lg:text-[12.5px] leading-[1.8] text-ink">
         يجب على المالك استلام بطاقته من أحد مكاتب التسجيل التالية:
       </p>
       <RegistrationStationList stations={info.registrationStations} />
@@ -1868,14 +1947,14 @@ function CardRequiredPanel({
             <button
               type="button"
               data-testid="fillup-override-open"
-              className="text-[12px] font-bold text-danger underline"
+              className="text-[13px] lg:text-[12px] font-bold text-danger underline"
               onClick={() => setOpen(true)}
             >
               تفويض طارئ (للمشرف فقط)
             </button>
           ) : (
             <div data-testid="fillup-override-form">
-              <p className="text-[11.5px] leading-[1.7] text-ink-soft">
+              <p className="text-[13px] lg:text-[12px] leading-[1.7] text-ink-soft">
                 يتجاوز التفويض شرط البطاقة فقط — تبقى الفواصل والحدود الأسبوعية سارية، وتُسجَّل التعبئة كاستثناء باسمك.
               </p>
               <textarea
@@ -1885,12 +1964,12 @@ function CardRequiredPanel({
                 maxLength={500}
                 placeholder="سبب التفويض (إلزامي)"
                 data-testid="fillup-override-reason"
-                className="mt-2 w-full rounded-sm bg-surface p-2 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                className="mt-2 w-full rounded-sm bg-surface p-2 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <PillButton
                 variant="danger"
                 data-testid="fillup-override-confirm"
-                className="mt-2 h-10 w-full text-[13px] !border-0 !bg-danger !text-white"
+                className="mt-2 h-10 w-full text-[15px] lg:text-[13px] !border-0 !bg-danger !text-white"
                 disabled={reason.trim().length === 0}
                 onClick={() => onOverride(reason.trim())}
               >
@@ -1906,7 +1985,7 @@ function CardRequiredPanel({
 
 function OverrideNotice({ onCancel }: { onCancel: () => void }) {
   return (
-    <div className="mt-4 rounded-sm bg-danger-100 p-2.5 text-[12px] font-bold text-danger" data-testid="fillup-override-active">
+    <div className="mt-4 rounded-sm bg-danger-100 p-2.5 text-[13px] lg:text-[12px] font-bold text-danger" data-testid="fillup-override-active">
       تفويض طارئ فعّال — شرط البطاقة متجاوَز لهذه التعبئة فقط.
       <button type="button" onClick={onCancel} className="ms-2 underline">
         إلغاء
@@ -1923,11 +2002,11 @@ function AwarenessBlock({ awareness }: { awareness: AwarenessNotice }) {
   const date = new Date(`${awareness.cardRequiredFromDate}T00:00:00Z`).toLocaleDateString('ar', { timeZone: 'UTC' });
   return (
     <div className="mt-4 w-full rounded-sm bg-accent-100 p-4 text-start" data-testid="fillup-awareness">
-      <p className="text-[13px] font-bold leading-[1.9] text-accent-dark">
+      <p className="text-[15px] lg:text-[13px] font-bold leading-[1.9] text-accent-ink">
         ابتداءً من {date} لن تتم تعبئة أي مركبة بدون بطاقة. استلم بطاقتك من أحد مكاتب التسجيل التالية:
       </p>
       <RegistrationStationList stations={awareness.registrationStations} />
-      <p className="mt-3 text-[13px] font-extrabold text-ink" data-testid="fillup-awareness-flyer">
+      <p className="mt-3 text-[15px] lg:text-[13px] font-extrabold text-ink" data-testid="fillup-awareness-flyer">
         سلّم السائق نشرة التوعية
       </p>
     </div>

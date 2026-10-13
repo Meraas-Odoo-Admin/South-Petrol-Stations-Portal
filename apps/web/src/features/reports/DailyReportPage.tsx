@@ -26,9 +26,9 @@ function todayIso(): string {
 }
 
 const selectClass =
-  'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+  'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
 const tintedSelectClass =
-  'h-9 rounded-sm bg-accent-100 px-3 text-[12.5px] font-bold text-accent-dark focus:outline-none focus:ring-2 focus:ring-accent';
+  'h-9 rounded-sm bg-accent-100 px-3 text-[13px] lg:text-[12.5px] font-bold text-accent-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
 // Round 4 feedback item 9, matches design/feedback-2026-08-29/
 // 10-design-target-daily-report.png: active (non-default) filters are
@@ -110,16 +110,16 @@ export function DailyReportPage() {
 
       <Card className="mb-4 p-4">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[11px] font-bold text-ink-soft">المرشحات</p>
+          <p className="text-[13px] lg:text-[12px] font-bold text-ink-soft">المرشحات</p>
           {filtersActive && (
-            <button type="button" onClick={resetFilters} className="text-[11px] font-bold text-accent-dark">
+            <button type="button" onClick={resetFilters} className="text-[13px] lg:text-[12px] font-bold text-accent-ink">
               إعادة الضبط
             </button>
           )}
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">المحطة</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المحطة</label>
             {canViewAllStations ? (
               <StationSelect value={stationId} onChange={setStationId} allowAllOption className={`w-56 ${selectClass}`} />
             ) : (
@@ -127,7 +127,7 @@ export function DailyReportPage() {
             )}
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">التاريخ</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">التاريخ</label>
             <DateField
               value={date}
               onChange={setDate}
@@ -135,7 +135,7 @@ export function DailyReportPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">نوع الوقود (اختياري)</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">نوع الوقود (اختياري)</label>
             <select
               value={fuelType}
               onChange={(e) => setFuelType(e.target.value as FuelType | '')}
@@ -150,7 +150,7 @@ export function DailyReportPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink-soft">
+            <label className="mb-1 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">
               المالك (اختياري)
               <InfoHint text="اكتب اسم مالك المركبة أو رقم هويته (وطني أو إداري) لعرض تعبئاته فقط ضمن هذا اليوم." />
             </label>
@@ -163,7 +163,7 @@ export function DailyReportPage() {
                     setOwnerId('');
                     setOwnerLabel('');
                   }}
-                  className="text-accent-dark hover:opacity-70"
+                  className="text-accent-ink hover:opacity-70"
                 >
                   ✕
                 </button>
@@ -182,9 +182,9 @@ export function DailyReportPage() {
         </div>
       </Card>
 
-      {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
       {isError && (
-        <p className="text-[13px] text-danger">
+        <p className="text-[15px] lg:text-[13px] text-danger">
           تعذر تحميل التقرير — تأكد من اختيار محطة إن لم تملك صلاحية عرض جميع المحطات.
         </p>
       )}
@@ -192,7 +192,7 @@ export function DailyReportPage() {
       {data && (
         <>
           {isNarrowed && (
-            <p className="mb-3 text-[12px] font-bold text-ink-soft" data-testid="daily-report-count-line">
+            <p className="mb-3 text-[13px] lg:text-[12px] font-bold text-ink-soft" data-testid="daily-report-count-line">
               تعرض {data.totalFillUps} تعبئات من أصل {data.totalBeforeFilters} بعد تطبيق المرشحات
             </p>
           )}
@@ -229,9 +229,9 @@ export function DailyReportPage() {
           <Card>
             <CardHeader title="نتائج التعبئات" />
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-[12.5px]">
+              <table className="w-full min-w-[760px] text-[13px] lg:text-[12.5px]">
                 <thead>
-                  <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                  <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                     <th className="px-[18px] py-2.5 text-start">الوقت</th>
                     <th className="px-[18px] py-2.5 text-start">المحطة</th>
                     <th className="px-[18px] py-2.5 text-start">المركبة</th>
@@ -275,7 +275,7 @@ export function DailyReportPage() {
                   ))}
                   {data.rows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-[13px] text-ink-soft">
+                      <td colSpan={7} className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">
                         لا توجد تعبئات مطابقة
                       </td>
                     </tr>

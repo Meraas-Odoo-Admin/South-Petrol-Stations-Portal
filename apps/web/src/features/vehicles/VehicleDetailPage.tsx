@@ -109,7 +109,7 @@ export function VehicleDetailPage() {
             key={tab.id}
             type="button"
             onClick={() => setMobileTab(tab.id)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-bold ${
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-[13px] lg:text-[12px] font-bold ${
               mobileTab === tab.id ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
             }`}
           >
@@ -142,7 +142,7 @@ export function VehicleDetailPage() {
                 <VehicleBrandLogo model={vehicle.make} size={52} />
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-extrabold text-ink">{[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'طراز غير محدَّد'}</p>
-                  <p className="truncate text-[11.5px] text-ink-faint">{vehicle.vehicleType?.name ?? 'نوع غير محدَّد'}</p>
+                  <p className="truncate text-[13px] lg:text-[12px] text-ink-faint">{vehicle.vehicleType?.name ?? 'نوع غير محدَّد'}</p>
                 </div>
               </div>
               {canEditVehicle && !editingCosmetic && (
@@ -197,7 +197,7 @@ export function VehicleDetailPage() {
                         <div className="mt-1">
                           <StatusPill variant="neutral">جهة / مؤسسة</StatusPill>
                           {vehicle.owner.responsibleDriverName && (
-                            <p className="mt-1 text-[11px] text-ink-soft">السائق المسؤول: {vehicle.owner.responsibleDriverName}</p>
+                            <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">السائق المسؤول: {vehicle.owner.responsibleDriverName}</p>
                           )}
                         </div>
                       )}
@@ -205,7 +205,7 @@ export function VehicleDetailPage() {
                         <button
                           type="button"
                           onClick={() => setEditingOwner(true)}
-                          className="mt-1 block text-[11px] font-bold text-accent hover:underline"
+                          className="mt-1 block text-[13px] lg:text-[12px] font-bold text-accent hover:underline"
                         >
                           تعديل
                         </button>
@@ -219,7 +219,7 @@ export function VehicleDetailPage() {
                 value={
                   vehicle.owner ? (
                     <>
-                      <p className="mb-1 text-[10.5px] text-ink-faint">{identityTypeLabel(vehicle.owner.identityType)}</p>
+                      <p className="mb-1 text-[13px] lg:text-[12px] text-ink-faint">{identityTypeLabel(vehicle.owner.identityType)}</p>
                       <span data-testid="vehicle-owner-identity-number">
                         <OwnerIdentityReveal
                           ownerId={vehicle.owner.id}
@@ -250,12 +250,12 @@ export function VehicleDetailPage() {
             className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'} p-4`}
             style={{ animationDelay: '100ms' }}
           >
-            <p className="mb-2 text-[12.5px] font-bold text-ink">استهلاك هذا الأسبوع</p>
+            <p className="mb-2 text-[13px] lg:text-[12.5px] font-bold text-ink">استهلاك هذا الأسبوع</p>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[22px] font-black text-ink" data-testid="vehicle-weekly-usage">
                 {weeklyUsageQuery.data.used}
               </span>
-              <span className="text-[12px] text-ink-soft">من {weeklyUsageQuery.data.max} تعبئات مسموح بها</span>
+              <span className="text-[13px] lg:text-[12px] text-ink-soft">من {weeklyUsageQuery.data.max} تعبئات مسموح بها</span>
             </div>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-alt">
               <div
@@ -350,12 +350,12 @@ export function VehicleDetailPage() {
 
         <Card className={mobileTab === 'plates' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل اللوحات" />
-          {vehicle.plateHistory.length === 0 && <p className="p-4 text-[13px] text-ink-soft">لا يوجد سجل.</p>}
+          {vehicle.plateHistory.length === 0 && <p className="p-4 text-[15px] lg:text-[13px] text-ink-soft">لا يوجد سجل.</p>}
           {vehicle.plateHistory.length > 0 && (
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-[12.5px]">
+            <table className="w-full min-w-[560px] text-[13px] lg:text-[12.5px]">
               <thead>
-                <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">رقم اللوحة</th>
                   <th className="px-[18px] py-2.5 text-start">سارية من</th>
                   <th className="px-[18px] py-2.5 text-start">سارية حتى</th>
@@ -396,14 +396,14 @@ export function VehicleDetailPage() {
 
         <Card className={mobileTab === 'history' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل التعبئات" />
-          {historyQuery.isLoading && <p className="p-4 text-[13px] text-ink-soft">...جارٍ التحميل</p>}
-          {historyQuery.isError && <p className="p-4 text-[13px] text-danger">تعذر تحميل السجل.</p>}
+          {historyQuery.isLoading && <p className="p-4 text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+          {historyQuery.isError && <p className="p-4 text-[15px] lg:text-[13px] text-danger">تعذر تحميل السجل.</p>}
           {historyQuery.data && (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-[12.5px]">
+                <table className="w-full min-w-[720px] text-[13px] lg:text-[12.5px]">
                 <thead>
-                  <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                  <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                     <th className="px-[18px] py-2.5 text-start">التاريخ</th>
                     <th className="px-[18px] py-2.5 text-start">المحطة</th>
                     <th className="px-[18px] py-2.5 text-start">المالك</th>
@@ -442,7 +442,7 @@ export function VehicleDetailPage() {
                   ))}
                   {historyQuery.data.rows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-4 text-center text-[13px] text-ink-soft">
+                      <td colSpan={7} className="p-4 text-center text-[15px] lg:text-[13px] text-ink-soft">
                         لا يوجد سجل
                       </td>
                     </tr>
@@ -464,8 +464,8 @@ export function VehicleDetailPage() {
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] text-ink-faint">{label}</p>
-      <p className="mt-0.5 text-[13px] font-bold text-ink">{value}</p>
+      <p className="text-[13px] lg:text-[12px] text-ink-faint">{label}</p>
+      <p className="mt-0.5 text-[15px] lg:text-[13px] font-bold text-ink">{value}</p>
     </div>
   );
 }

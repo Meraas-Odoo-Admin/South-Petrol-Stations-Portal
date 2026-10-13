@@ -16,8 +16,8 @@ This document is the background every phase prompt refers to. Sections 1–14 ar
 | 4c | Registration-station monitoring reports, card-stock reconciliation, deadline-readiness report | Built and merged to main (`f334707`); decisions logged in `OPEN_ITEMS.md` #58 |
 | 5A | Municipalities as the core, the final user structure (each level creates the one below), archive instead of delete, fill-up rule switches, owner national-ID checks and institutions, vehicle fields, field-validation audit | Built on `feat/p5a-structure`, awaiting review; decisions logged in `OPEN_ITEMS.md` #59 |
 | 5B | Fuel storage per station and fuel type (deliveries, computed level, low-stock alert, reset), the notification bell, reports per role, the three 4c pages folded into the station and office pages, clearer person settings | Built on `feat/p5b-operations`, awaiting review; decisions logged in `OPEN_ITEMS.md` #60 |
-| 4d | Older screens brought to the DESIGN.md text sizes, ink text on amber buttons, the real-iPhone re-test of the 4b fixes | Next |
-| 5C | Go-live clean-up: remove non-Sabha data, clear test data, make the municipality columns required in the database | Waits on the client's list of which place names belong to Sabha |
+| 4d | Older screens brought to the DESIGN.md text sizes, ink text on amber buttons, the pump flow audit | Built inside Phase 5C (`feat/p5c-golive`); the real-iPhone check is hardware-only and is listed in `OPEN_ITEMS.md` #61 |
+| 5C | Sabha's 29 real stations imported from the client's list, non-Sabha data removed, go-live clean-up (`golive:clean`), the first super admin and the go-live order in `infra/DEPLOYMENT.md`, municipality columns required in the database, final polish and test stability | Built on `feat/p5c-golive`, awaiting review; decisions logged in `OPEN_ITEMS.md` #61. What remains is client and hardware only: the client's answers to the import's check notes and the «مملوكة» question, the real-iPhone check, kiosk printing and card scanning on real hardware |
 
 ---
 

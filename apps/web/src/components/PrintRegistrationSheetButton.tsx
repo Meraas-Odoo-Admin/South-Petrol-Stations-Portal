@@ -57,7 +57,7 @@ export function PrintRegistrationSheetButton({
       >
         {busy ? '...جارٍ التحضير' : 'طباعة قائمة مكاتب التسجيل'}
       </PillButton>
-      {error && <span className="ms-2 text-[11px] text-danger">تعذرت الطباعة.</span>}
+      {error && <span className="ms-2 text-[13px] lg:text-[12px] text-danger">تعذرت الطباعة.</span>}
     </span>
   );
 }

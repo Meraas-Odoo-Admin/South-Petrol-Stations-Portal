@@ -8,7 +8,11 @@ export default {
     extend: {
       colors: {
         primary: { DEFAULT: '#0D5C52', dark: '#0A4841', 100: '#E3EFEC' },
-        accent: { DEFAULT: '#E8A53D', dark: '#B97A1A', 100: '#FBEDD4' },
+        // mid: the far end of the amber button gradient (Phase 5C) - Ink text on it
+        // is 5.4:1; on accent-dark it was 4.4:1.
+        // ink: amber-family TEXT on white or on the tint (6.2:1 on the tint); dark stays
+        // for fills and borders, where it is below 4.5:1 as text.
+        accent: { DEFAULT: '#E8A53D', mid: '#C98A22', dark: '#B97A1A', ink: '#7A4F0B', 100: '#FBEDD4' },
         danger: { DEFAULT: '#C1462D', dark: '#8F3120', 100: '#FBE6E0' },
         ok: { DEFAULT: '#1F7A5C', 100: '#E2F2EA' },
         paper: '#F7F5EF',

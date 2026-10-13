@@ -8,7 +8,7 @@ import { InfoHint } from '../InfoHint';
 // for a rate that's actually a problem (2h's exception-rate card).
 const VARIANTS = {
   neutral: { card: 'bg-surface', label: 'text-ink-soft', value: 'text-ink' },
-  accent: { card: 'bg-accent-100', label: 'text-accent-dark', value: 'text-accent-dark' },
+  accent: { card: 'bg-accent-100', label: 'text-accent-ink', value: 'text-accent-ink' },
   danger: { card: 'bg-danger-100', label: 'text-danger-dark', value: 'text-danger-dark' },
 } as const;
 
@@ -26,7 +26,7 @@ export function KpiCard({
   const v = VARIANTS[variant];
   return (
     <div className={`rounded-md p-4 shadow-sm ${v.card}`}>
-      <div className={`flex items-center gap-1.5 text-[11px] font-medium ${v.label}`}>
+      <div className={`flex items-center gap-1.5 text-[13px] lg:text-[12px] font-medium ${v.label}`}>
         {label}
         {hint && <InfoHint text={hint} />}
       </div>

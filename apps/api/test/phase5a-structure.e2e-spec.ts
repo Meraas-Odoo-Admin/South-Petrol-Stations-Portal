@@ -395,8 +395,9 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
       });
       await post('mm1', '/stations', stationBody(m2)).expect(403);
       const none = await post('mm1', '/stations', stationBody());
+      // Phase 5C: the municipality is a required field of the request itself.
       expect(none.status).toBe(400);
-      expect(none.body.message).toBe('MUNICIPALITY_REQUIRED');
+      expect(JSON.stringify(none.body.message)).toContain('municipalityId');
 
       const ok = await post('mm1', '/stations', stationBody(m1));
       expect(ok.status).toBe(201);

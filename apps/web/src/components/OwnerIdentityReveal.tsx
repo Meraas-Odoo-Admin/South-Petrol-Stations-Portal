@@ -90,7 +90,7 @@ export function OwnerIdentityReveal({ ownerId, maskedValue, className }: OwnerId
         <LtrText>{displayValue}</LtrText>
         <EyeIcon open={showReal} size={13} />
       </button>
-      {failed && <span className="mt-0.5 text-[10.5px] text-danger">تعذر إظهار الرقم — حاول مرة أخرى.</span>}
+      {failed && <span className="mt-0.5 text-[13px] lg:text-[12px] text-danger">تعذر إظهار الرقم — حاول مرة أخرى.</span>}
     </span>
   );
 }

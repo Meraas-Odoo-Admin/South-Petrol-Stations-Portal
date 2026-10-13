@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // Round 4 client feedback: new endpoints added to support new frontend
 // behavior (fuel-price-driven cost field, vehicle weekly-usage bar, the
@@ -19,6 +20,8 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 // endpoints (see docs/DESIGN_owner_based_fillups.md) — fill-ups no longer
 // require driver identity, and there is no more drivers:read permission
 // to test a scoping boundary against.
+let r4MunicipalityId: string;
+
 describe('Round 4 features (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -72,8 +75,15 @@ describe('Round 4 features (e2e)', () => {
     }
 
     company = await prisma.company.create({ data: { name: `E2E R4 Company ${runId}` } });
+    r4MunicipalityId = (await createMunicipality(prisma, `E2E R4 Municipality ${runId}`)).id;
     station = await prisma.station.create({
-      data: { internalCode: `E2E-R4-${runId}`, stationNumber: '1', name: 'E2E R4 Station', companyId: company.id },
+      data: {
+        internalCode: `E2E-R4-${runId}`,
+        stationNumber: '1',
+        name: 'E2E R4 Station',
+        companyId: company.id,
+        municipalityId: r4MunicipalityId,
+      },
     });
 
     const vehicle = await prisma.vehicle.create({
@@ -152,7 +162,7 @@ describe('Round 4 features (e2e)', () => {
 
     const noPermUser = await createUser(usernameNoPerm);
     noPermUserId = noPermUser.id;
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const allUserIds = [fillupCreatorUserId, settingsAdminUserId, noPermUserId];
@@ -171,6 +181,7 @@ describe('Round 4 features (e2e)', () => {
     await prisma.vehicleOwner.deleteMany({ where: { id: ownerWithExceptionId } });
     await prisma.station.delete({ where: { id: station.id } });
     await prisma.company.delete({ where: { id: company.id } });
+    await deleteMunicipalities(prisma, [r4MunicipalityId]);
     await prisma.systemSetting.deleteMany({ where: { key: { startsWith: 'e2e_r4_' } } });
     await app.close();
   });

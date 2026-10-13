@@ -238,7 +238,7 @@ describe('Fill-ups (e2e)', () => {
 
     const noPermUser = await createUser(usernameNoPerm);
     noPermUserId = noPermUser.id;
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const allUserIds = [

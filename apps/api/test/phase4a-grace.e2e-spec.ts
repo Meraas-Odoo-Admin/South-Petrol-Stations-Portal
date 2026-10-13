@@ -193,7 +193,7 @@ describe('Phase 4a grace period (e2e)', () => {
     };
     carded = await mkCardedVehicle(1);
     scanned = await mkCardedVehicle(2);
-  }, 60_000);
+  });
 
   afterAll(async () => {
     const userIds = Object.values(users).map((u) => u.id).filter(Boolean);

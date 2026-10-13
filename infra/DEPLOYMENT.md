@@ -34,12 +34,80 @@ so `context: ..` in the compose file matters.
 Database migrations run automatically on API container startup
 (`prisma migrate deploy`, the non-interactive production form — never
 `migrate dev`). The seed script (`prisma/seed.ts`) is **not** run
-automatically; it creates demo/test data (`employee1`/`ChangeMe123!` etc.)
-that has no place in a real deployment. If you want the initial
-lookup-table rows it also creates (companies, real station data,
-permission/role rows), read through `apps/api/prisma/seed.ts` first and
-decide deliberately what to run — don't run it wholesale against a real
-database without reviewing it.
+automatically and must **never** be run against a real database: it creates
+test fixtures and the test accounts (`employee1`/`ChangeMe123!` etc.). A
+production database is started with `bootstrap:prod`, in the order below.
+
+## Go-live, in order (Sabha)
+
+Run the commands from the repo root (or inside the API container, from
+`apps/api`, with the same environment). Each step needs the one before it.
+
+1. **Create the super admin.** One account, from environment variables, with
+   a forced password change at first login. Nothing else is created: no test
+   accounts, no demo data.
+
+   ```bash
+   BOOTSTRAP_ADMIN_USERNAME=<name> BOOTSTRAP_ADMIN_PASSWORD='<temporary password>' \
+     pnpm --filter @fuel-tracking/api bootstrap:prod
+   ```
+
+   This also loads the roles, permissions and settings, and creates the
+   municipality **سبها** (LIVE, no stage dates — the grace stage) with its
+   security authority **مديرية أمن سبها**. It refuses to create a second super
+   admin; later ones are created in the app by the first.
+
+2. **Sign in as the super admin** (choose a new password), open
+   «إدارة البلديات», and check that **سبها** and **مديرية أمن سبها** are there
+   (step 1 created them). Create the municipality's **managers** (مديرو البلدية).
+
+3. **Import Sabha's petrol stations** from the client's CSV (it holds names and
+   phone numbers: keep it outside git, e.g. `data/private/`, which is
+   git-ignored):
+
+   ```bash
+   pnpm --filter @fuel-tracking/api stations:import data/private/sabha-stations.csv --dry-run
+   pnpm --filter @fuel-tracking/api stations:import data/private/sabha-stations.csv
+   ```
+
+   Safe to run twice. Rows with a `check_note` are imported as written and
+   listed at the end; take that list back to the client.
+
+4. **The municipality managers create the registration offices** (the CSV has
+   none), then the **station supervisors** and the **registration office
+   managers**, from «إدارة المحطات».
+
+5. **Supervisors create their station employees** in «محطتي»; office managers
+   create their registration employees in «مكتبي».
+
+6. **Supervisors enter each station's fuel types, tank capacities and opening
+   levels** (the «الوقود والمخزون» tab of «محطتي»).
+
+Nothing in these steps uses a standalone users screen or a «الجهات الأمنية»
+section: both were removed in Phase 5A (their old addresses redirect to the
+places above).
+
+### Defaults at go-live
+
+سبها LIVE with no stage dates; the five rule switches on except owner liters
+(off); «إظهار المخزون للموظفين» on for every station; low fuel threshold
+1,000 L (`stock.low_threshold_liters`). The super admin changes them in the
+app; a re-run of `bootstrap:prod` never overwrites a value that was changed.
+
+### If the database held test data first (a staging copy, a rehearsal)
+
+```bash
+pnpm --filter @fuel-tracking/api stations:clean-non-sabha data/private/sabha-stations.csv   # lists what it would delete
+pnpm --filter @fuel-tracking/api golive:clean                                                # dry run: counts per table
+ALLOW_TEST_DATA_REMOVAL=yes pnpm --filter @fuel-tracking/api golive:clean --confirm          # production needs both
+```
+
+Both are dry runs unless `--confirm` is given, both refuse to delete a
+fill-up that no test marker explains (override: `--allow-real-fillups`, only
+after reading the sample they print), and neither deletes audit rows of real
+activity. Test rows in the insert-only stock tables are removed through one
+guarded path (a transaction-local setting their triggers check); the triggers
+themselves are never dropped. Run them *before* real use, never after.
 
 ## Before this touches anything real
 

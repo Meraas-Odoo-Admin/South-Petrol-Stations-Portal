@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 
 function tabClass({ isActive }: { isActive: boolean }): string {
-  return `flex h-[34px] items-center rounded-full px-3.5 text-[12px] font-bold transition ${
+  return `flex h-[34px] items-center rounded-full px-3.5 text-[13px] lg:text-[12px] font-bold transition ${
     isActive ? 'bg-primary text-white' : 'text-ink-soft hover:bg-surface-alt'
   }`;
 }
@@ -32,7 +32,7 @@ export function AdminLayout() {
       <div className="flex flex-wrap items-end justify-between gap-3 bg-surface px-6 py-5 shadow-sm">
         <div>
           <h1 className="text-xl font-extrabold text-ink">الإدارة</h1>
-          <div className="text-[12px] text-ink-soft">{tabs.map((tab) => tab.label).join(' · ')}</div>
+          <div className="text-[13px] lg:text-[12px] text-ink-soft">{tabs.map((tab) => tab.label).join(' · ')}</div>
         </div>
         <nav aria-label="أقسام الإدارة" className="flex flex-wrap gap-1.5">
           {tabs.map((tab) => (

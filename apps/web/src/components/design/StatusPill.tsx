@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 const VARIANTS = {
   ok: 'bg-ok-100 text-ok',
   danger: 'text-danger border border-danger',
-  accent: 'bg-accent-100 text-accent-dark',
+  accent: 'bg-accent-100 text-accent-ink',
   // Same amber tint, Ink text: 13.8:1 where Amber Deep is only 3.1:1. Used by the
   // phase 4b screens for pending and attention states.
   warn: 'bg-accent-100 text-ink',
@@ -17,7 +17,7 @@ const VARIANTS = {
 
 // size="md" is for the phase 4b screens: 13px on a phone, 12px on a desktop.
 const SIZES = {
-  sm: 'px-2.5 py-0.5 text-[11px]',
+  sm: 'px-2.5 py-0.5 text-[13px] lg:text-[12px]',
   md: 'px-3 py-1 text-[13px] lg:px-2.5 lg:py-0.5 lg:text-[12px]',
 } as const;
 

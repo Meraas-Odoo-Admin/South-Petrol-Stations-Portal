@@ -199,7 +199,7 @@ export class RbacService {
     const [own, stations, offices] = await Promise.all([
       this.prisma.userMunicipalityScope.findMany({ where: { userId }, select: { municipalityId: true } }),
       this.prisma.station.findMany({
-        where: { userScopes: { some: { userId } }, municipalityId: { not: null } },
+        where: { userScopes: { some: { userId } } },
         select: { municipalityId: true },
       }),
       this.prisma.registrationStation.findMany({

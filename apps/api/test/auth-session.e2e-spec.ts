@@ -9,6 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
 import { REFRESH_COOKIE_NAME } from '../src/auth/auth.controller';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // login/refresh/logout are explicitly named in the M1 checklist
 // (docs/IMPLEMENTATION_PLAN.md §11), but only login's happy path had any
@@ -22,6 +23,8 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 // purpose (that's exactly what MAX_FAILED_ATTEMPTS = 5 requires), so
 // every other scenario here mints tokens directly through the real
 // AuthService instead of going through POST /auth/login.
+let meMunicipalityId: string;
+
 describe('Auth session lifecycle (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -85,8 +88,15 @@ describe('Auth session lifecycle (e2e)', () => {
     // ── Fixtures for GET /auth/me ────────────────────────────────────────
     const company = await prisma.company.create({ data: { name: `E2E Auth Me Company ${runId}` } });
     meCompanyId = company.id;
+    meMunicipalityId = (await createMunicipality(prisma, `E2E Auth Me Municipality ${runId}`)).id;
     meStation = await prisma.station.create({
-      data: { internalCode: `E2E-AUTH-ME-${runId}`, stationNumber: '1', name: 'E2E Auth Me Station', companyId: company.id },
+      data: {
+        internalCode: `E2E-AUTH-ME-${runId}`,
+        stationNumber: '1',
+        name: 'E2E Auth Me Station',
+        companyId: company.id,
+        municipalityId: meMunicipalityId,
+      },
     });
     const mePermission = await prisma.permission.upsert({
       where: { key: 'stations:read' },
@@ -127,7 +137,7 @@ describe('Auth session lifecycle (e2e)', () => {
     });
     pendingUserId = pendingUser.id;
     await prisma.userRole.create({ data: { userId: pendingUser.id, roleId: pendingRole.id } });
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const allUserIds = [refreshUserId, logoutUserId, lockoutUserId, meUserId, changePwUserId, pendingUserId];
@@ -140,6 +150,7 @@ describe('Auth session lifecycle (e2e)', () => {
     await prisma.role.deleteMany({ where: { id: { in: [meRoleId, pendingRoleId] } } });
     await prisma.station.delete({ where: { id: meStation.id } });
     await prisma.company.delete({ where: { id: meCompanyId } });
+    await deleteMunicipalities(prisma, [meMunicipalityId]);
     await app.close();
   });
 

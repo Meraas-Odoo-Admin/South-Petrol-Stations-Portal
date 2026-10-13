@@ -156,7 +156,7 @@ export function OpsTableView({
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
                   {table.columns.map((c) => (
                     <div key={c.key} className={c.type === 'text' && table.columns.indexOf(c) === 0 ? 'col-span-2' : ''}>
-                      <dt className="text-[13px] text-ink-soft">{c.label}</dt>
+                      <dt className="text-[15px] lg:text-[13px] text-ink-soft">{c.label}</dt>
                       <dd className="text-[16px] font-bold text-ink">{renderCell(c, row[c.key] ?? null)}</dd>
                     </div>
                   ))}
@@ -165,7 +165,7 @@ export function OpsTableView({
             ))}
           </ul>
           <div className="hidden overflow-x-auto lg:block">
-            <table className="w-full text-[14px]">
+            <table className="w-full text-[16px] lg:text-[14px]">
               <caption className="sr-only">{table.title}</caption>
               <thead>
                 <tr className="border-b-2 border-line bg-surface-alt/60">
@@ -174,7 +174,7 @@ export function OpsTableView({
                       key={c.key}
                       scope="col"
                       aria-sort={sort === c.key ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      className="px-3 py-2 text-start text-[13px] font-extrabold text-ink"
+                      className="px-3 py-2 text-start text-[15px] lg:text-[13px] font-extrabold text-ink"
                     >
                       <button
                         type="button"
@@ -182,7 +182,7 @@ export function OpsTableView({
                         className="inline-flex min-h-[32px] items-center gap-1 rounded hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       >
                         {c.label}
-                        <span aria-hidden="true" className="text-[11px] text-ink-soft">
+                        <span aria-hidden="true" className="text-[13px] lg:text-[12px] text-ink-soft">
                           {sort === c.key ? (dir === 'asc' ? '▲' : '▼') : '↕'}
                         </span>
                       </button>

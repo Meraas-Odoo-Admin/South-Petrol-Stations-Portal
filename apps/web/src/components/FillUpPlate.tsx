@@ -14,7 +14,7 @@ export function FillUpPlate({
   return (
     <span className="inline-flex items-center gap-1.5">
       <LtrText>{typedPlate ? formatLicensePlate(typedPlate) : '—'}</LtrText>
-      <span className="rounded-sm bg-accent-100 px-1.5 py-0.5 text-[10.5px] font-bold text-accent-dark">مركبة غير مسجلة</span>
+      <span className="rounded-sm bg-accent-100 px-1.5 py-0.5 text-[13px] lg:text-[12px] font-bold text-accent-ink">مركبة غير مسجلة</span>
     </span>
   );
 }

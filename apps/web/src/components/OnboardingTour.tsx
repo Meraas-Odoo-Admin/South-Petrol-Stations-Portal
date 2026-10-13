@@ -148,7 +148,7 @@ export function OnboardingTour() {
         </div>
         <div className="p-5">
           <h2 className="text-[16px] font-extrabold text-ink">{current.title}</h2>
-          <p className="mt-2 text-[12.5px] leading-[1.8] text-ink-soft">{current.body}</p>
+          <p className="mt-2 text-[13px] lg:text-[12.5px] leading-[1.8] text-ink-soft">{current.body}</p>
 
           <div className="mt-4 flex items-center justify-center gap-1.5">
             {steps.map((_, i) => (
@@ -182,7 +182,7 @@ export function OnboardingTour() {
               </PillButton>
             </div>
             {!isLast && (
-              <button type="button" onClick={finish} className="text-[11.5px] font-bold text-ink-faint hover:text-ink-soft">
+              <button type="button" onClick={finish} className="text-[13px] lg:text-[12px] font-bold text-ink-faint hover:text-ink-soft">
                 تخطّي الجولة
               </button>
             )}

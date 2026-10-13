@@ -125,7 +125,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
       await prisma.userRegistrationStationScope.create({ data: { userId: registrar.id, registrationStationId: id } });
     }
     await createUser(usernameAdmin, adminRole.id);
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const createdStationIds = await prisma.registrationStation.findMany({

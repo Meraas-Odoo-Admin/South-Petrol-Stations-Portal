@@ -33,10 +33,11 @@ export class CreateStationDto {
   @IsString()
   companyId!: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  // Phase 5C: every station sits in a municipality.
+  @ApiProperty()
   @IsString()
-  municipalityId?: string;
+  @MinLength(1)
+  municipalityId!: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

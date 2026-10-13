@@ -116,7 +116,7 @@ export function ChangeRequestsQueuePage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+            className="h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <option value="">الكل</option>
             <option value="PENDING">قيد الانتظار</option>
@@ -126,9 +126,9 @@ export function ChangeRequestsQueuePage() {
         }
       />
 
-      <p className="mb-3 mt-2 text-[13.5px] font-extrabold text-ink">طلبات تعديل بيانات المركبة</p>
-      {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
-      {isError && <p className="text-[13px] text-danger">تعذر تحميل الطلبات.</p>}
+      <p className="mb-3 mt-2 text-[15px] lg:text-[13px] font-extrabold text-ink">طلبات تعديل بيانات المركبة</p>
+      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل الطلبات.</p>}
 
       {data && (
         <div className="space-y-4">
@@ -145,29 +145,29 @@ export function ChangeRequestsQueuePage() {
                   ) : (
                     <span className="text-[15px] font-extrabold text-ink">{r.vehicleId}</span>
                   )}
-                  <p className="mt-0.5 text-[11px] text-ink-faint">{vehicleChangeTypeLabel(r.changeType)}</p>
+                  <p className="mt-0.5 text-[13px] lg:text-[12px] text-ink-faint">{vehicleChangeTypeLabel(r.changeType)}</p>
                 </div>
                 <StatusPill variant={STATUS_VARIANT[r.status]}>{STATUS_LABELS[r.status]}</StatusPill>
               </div>
 
               <div className="mt-4 grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_30px_1fr] sm:gap-0">
                 <div className="rounded-sm bg-surface-alt px-3.5 py-3">
-                  <div className="text-[10.5px] text-ink-soft">الساري الآن</div>
+                  <div className="text-[13px] lg:text-[12px] text-ink-soft">الساري الآن</div>
                   <div className="mt-1.5">
                     <LtrText>
-                      <span className="font-mono text-[14px] font-bold text-ink">{r.currentValue}</span>
+                      <span className="font-mono text-[14px] lg:text-[13px] font-bold text-ink">{r.currentValue}</span>
                     </LtrText>
                   </div>
                 </div>
                 <div className="rotate-90 text-center text-ink-faint sm:rotate-0">←</div>
                 <div className="rounded-sm border border-accent bg-accent-100 px-3.5 py-3">
-                  <div className="text-[10.5px] text-accent-dark">المقترح — يختلف في الخانات المظللة</div>
+                  <div className="text-[13px] lg:text-[12px] text-accent-ink">المقترح — يختلف في الخانات المظللة</div>
                   <div className="mt-1.5">
                     <LtrText>
-                      <span className="font-mono text-[14px] font-bold text-ink">
+                      <span className="font-mono text-[14px] lg:text-[13px] font-bold text-ink">
                         {diff.prefix}
                         <mark
-                          className="rounded-sm bg-accent px-0.5 text-white"
+                          className="rounded-sm bg-accent px-0.5 text-ink"
                           data-testid="change-request-diff-highlight"
                         >
                           {diff.newChanged}
@@ -179,24 +179,24 @@ export function ChangeRequestsQueuePage() {
                 </div>
               </div>
 
-              <p className="mt-3 text-[12.5px] leading-[1.7] text-ink">{r.reason}</p>
+              <p className="mt-3 text-[13px] lg:text-[12.5px] leading-[1.7] text-ink">{r.reason}</p>
               {r.proofReference && (
-                <p className="mt-1 text-[11px] text-ink-faint">
+                <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
                   مرجع الإثبات: <CodeText>{r.proofReference}</CodeText>
                 </p>
               )}
 
               {r.status === 'REJECTED' && r.rejectionReason && (
-                <p className="mt-2 text-[12px] text-danger">سبب الرفض: {r.rejectionReason}</p>
+                <p className="mt-2 text-[13px] lg:text-[12px] text-danger">سبب الرفض: {r.rejectionReason}</p>
               )}
 
               {r.status === 'PENDING' && (
                 <>
                   <div className="mt-4 rounded-sm bg-surface-alt p-3.5">
-                    <p className="mb-1.5 text-[11.5px] font-bold text-ink">ما يتأثر بالاعتماد</p>
+                    <p className="mb-1.5 text-[13px] lg:text-[12px] font-bold text-ink">ما يتأثر بالاعتماد</p>
                     <ul className="space-y-1">
                       {APPROVAL_CONSEQUENCES.map((c) => (
-                        <li key={c} className="flex gap-1.5 text-[11.5px] text-ink-soft">
+                        <li key={c} className="flex gap-1.5 text-[13px] lg:text-[12px] text-ink-soft">
                           <span className="text-ink-faint">•</span>
                           {c}
                         </li>
@@ -219,7 +219,7 @@ export function ChangeRequestsQueuePage() {
                           value={rejectReason}
                           onChange={(e) => setRejectReason(e.target.value)}
                           placeholder="سبب الرفض"
-                          className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                          className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                         <PillButton
                           size="sm"
@@ -242,16 +242,16 @@ export function ChangeRequestsQueuePage() {
             );
           })}
           {data.length === 0 && (
-            <Card className="p-6 text-center text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
+            <Card className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
           )}
         </div>
       )}
 
       {canReviewOwnerChanges && (
         <>
-          <p className="mb-3 mt-6 text-[13.5px] font-extrabold text-ink">طلبات تصحيح هوية المالك</p>
-          {ownerIsLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
-          {ownerIsError && <p className="text-[13px] text-danger">تعذر تحميل الطلبات.</p>}
+          <p className="mb-3 mt-6 text-[15px] lg:text-[13px] font-extrabold text-ink">طلبات تصحيح هوية المالك</p>
+          {ownerIsLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+          {ownerIsError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل الطلبات.</p>}
 
           {ownerData && (
             <div className="space-y-4">
@@ -260,42 +260,42 @@ export function ChangeRequestsQueuePage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <span className="text-[15px] font-extrabold text-ink">{r.owner?.fullName ?? r.ownerId}</span>
-                      <p className="mt-0.5 text-[11px] text-ink-faint">تصحيح رقم/نوع الهوية</p>
+                      <p className="mt-0.5 text-[13px] lg:text-[12px] text-ink-faint">تصحيح رقم/نوع الهوية</p>
                     </div>
                     <StatusPill variant={STATUS_VARIANT[r.status]}>{STATUS_LABELS[r.status]}</StatusPill>
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_30px_1fr] sm:gap-0">
                     <div className="rounded-sm bg-surface-alt px-3.5 py-3">
-                      <div className="text-[10.5px] text-ink-soft">الساري الآن</div>
+                      <div className="text-[13px] lg:text-[12px] text-ink-soft">الساري الآن</div>
                       <div className="mt-1.5">
-                        <p className="text-[11px] text-ink-faint">{identityTypeLabel(r.currentIdentityType)}</p>
+                        <p className="text-[13px] lg:text-[12px] text-ink-faint">{identityTypeLabel(r.currentIdentityType)}</p>
                         <LtrText>
-                          <span className="font-mono text-[14px] font-bold text-ink">{r.currentIdentityNumber}</span>
+                          <span className="font-mono text-[14px] lg:text-[13px] font-bold text-ink">{r.currentIdentityNumber}</span>
                         </LtrText>
                       </div>
                     </div>
                     <div className="rotate-90 text-center text-ink-faint sm:rotate-0">←</div>
                     <div className="rounded-sm border border-accent bg-accent-100 px-3.5 py-3">
-                      <div className="text-[10.5px] text-accent-dark">المقترح</div>
+                      <div className="text-[13px] lg:text-[12px] text-accent-ink">المقترح</div>
                       <div className="mt-1.5">
-                        <p className="text-[11px] text-accent-dark">{identityTypeLabel(r.requestedIdentityType)}</p>
+                        <p className="text-[13px] lg:text-[12px] text-accent-ink">{identityTypeLabel(r.requestedIdentityType)}</p>
                         <LtrText>
-                          <span className="font-mono text-[14px] font-bold text-ink">{r.requestedIdentityNumber}</span>
+                          <span className="font-mono text-[14px] lg:text-[13px] font-bold text-ink">{r.requestedIdentityNumber}</span>
                         </LtrText>
                       </div>
                     </div>
                   </div>
 
-                  <p className="mt-3 text-[12.5px] leading-[1.7] text-ink">{r.reason}</p>
+                  <p className="mt-3 text-[13px] lg:text-[12.5px] leading-[1.7] text-ink">{r.reason}</p>
                   {r.proofReference && (
-                    <p className="mt-1 text-[11px] text-ink-faint">
+                    <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
                       مرجع الإثبات: <CodeText>{r.proofReference}</CodeText>
                     </p>
                   )}
 
                   {r.status === 'REJECTED' && r.rejectionReason && (
-                    <p className="mt-2 text-[12px] text-danger">سبب الرفض: {r.rejectionReason}</p>
+                    <p className="mt-2 text-[13px] lg:text-[12px] text-danger">سبب الرفض: {r.rejectionReason}</p>
                   )}
 
                   {r.status === 'PENDING' && (
@@ -314,7 +314,7 @@ export function ChangeRequestsQueuePage() {
                             value={rejectReason}
                             onChange={(e) => setRejectReason(e.target.value)}
                             placeholder="سبب الرفض"
-                            className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                            className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                           />
                           <PillButton
                             size="sm"
@@ -337,7 +337,7 @@ export function ChangeRequestsQueuePage() {
                 </Card>
               ))}
               {ownerData.length === 0 && (
-                <Card className="p-6 text-center text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
+                <Card className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
               )}
             </div>
           )}

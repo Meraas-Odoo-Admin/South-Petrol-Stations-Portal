@@ -23,9 +23,9 @@ const ENTITY_TYPES = [
 function ValueChip({ value, variant }: { value: unknown; variant: 'neutral' | 'accent' }) {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   const cls =
-    variant === 'neutral' ? 'bg-surface-alt text-ink' : 'bg-accent-100 text-accent-dark';
+    variant === 'neutral' ? 'bg-surface-alt text-ink' : 'bg-accent-100 text-accent-ink';
   return (
-    <span dir="ltr" className={`inline-block rounded-[3px] px-1.5 font-mono text-[11px] font-bold ${cls}`}>
+    <span dir="ltr" className={`inline-block rounded-[3px] px-1.5 font-mono text-[13px] lg:text-[12px] font-bold ${cls}`}>
       {text}
     </span>
   );
@@ -62,7 +62,7 @@ export function AuditLogAdminPage() {
               setEntityType(e.target.value);
               setSkip(0);
             }}
-            className="h-8 rounded-sm bg-surface-alt px-2.5 text-[11.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+            className="h-8 rounded-sm bg-surface-alt px-2.5 text-[13px] lg:text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <option value="">كل الأنواع</option>
             {ENTITY_TYPES.map((t) => (
@@ -88,7 +88,7 @@ export function AuditLogAdminPage() {
               <div key={row.id} className="flex gap-3.5 border-b border-surface-alt px-[18px] py-3 last:border-0">
                 <div className="w-24 shrink-0 pt-0.5">
                   <LtrText>
-                    <span className="font-mono text-[11px] font-semibold text-ink-faint">
+                    <span className="font-mono text-[13px] lg:text-[12px] font-semibold text-ink-faint">
                       {new Date(row.createdAt).toLocaleString('en-GB', {
                         month: '2-digit',
                         day: '2-digit',
@@ -98,7 +98,7 @@ export function AuditLogAdminPage() {
                     </span>
                   </LtrText>
                 </div>
-                <div className="flex-1 text-[12.5px] leading-[1.7] text-ink">
+                <div className="flex-1 text-[13px] lg:text-[12.5px] leading-[1.7] text-ink">
                   <span className="font-bold">{row.user ? row.user.fullName : '—'}</span>{' '}
                   <CodeText>{row.action}</CodeText> <CodeText>{row.entityType}</CodeText>{' '}
                   <CodeText>#{row.entityId.slice(0, 8)}</CodeText>
@@ -109,7 +109,7 @@ export function AuditLogAdminPage() {
                         const newV = (row.newValue as Record<string, unknown>)[key];
                         return (
                           <span key={key} className="inline-flex items-center gap-1">
-                            <span className="text-[11px] text-ink-faint">{key}</span>
+                            <span className="text-[13px] lg:text-[12px] text-ink-faint">{key}</span>
                             {oldV !== undefined && (
                               <>
                                 <ValueChip value={oldV} variant="neutral" />
@@ -126,9 +126,9 @@ export function AuditLogAdminPage() {
               </div>
             );
           })}
-          {data.rows.length === 0 && <p className="p-4 text-center text-[12.5px] text-ink-soft">لا توجد سجلات</p>}
+          {data.rows.length === 0 && <p className="p-4 text-center text-[13px] lg:text-[12.5px] text-ink-soft">لا توجد سجلات</p>}
 
-          <div className="flex items-center justify-between px-[18px] py-3 text-[11px] text-ink-faint">
+          <div className="flex items-center justify-between px-[18px] py-3 text-[13px] lg:text-[12px] text-ink-faint">
             <span>السجل للإضافة فقط — لا يُعدّل ولا يُحذف.</span>
             <div className="flex gap-2">
               <button

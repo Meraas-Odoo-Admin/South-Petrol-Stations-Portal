@@ -187,7 +187,7 @@ export function Layout() {
           <BrandMark size={34} />
           <div>
             <p className="text-[17px] font-extrabold text-primary">{APP_NAME}</p>
-            <p className="text-[10.5px] font-medium text-ink-faint">مديرية أمن سبها</p>
+            <p className="text-[13px] lg:text-[12px] font-medium text-ink-faint">مديرية أمن سبها</p>
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 px-3">
@@ -197,7 +197,7 @@ export function Layout() {
               to={item.to}
               end={item.to === '/' || item.to === '/vehicles' || item.to === '/stations'}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[12.5px] font-bold transition ${
+                `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] lg:text-[12.5px] font-bold transition ${
                   isActive ? 'bg-primary text-white shadow-sm' : 'text-ink-soft hover:bg-surface-alt'
                 }`
               }
@@ -205,7 +205,7 @@ export function Layout() {
               {item.icon}
               <span className="flex-1">{item.label}</span>
               {!!item.badge && (
-                <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                <span className="rounded-full bg-accent px-1.5 py-0.5 text-[13px] lg:text-[12px] font-extrabold text-ink">
                   {item.badge}
                 </span>
               )}
@@ -220,12 +220,12 @@ export function Layout() {
             PillButton already use elsewhere, not a new pattern. */}
         <div className="border-t border-surface-alt p-3">
           <div className="flex items-center gap-2.5 rounded-lg bg-surface-alt/70 p-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[12px] font-extrabold text-primary">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[13px] lg:text-[12px] font-extrabold text-primary">
               {(user?.fullName ?? '').trim().slice(0, 2)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[12.5px] font-bold text-ink">{user?.fullName}</p>
-              <p className="truncate text-[10.5px] text-ink-faint">
+              <p className="truncate text-[13px] lg:text-[12.5px] font-bold text-ink">{user?.fullName}</p>
+              <p className="truncate text-[13px] lg:text-[12px] text-ink-faint">
                 {roleName}
                 {stationName ? ` · ${stationName}` : ''}
               </p>
@@ -234,7 +234,7 @@ export function Layout() {
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <NavLink
               to="/change-password"
-              className="flex items-center justify-center gap-1.5 rounded-full bg-surface-alt py-2 text-[11px] font-bold text-ink-soft transition hover:bg-primary-100 hover:text-primary"
+              className="flex items-center justify-center gap-1.5 rounded-full bg-surface-alt py-2 text-[13px] lg:text-[12px] font-bold text-ink-soft transition hover:bg-primary-100 hover:text-primary"
             >
               <Icon d={ICONS.lock} />
               كلمة المرور
@@ -242,7 +242,7 @@ export function Layout() {
             <button
               type="button"
               onClick={() => logout()}
-              className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2 text-[11px] font-bold text-danger transition hover:bg-danger hover:text-white"
+              className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2 text-[13px] lg:text-[12px] font-bold text-danger transition hover:bg-danger hover:text-white"
             >
               <Icon d={ICONS.logout} />
               خروج
@@ -262,8 +262,8 @@ export function Layout() {
           <Icon d={ICONS.menu} />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-extrabold text-ink">{stationName ?? APP_NAME}</p>
-          <p className="truncate text-[10.5px] text-ink-faint">
+          <p className="truncate text-[13px] lg:text-[12.5px] font-extrabold text-ink">{stationName ?? APP_NAME}</p>
+          <p className="truncate text-[13px] lg:text-[12px] text-ink-faint">
             {roleName}
             {user?.fullName ? ` · ${user.fullName}` : ''}
           </p>
@@ -313,7 +313,7 @@ export function Layout() {
             // screen readers and voice control (the visible word is part of it).
             aria-label={item.shortLabel ? item.label : undefined}
             className={({ isActive }) =>
-              `relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[13px] font-bold leading-tight ${
+              `relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight ${
                 isActive ? 'text-primary' : 'text-ink-soft'
               }`
             }
@@ -321,7 +321,7 @@ export function Layout() {
             {item.icon}
             <span className="max-w-full whitespace-nowrap">{item.shortLabel ?? item.label}</span>
             {!!item.badge && (
-              <span className="absolute end-[18%] top-1 rounded-full bg-accent px-1.5 text-[11px] font-extrabold text-white">
+              <span className="absolute end-[18%] top-1 rounded-full bg-accent px-1.5 text-[13px] lg:text-[12px] font-extrabold text-ink">
                 {item.badge}
               </span>
             )}
@@ -331,7 +331,7 @@ export function Layout() {
           <button
             type="button"
             onClick={() => navigate('/vehicles')}
-            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[13px] font-bold leading-tight text-ink-soft"
+            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight text-ink-soft"
           >
             <Icon d={ICONS.search} />
             <span className="whitespace-nowrap">بحث</span>
@@ -349,12 +349,12 @@ export function Layout() {
           />
           <div className="absolute inset-x-0 top-0 max-h-[85vh] overflow-y-auto rounded-b-lg bg-surface p-4 shadow-lg">
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[13px] font-extrabold text-primary">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[15px] lg:text-[13px] font-extrabold text-primary">
                 {(user?.fullName ?? '').trim().slice(0, 2)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13.5px] font-extrabold text-ink">{user?.fullName}</p>
-                <p className="truncate text-[11px] text-ink-faint">
+                <p className="truncate text-[15px] lg:text-[13px] font-extrabold text-ink">{user?.fullName}</p>
+                <p className="truncate text-[13px] lg:text-[12px] text-ink-faint">
                   {roleName}
                   {stationName ? ` · ${stationName}` : ''}
                 </p>
@@ -377,7 +377,7 @@ export function Layout() {
               <NavLink
                 to="/change-password"
                 onClick={() => setSheetOpen(false)}
-                className="flex items-center justify-center gap-1.5 rounded-full bg-surface-alt py-2.5 text-[12px] font-bold text-ink-soft"
+                className="flex items-center justify-center gap-1.5 rounded-full bg-surface-alt py-2.5 text-[13px] lg:text-[12px] font-bold text-ink-soft"
               >
                 <Icon d={ICONS.lock} />
                 كلمة المرور
@@ -385,7 +385,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={() => closeSheetAnd(() => logout())}
-                className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2.5 text-[12px] font-bold text-danger"
+                className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2.5 text-[13px] lg:text-[12px] font-bold text-danger"
               >
                 <Icon d={ICONS.logout} />
                 خروج
@@ -404,7 +404,7 @@ function NavGroup({ title, items, onNavigate }: { title: string; items: NavItem[
   if (items.length === 0) return null;
   return (
     <div className="mb-3">
-      {title && <p className="mb-1 px-3.5 text-[10.5px] font-extrabold uppercase tracking-wide text-ink-faint">{title}</p>}
+      {title && <p className="mb-1 px-3.5 text-[13px] lg:text-[12px] font-extrabold uppercase tracking-wide text-ink-faint">{title}</p>}
       <div className="space-y-0.5">
         {items.map((item) => (
           <NavLink
@@ -413,7 +413,7 @@ function NavGroup({ title, items, onNavigate }: { title: string; items: NavItem[
             end={item.to === '/' || item.to === '/vehicles' || item.to === '/stations'}
             onClick={() => onNavigate(false)}
             className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[12.5px] font-bold ${
+              `flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] lg:text-[12.5px] font-bold ${
                 isActive ? 'bg-primary-100 text-primary' : 'text-ink hover:bg-surface-alt'
               }`
             }
@@ -421,7 +421,7 @@ function NavGroup({ title, items, onNavigate }: { title: string; items: NavItem[
             {item.icon}
             <span className="flex-1">{item.label}</span>
             {!!item.badge && (
-              <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-extrabold text-white">{item.badge}</span>
+              <span className="rounded-full bg-accent px-1.5 py-0.5 text-[13px] lg:text-[12px] font-extrabold text-ink">{item.badge}</span>
             )}
           </NavLink>
         ))}

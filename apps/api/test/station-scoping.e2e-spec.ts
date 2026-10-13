@@ -7,11 +7,14 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RbacService } from '../src/rbac/rbac.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // The acceptance bar for M1 (docs/IMPLEMENTATION_PLAN.md §8, §11): a
 // station_employee scoped to one station must not be able to read another
 // station's data, even by guessing its ID directly — enforced in the
 // service layer, not the controller or the UI (CLAUDE.md rule 3).
+let scopingMunicipalityId: string;
+
 describe('Station scoping boundary (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -65,12 +68,14 @@ describe('Station scoping boundary (e2e)', () => {
     companyA = await prisma.company.create({ data: { name: `E2E Company A ${runId}` } });
     companyB = await prisma.company.create({ data: { name: `E2E Company B ${runId}` } });
 
+    scopingMunicipalityId = (await createMunicipality(prisma, `E2E SS Municipality ${runId}`)).id;
     stationA = await prisma.station.create({
       data: {
         internalCode: `E2E-A-${runId}`,
         stationNumber: '99',
         name: 'E2E Station A',
         companyId: companyA.id,
+        municipalityId: scopingMunicipalityId,
       },
     });
     stationB = await prisma.station.create({
@@ -79,6 +84,7 @@ describe('Station scoping boundary (e2e)', () => {
         stationNumber: '99', // same number, different company — must be allowed
         name: 'E2E Station B',
         companyId: companyB.id,
+        municipalityId: scopingMunicipalityId,
       },
     });
 
@@ -183,7 +189,7 @@ describe('Station scoping boundary (e2e)', () => {
     });
     unrestrictedUserId = unrestrictedUser.id;
     await prisma.userRole.create({ data: { userId: unrestrictedUser.id, roleId: unrestrictedRole.id } });
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const allUserIds = [employeeUserId, supervisorUserId, noScopeUserId, unrestrictedUserId];
@@ -198,6 +204,7 @@ describe('Station scoping boundary (e2e)', () => {
     await prisma.station.delete({ where: { id: stationB.id } });
     await prisma.company.delete({ where: { id: companyA.id } });
     await prisma.company.delete({ where: { id: companyB.id } });
+    await deleteMunicipalities(prisma, [scopingMunicipalityId]);
     await app.close();
   });
 

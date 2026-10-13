@@ -42,8 +42,10 @@ model Station {
   // seeded municipality first; treated the same as every other
   // schema-affecting judgment call in this project — nullable/flexible
   // until that's confirmed as a hard requirement, not silently forced.
-  municipalityId String?
-  municipality   Municipality? @relation(fields: [municipalityId], references: [id])
+  // Phase 5C: required (migration 20261013100100_p5c_required_municipality) now
+  // that every station sits in a municipality.
+  municipalityId String
+  municipality   Municipality  @relation(fields: [municipalityId], references: [id])
   routeId        String?
   route          Route?        @relation(fields: [routeId], references: [id])
 
@@ -911,8 +913,9 @@ model FillUpTransaction {
   // the municipality they actually happened in. Nullable only because
   // pre-existing rows at stations with no municipality can't be
   // backfilled; FillUpsService refuses to create a fill-up without one.
-  municipalityId      String?
-  municipality        Municipality?        @relation(fields: [municipalityId], references: [id])
+  // Phase 5C: required, now that every row carries one.
+  municipalityId      String
+  municipality        Municipality         @relation(fields: [municipalityId], references: [id])
   fuelType            FuelType
   quantityLiters      Decimal
   occurredAt          DateTime             @default(now())

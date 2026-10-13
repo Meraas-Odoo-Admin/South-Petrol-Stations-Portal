@@ -444,7 +444,7 @@ export function DigitBoxInput({
             type="button"
             disabled={disabled}
             onClick={handleKeypadBackspace}
-            className="h-11 rounded-sm bg-surface-alt text-[13px] font-bold text-ink-soft hover:bg-primary-100"
+            className="h-11 rounded-sm bg-surface-alt text-[15px] lg:text-[13px] font-bold text-ink-soft hover:bg-primary-100"
           >
             ⌫
           </button>

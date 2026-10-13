@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-08T09:11:01.436Z",
+  "generatedAt": "2026-10-13T13:04:23.725Z",
   "title": "Design System: ضبط الوقود (Fuel Control)",
   "extensions": {
     "colorMeta": {
@@ -273,6 +273,36 @@
           "#C7CAC6",
           "#ECF0EB"
         ]
+      },
+      "gauge-amber-mid": {
+        "role": "secondary",
+        "displayName": "Gauge Amber Mid",
+        "canonical": "#C98A22",
+        "tonalRamp": [
+          "#220000",
+          "#441500",
+          "#673300",
+          "#8C5200",
+          "#B37300",
+          "#D59737",
+          "#F9BD68",
+          "#FFE395"
+        ]
+      },
+      "gauge-amber-ink": {
+        "role": "secondary",
+        "displayName": "Gauge Amber Ink",
+        "canonical": "#7A4F0B",
+        "tonalRamp": [
+          "#220000",
+          "#441500",
+          "#673300",
+          "#8C5200",
+          "#B37300",
+          "#D59737",
+          "#F9BD68",
+          "#FFE395"
+        ]
       }
     },
     "typographyMeta": {
@@ -302,7 +332,7 @@
       },
       "page-title-phone": {
         "displayName": "Page title (phone)",
-        "purpose": "Page titles on phone screens built from Phase 4b onward."
+        "purpose": "Page titles on every phone screen."
       },
       "title-phone": {
         "displayName": "Title (phone)",
@@ -314,7 +344,7 @@
       },
       "body-phone": {
         "displayName": "Body (phone)",
-        "purpose": "Field text, buttons and paragraphs on a phone."
+        "purpose": "Field text, buttons and paragraphs on a phone: 16px on every screen since Phase 5C."
       },
       "body-secondary-phone": {
         "displayName": "Secondary (phone)",
@@ -326,7 +356,7 @@
       },
       "caption-phone": {
         "displayName": "Caption (phone)",
-        "purpose": "The smallest size allowed on a phone: captions and codes."
+        "purpose": "The smallest size allowed on a phone: captions and codes, 13px. Nothing is set below it."
       },
       "title-desktop": {
         "displayName": "Title (desktop)",
@@ -334,7 +364,11 @@
       },
       "label-desktop": {
         "displayName": "Label (desktop)",
-        "purpose": "Field labels, captions and codes on a desktop: the smallest size allowed there."
+        "purpose": "Field labels, captions and codes on a desktop: 12px, the smallest size allowed there. Body on desktop is 14px."
+      },
+      "figure-phone": {
+        "displayName": "Key figure (phone)",
+        "purpose": "The plate, liters and amount on the pump screen: 44-48px, the largest thing on the step."
       }
     },
     "shadows": [
@@ -395,7 +429,7 @@
       "refersTo": "button-primary",
       "description": "The single amber call to action in a region.",
       "html": "<button class=\"ds-btn-primary\">تسجيل التعبئة</button>",
-      "css": ".ds-btn-primary{font-family:Cairo,sans-serif;height:36px;padding:0 16px;border:0;border-radius:9999px;background:linear-gradient(to left,#E8A53D,#B97A1A);color:#fff;font-size:12.5px;font-weight:700;box-shadow:0 4px 16px -2px rgba(232,165,61,.45);cursor:pointer;transition:all .15s}.ds-btn-primary:hover{filter:brightness(1.05)}.ds-btn-primary:focus-visible{outline:2px solid #E8A53D;outline-offset:2px}.ds-btn-primary:disabled{opacity:.4}"
+      "css": ".ds-btn-primary{font-family:Cairo,sans-serif;height:36px;padding:0 16px;border:0;border-radius:9999px;background:linear-gradient(to left,#E8A53D,#C98A22);color:#132524;font-size:12.5px;font-weight:700;box-shadow:0 4px 16px -2px rgba(232,165,61,.45);cursor:pointer;transition:all .15s}.ds-btn-primary:hover{filter:brightness(1.05)}.ds-btn-primary:focus-visible{outline:2px solid #E8A53D;outline-offset:2px}.ds-btn-primary:disabled{opacity:.4}"
     },
     {
       "name": "Secondary Button",

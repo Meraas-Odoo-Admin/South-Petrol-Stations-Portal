@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // M4 (docs/IMPLEMENTATION_PLAN.md §11): reporting API + export. All fixture
 // fill-ups below are inserted directly via Prisma (not through POST
@@ -25,6 +26,8 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 // management surface (see docs/DESIGN_owner_based_fillups.md) — replaced
 // below with an ownerId filter, scoped through the vehicle's owner
 // instead of a per-fill-up driver.
+let rptMunicipalityId: string;
+
 describe('Reports (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -69,11 +72,24 @@ describe('Reports (e2e)', () => {
     prisma = moduleRef.get(PrismaService);
 
     company = await prisma.company.create({ data: { name: `E2E RPT Company ${runId}` } });
+    rptMunicipalityId = (await createMunicipality(prisma, `E2E RPT Municipality ${runId}`)).id;
     stationA = await prisma.station.create({
-      data: { internalCode: `E2E-RPT-A-${runId}`, stationNumber: '1', name: 'E2E RPT Station A', companyId: company.id },
+      data: {
+        internalCode: `E2E-RPT-A-${runId}`,
+        stationNumber: '1',
+        name: 'E2E RPT Station A',
+        companyId: company.id,
+        municipalityId: rptMunicipalityId,
+      },
     });
     stationB = await prisma.station.create({
-      data: { internalCode: `E2E-RPT-B-${runId}`, stationNumber: '2', name: 'E2E RPT Station B', companyId: company.id },
+      data: {
+        internalCode: `E2E-RPT-B-${runId}`,
+        stationNumber: '2',
+        name: 'E2E RPT Station B',
+        companyId: company.id,
+        municipalityId: rptMunicipalityId,
+      },
     });
 
     const owner = await prisma.vehicleOwner.create({
@@ -179,6 +195,7 @@ describe('Reports (e2e)', () => {
           quantityLiters,
           occurredAt,
           recordedById: scopedUserId,
+          municipalityId: rptMunicipalityId,
           idempotencyKey: `e2e-rpt-${runId}-${key}`,
           identifiedBy: 'TYPED_REGISTERED' as const,
         },
@@ -196,6 +213,7 @@ describe('Reports (e2e)', () => {
         quantityLiters: 10,
         occurredAt,
         recordedById: scopedUserId,
+        municipalityId: rptMunicipalityId,
         idempotencyKey: `e2e-rpt-${runId}-a4`,
         identifiedBy: 'TYPED_REGISTERED' as const,
         isException: true,
@@ -218,6 +236,7 @@ describe('Reports (e2e)', () => {
         quantityLiters: 10,
         occurredAt,
         recordedById: scopedUserId,
+        municipalityId: rptMunicipalityId,
         idempotencyKey: `e2e-rpt-${runId}-a5`,
         identifiedBy: 'TYPED_REGISTERED' as const,
         isException: true,
@@ -243,6 +262,7 @@ describe('Reports (e2e)', () => {
         quantityLiters: 7,
         occurredAt,
         recordedById: scopedUserId,
+        municipalityId: rptMunicipalityId,
         idempotencyKey: `e2e-rpt-${runId}-a6`,
         identifiedBy: 'TYPED_REGISTERED' as const,
       },
@@ -257,6 +277,7 @@ describe('Reports (e2e)', () => {
         quantityLiters: 5,
         occurredAt,
         recordedById: scopedUserId,
+        municipalityId: rptMunicipalityId,
         idempotencyKey: `e2e-rpt-${runId}-b2`,
         identifiedBy: 'TYPED_REGISTERED' as const,
         isException: true,
@@ -267,7 +288,7 @@ describe('Reports (e2e)', () => {
     });
 
     fillUpIds = [a1.id, a2.id, a3.id, a4Pending.id, a5Approved.id, a6OtherOwner.id, b1.id, b2Pending.id];
-  }, 30_000);
+  });
 
   afterAll(async () => {
     await prisma.exception.deleteMany({ where: { fillUpTransactionId: { in: fillUpIds } } });
@@ -287,6 +308,7 @@ describe('Reports (e2e)', () => {
     await prisma.vehicleOwner.delete({ where: { id: owner2Id } });
     await prisma.station.deleteMany({ where: { id: { in: [stationA.id, stationB.id] } } });
     await prisma.company.delete({ where: { id: company.id } });
+    await deleteMunicipalities(prisma, [rptMunicipalityId]);
     await app.close();
   });
 

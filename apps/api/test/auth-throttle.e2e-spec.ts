@@ -34,7 +34,7 @@ describe('Auth throttling is per account, not per address (e2e)', () => {
     for (const username of [...usernames, victim]) {
       await prisma.user.create({ data: { username, passwordHash, fullName: `Throttle ${username.slice(-6)}` } });
     }
-  }, 60_000);
+  });
 
   afterAll(async () => {
     const users = await prisma.user.findMany({ where: { username: { startsWith: prefix } }, select: { id: true } });
