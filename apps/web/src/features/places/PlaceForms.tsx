@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkLibyanMobile } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
-import { FUEL_TYPE_LABELS, OWNERSHIP_TYPE_LABELS, STATION_STATUS_LABELS } from '../../lib/labels';
+import { FUEL_TYPE_LABELS, STATION_STATUS_LABELS } from '../../lib/labels';
 import { restrictToPhoneNumber } from '../../lib/libyanFormats';
 import { PillButton } from '../../components/design/PillButton';
 import { TextField } from '../../components/design/TextField';
@@ -68,7 +68,6 @@ export interface StationFormValues {
   companyId: string;
   municipalityId: string;
   routeId: string;
-  ownershipType: '' | 'GOVERNMENT' | 'PRIVATE';
   status: string;
   statusNote: string;
   locality: string;
@@ -86,7 +85,6 @@ export const EMPTY_STATION: StationFormValues = {
   companyId: '',
   municipalityId: '',
   routeId: '',
-  ownershipType: '',
   status: 'ACTIVE',
   statusNote: '',
   locality: '',
@@ -105,7 +103,6 @@ export function stationToValues(s: StationRow): StationFormValues {
     companyId: s.companyId,
     municipalityId: s.municipalityId ?? '',
     routeId: s.routeId ?? '',
-    ownershipType: s.ownershipType ?? '',
     status: s.status,
     statusNote: s.statusNote ?? '',
     locality: s.locality ?? '',
@@ -149,7 +146,6 @@ export function stationPayload(values: StationFormValues, mode: 'create' | 'edit
     companyId: values.companyId,
     municipalityId: values.municipalityId || undefined,
     routeId: values.routeId || undefined,
-    ownershipType: values.ownershipType || undefined,
     status: values.status,
     statusNote: text(values.statusNote),
     locality: text(values.locality),
@@ -293,19 +289,6 @@ export function StationForm({
           {routes.data?.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          id="st-ownership"
-          label="نوع الملكية (اختياري)"
-          value={values.ownershipType}
-          onChange={(v) => set('ownershipType', v as StationFormValues['ownershipType'])}
-        >
-          <option value="">— غير محدَّد —</option>
-          {Object.entries(OWNERSHIP_TYPE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
             </option>
           ))}
         </SelectField>

@@ -3,7 +3,7 @@ import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLengt
 import { Transform } from 'class-transformer';
 import { IsOptionalLibyanMobile } from '../../common/validators/shared-field-checks';
 import { normalizePhoneValue } from '../../common/validators/phone-transform';
-import { FuelType, StationOwnershipType, StationStatus } from '@prisma/client';
+import { FuelType, StationStatus } from '@prisma/client';
 
 export class UpdateStationDto {
   @ApiProperty({ required: false })
@@ -43,11 +43,6 @@ export class UpdateStationDto {
   @IsOptional()
   @IsString()
   statusNote?: string;
-
-  @ApiProperty({ enum: StationOwnershipType, required: false })
-  @IsOptional()
-  @IsEnum(StationOwnershipType)
-  ownershipType?: StationOwnershipType;
 
   @ApiProperty({ required: false })
   @IsOptional()

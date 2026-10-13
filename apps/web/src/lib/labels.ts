@@ -125,18 +125,6 @@ export function stationStatusLabel(status: string | null | undefined): string {
   return STATION_STATUS_LABELS[status] ?? status;
 }
 
-// Station.ownershipType (Prisma enum StationOwnershipType) — fixed,
-// two-value, not Settings-managed (see the schema's own comment on why).
-export const OWNERSHIP_TYPE_LABELS: Record<string, string> = {
-  GOVERNMENT: 'حكومية',
-  PRIVATE: 'خاصة',
-};
-
-export function ownershipTypeLabel(ownershipType: string | null | undefined): string {
-  if (!ownershipType) return '—';
-  return OWNERSHIP_TYPE_LABELS[ownershipType] ?? ownershipType;
-}
-
 // Fuel types (FuelType — PETROL_95 / DIESEL / KEROSENE).
 export const FUEL_TYPE_LABELS: Record<string, string> = {
   PETROL_95: 'بنزين 95',

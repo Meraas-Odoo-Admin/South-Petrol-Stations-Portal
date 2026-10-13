@@ -21,6 +21,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 // yet, which stay visible so that recording at one fails with the fill-up
 // screen's clear "no municipality" message instead of the station silently
 // vanishing. Fill-ups at either kind are refused by FillUpsService.
+// The fuel types a station sells, in a stable order, for the audit trail.
+function soldFuelTypes(rows: Array<{ fuelType: string; isAvailable: boolean }>): string[] {
+  return rows
+    .filter((r) => r.isAvailable)
+    .map((r) => r.fuelType)
+    .sort();
+}
+
 @Injectable()
 export class StationsService {
   constructor(
@@ -168,7 +176,6 @@ export class StationsService {
     if (query.municipalityId) and.push({ municipalityId: query.municipalityId });
     if (query.companyId) and.push({ companyId: query.companyId });
     if (query.status) and.push({ status: query.status });
-    if (query.ownershipType) and.push({ ownershipType: query.ownershipType });
     if (query.locality?.trim()) and.push({ locality: { contains: query.locality.trim(), mode: 'insensitive' } });
     if (query.q?.trim()) {
       const q = query.q.trim();
@@ -367,8 +374,18 @@ export class StationsService {
           action: 'UPDATE',
           entityType: 'Station',
           entityId: station.id,
-          oldValue: { name: before.name, status: before.status },
-          newValue: { name: station.name, status: station.status },
+          // A change of the fuel types a station sells is always visible in the
+          // audit trail, by who and from what to what (client decision, #62).
+          oldValue: {
+            name: before.name,
+            status: before.status,
+            ...(fuelTypes ? { fuelTypes: soldFuelTypes(before.fuelAvailability) } : {}),
+          },
+          newValue: {
+            name: station.name,
+            status: station.status,
+            ...(fuelTypes ? { fuelTypes: soldFuelTypes(station.fuelAvailability) } : {}),
+          },
         },
         tx,
       );

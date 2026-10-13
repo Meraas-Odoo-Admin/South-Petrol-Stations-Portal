@@ -3,7 +3,7 @@ import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLengt
 import { Transform } from 'class-transformer';
 import { IsOptionalLibyanMobile } from '../../common/validators/shared-field-checks';
 import { normalizePhoneValue } from '../../common/validators/phone-transform';
-import { FuelType, StationOwnershipType, StationStatus } from '@prisma/client';
+import { FuelType, StationStatus } from '@prisma/client';
 
 export class CreateStationDto {
   // Auto-generated ("STN-######") when omitted, same pattern as
@@ -69,11 +69,6 @@ export class CreateStationDto {
   @IsOptional()
   @IsString()
   statusNote?: string;
-
-  @ApiProperty({ enum: StationOwnershipType, required: false })
-  @IsOptional()
-  @IsEnum(StationOwnershipType)
-  ownershipType?: StationOwnershipType;
 
   @ApiProperty({ required: false })
   @IsOptional()

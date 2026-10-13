@@ -26,8 +26,6 @@ export interface StationRow {
   locality: string | null;
   status: StationStatus;
   statusNote: string | null;
-  ownershipAsWritten: string;
-  ownershipType: 'GOVERNMENT' | 'PRIVATE' | null;
   supervisorName: string | null;
   supervisorPhone: string | null;
   operatorName: string | null;
@@ -90,16 +88,8 @@ export function parseStationRows(csvText: string): ParseResult {
       return;
     }
 
-    // «خاصة» -> PRIVATE. «مملوكة» is deliberately left empty: it may mean
-    // company-owned rather than government, which is a question for the client.
-    const ownershipAsWritten = blank(rec['ownership_as_written']) ?? '';
-    let ownershipType: StationRow['ownershipType'] = null;
-    if (ownershipAsWritten === 'خاصة') ownershipType = 'PRIVATE';
-    else if (ownershipAsWritten !== '') {
-      warnings.push(
-        `Line ${line} (${company} / ${stationNumber}, ${name}): ownership «${ownershipAsWritten}» left empty - client question.`,
-      );
-    }
+    // Ownership (خاصة / مملوكة) is not used by the system: the column, if the file
+    // has one, is ignored (client decision, OPEN_ITEMS #62).
 
     const phone = (raw: string | null, label: string): string | null => {
       if (!raw) return null;
@@ -126,8 +116,6 @@ export function parseStationRows(csvText: string): ParseResult {
       locality: blank(rec['locality']),
       status,
       statusNote: blank(rec['status_note']),
-      ownershipAsWritten,
-      ownershipType,
       supervisorName: blank(rec['supervisor_name']),
       supervisorPhone: phone(blank(rec['supervisor_phone']), 'supervisor phone'),
       operatorName: blank(rec['operator_name']),
@@ -201,8 +189,7 @@ export async function importStations(
 
         // The CSV is the source for what it carries. A blank cell never wipes a
         // value that is already there (a manager may have filled it in since);
-        // only the status and, for any written ownership other than «خاصة»
-        // (i.e. «مملوكة»), the ownership are always written.
+        // only the status is always written.
         const data: {
           name: string;
           municipalityId: string;
@@ -210,7 +197,6 @@ export async function importStations(
           statusNote: string | null;
           operatorSameAsSupervisor: boolean;
           locality?: string | null;
-          ownershipType?: 'GOVERNMENT' | 'PRIVATE' | null;
           supervisorName?: string | null;
           supervisorPhone?: string | null;
           operatorName?: string | null;
@@ -239,7 +225,6 @@ export async function importStations(
         assign('supervisorPhone', row.supervisorPhone);
         assign('operatorName', row.operatorName);
         assign('operatorPhone', row.operatorPhone);
-        if (row.ownershipAsWritten !== '' || options.clearBlanks) data.ownershipType = row.ownershipType;
 
         if (row.checkNote) {
           report.checkNotes.push({ company: row.company, stationNumber: row.stationNumber, name: row.name, note: row.checkNote });

@@ -11,8 +11,6 @@ export interface LookupRef {
   name: string;
 }
 
-export type StationOwnershipType = 'GOVERNMENT' | 'PRIVATE';
-
 // Registration pivot, phase 1: a municipality is PREPARING (admin-only,
 // no fill-ups) or LIVE, and carries its one security authority — a
 // station's authority is read from here, never stored per station.
@@ -47,7 +45,6 @@ export interface StationBasicInfo {
   route: LookupRef | null;
   status: string;
   statusNote: string | null;
-  ownershipType: StationOwnershipType | null;
   supervisorName: string | null;
   supervisorPhone: string | null;
   operatorSameAsSupervisor: boolean;
