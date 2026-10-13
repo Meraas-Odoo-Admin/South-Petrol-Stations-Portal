@@ -64,6 +64,8 @@ async function spaGo(page: Page, to: string) {
 async function openSabha(adminPage: Page) {
   await spaGo(adminPage, '/admin/municipalities');
   await adminPage.locator('tr', { hasText: 'سبها' }).first().getByRole('link', { name: 'فتح' }).click();
+  // The stage dates are on the «الإعدادات» tab of the municipality page.
+  await adminPage.getByTestId('tab-settings').click();
   await expect(adminPage.getByRole('button', { name: 'تعديل التواريخ' })).toBeVisible();
 }
 

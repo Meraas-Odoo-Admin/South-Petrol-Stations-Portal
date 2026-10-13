@@ -1,3 +1,4 @@
+import { arabicCount } from '@fuel-tracking/shared-types';
 import type { PdfReport } from '../report-pdf/report-pdf.html';
 
 interface Headline {
@@ -35,15 +36,15 @@ export function headlineSentence(h: Headline): string {
     case 'NONE_REMAINING':
       return 'لا توجد مركبات بدون بطاقة بين من عبّأوا مؤخرًا.';
     case 'NO_ISSUANCE':
-      return `يوجد ${h.cardlessPlates} لوحة بدون بطاقة، ولم تُصدر مكاتب التسجيل بطاقات أولى مؤخرًا، فلا يمكن تقدير المدة.`;
+      return `يوجد ${arabicCount(h.cardlessPlates, 'plate')} بدون بطاقة، ولم تُصدر مكاتب التسجيل بطاقات أولى مؤخرًا، فلا يمكن تقدير المدة.`;
     case 'NO_DEADLINE':
-      return `تقريبًا ${h.daysNeeded} يومًا لازمة لإصدار البطاقات لـ ${h.cardlessPlates} لوحة بدون بطاقة، بمعدل ${h.averagePerDay} بطاقة يوميًا. لم يُحدَّد موعد نهائي بعد.`;
+      return `يحتاج إصدار البطاقات لـ ${arabicCount(h.cardlessPlates, 'plate', { oblique: true })} بدون بطاقة تقريبًا ${arabicCount(h.daysNeeded ?? 0, 'day')}، بمعدل ${arabicCount(h.averagePerDay ?? 0, 'card')} يوميًا. لم يُحدَّد موعد نهائي بعد.`;
     case 'DEADLINE_PASSED':
-      return `انقضى الموعد النهائي، ولا تزال ${h.cardlessPlates} لوحة بدون بطاقة.`;
+      return `انقضى الموعد النهائي، ولا تزال ${arabicCount(h.cardlessPlates, 'plate')} بدون بطاقة.`;
     case 'ON_TRACK':
-      return `تقريبًا ${h.daysNeeded} يومًا لازمة مقابل ${h.daysLeft} يومًا متبقية: الموعد واقعي بالمعدل الحالي (${h.averagePerDay} بطاقة يوميًا).`;
+      return `يحتاج التسجيل تقريبًا ${arabicCount(h.daysNeeded ?? 0, 'day')} والمتبقي ${arabicCount(h.daysLeft ?? 0, 'day')}: الموعد واقعي بالمعدل الحالي (${arabicCount(h.averagePerDay ?? 0, 'card')} يوميًا).`;
     default:
-      return `تقريبًا ${h.daysNeeded} يومًا لازمة مقابل ${h.daysLeft} يومًا متبقية: الموعد غير واقعي بالمعدل الحالي، وقد تبقى نحو ${h.shortfall} لوحة بدون بطاقة.`;
+      return `يحتاج التسجيل تقريبًا ${arabicCount(h.daysNeeded ?? 0, 'day')} والمتبقي ${arabicCount(h.daysLeft ?? 0, 'day')}: الموعد غير واقعي بالمعدل الحالي، وقد تبقى نحو ${arabicCount(h.shortfall ?? 0, 'plate')} بدون بطاقة.`;
   }
 }
 
@@ -54,7 +55,7 @@ export function readinessPdf(result: ReadinessResult): PdfReport {
       title: 'التقدير (تقدير وليس حسابًا مؤكدًا)',
       headers: ['الخلاصة'],
       rows: [[headlineSentence(result.headline)]],
-      footnote: `الحساب: لوحات مميّزة عُبّئت بدون بطاقة في آخر ${result.headline.windowDays} يومًا ولا بطاقة فعّالة لها ÷ متوسط البطاقات الأولى المُصدرة يوميًا في المدة نفسها، مقرَّبًا للأعلى.`,
+      footnote: `الحساب: لوحات مميّزة عُبّئت بدون بطاقة في آخر ${arabicCount(result.headline.windowDays, 'day', { oblique: true })} ولا بطاقة فعّالة لها ÷ متوسط البطاقات الأولى المُصدرة يوميًا في المدة نفسها، مقرَّبًا للأعلى.`,
     });
   }
   if (result.sees.stations !== 'none') {

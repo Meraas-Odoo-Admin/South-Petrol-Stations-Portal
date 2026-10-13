@@ -110,7 +110,7 @@ export class ReportsService {
     // type (a pump warning, never a block) - supervisors see how many.
     const fuelMismatchCount = await this.prisma.fillUpTransaction.count({ where: { ...where, fuelMismatch: true } });
 
-    const [aggregate, exceptionsPending, exceptionsApproved, totalBeforeFilters, rows] = await Promise.all([
+    const [aggregate, exceptionsPending, exceptionsApproved, totalBeforeFilters, rows, byFuelRows] = await Promise.all([
       this.prisma.fillUpTransaction.aggregate({
         where,
         _count: { _all: true },
@@ -126,8 +126,19 @@ export class ReportsService {
       this.prisma.fillUpTransaction.findMany({
         where,
         include: FILL_UP_HISTORY_INCLUDE,
-        orderBy: { occurredAt: 'desc' },
-        take: 200,
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        // The screen asks for a page (skip/take); the export asks for none and
+        // gets the first 200 rows, as before.
+        skip: query.skip ?? 0,
+        take: query.take ?? 200,
+      }),
+      // The chart's counts come from the database, not from the rows of the
+      // page on screen.
+      this.prisma.fillUpTransaction.groupBy({
+        by: ['fuelType'],
+        where,
+        _count: { _all: true },
+        _sum: { quantityLiters: true },
       }),
     ]);
 
@@ -142,6 +153,12 @@ export class ReportsService {
       exceptionsPending,
       exceptionsApproved,
       totalBeforeFilters,
+      rowsTotal: aggregate._count._all,
+      byFuelType: byFuelRows.map((r) => ({
+        fuelType: r.fuelType,
+        count: r._count._all,
+        liters: r._sum.quantityLiters?.toNumber() ?? 0,
+      })),
       rows,
     };
   }

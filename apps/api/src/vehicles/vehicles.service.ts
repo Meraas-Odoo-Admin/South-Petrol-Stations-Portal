@@ -353,7 +353,7 @@ export class VehiclesService {
   // aggregate join this round didn't build — see VehicleSortField's own
   // comment and docs/OPEN_ITEMS.md; requesting it isn't possible yet
   // since the DTO's enum doesn't expose it, not silently ignored.
-  findAll(query: FindVehiclesQueryDto) {
+  async findAll(query: FindVehiclesQueryDto) {
     const ownerIdentityFilter: Record<OwnerIdentityStatusFilter, object> = {
       [OwnerIdentityStatusFilter.VERIFIED]: {
         owner: { identityType: { in: ['NATIONAL_ID', 'ADMINISTRATIVE_ID'] } },
@@ -367,8 +367,7 @@ export class VehiclesService {
       [VehicleSortField.CURRENT_PLATE]: { currentPlate: 'asc' },
     };
 
-    return this.prisma.vehicle.findMany({
-      where: {
+    const where: Prisma.VehicleWhereInput = {
         internalCode: query.internalCode ? { contains: query.internalCode } : undefined,
         // Plates match on the normalized form too, so a plate typed with a
         // different separator or in Arabic-Indic digits still finds it.
@@ -406,26 +405,36 @@ export class VehiclesService {
               { owner: { identityNumber: { contains: query.search } } },
             ]
           : undefined,
-      },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            fullName: true,
-            identityType: true,
-            identityNumber: true,
-            phone: true,
-            ownerKind: true,
-            responsibleDriverName: true,
-            responsibleDriverPhone: true,
-          },
+    };
+    const include = {
+      owner: {
+        select: {
+          id: true,
+          fullName: true,
+          identityType: true,
+          identityNumber: true,
+          phone: true,
+          ownerKind: true,
+          responsibleDriverName: true,
+          responsibleDriverPhone: true,
         },
-        vehicleType: { select: { id: true, name: true } },
       },
-      skip: query.skip,
-      take: query.take,
-      orderBy: sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT],
-    });
+      vehicleType: { select: { id: true, name: true } },
+    } satisfies Prisma.VehicleInclude;
+    const orderBy = sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT];
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 50;
+
+    // `paged`: one page and the total («1–20 من 340»); otherwise the bare page
+    // of rows the pickers use. Either way, never more than `take` (<= 100).
+    if (query.paged) {
+      const [total, items] = await Promise.all([
+        this.prisma.vehicle.count({ where }),
+        this.prisma.vehicle.findMany({ where, include, skip, take, orderBy }),
+      ]);
+      return { total, skip, take, items };
+    }
+    return this.prisma.vehicle.findMany({ where, include, skip, take, orderBy });
   }
 
   async findOne(id: string) {

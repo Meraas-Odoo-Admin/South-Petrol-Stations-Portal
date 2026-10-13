@@ -26,14 +26,6 @@ export class UsersService {
     private readonly rbac: RbacService,
   ) {}
 
-  async findAll() {
-    const users = await this.prisma.user.findMany({
-      include: USER_INCLUDE,
-      orderBy: { createdAt: 'asc' },
-    });
-    return users.map(toSafeUser);
-  }
-
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { LookupQueryDto } from '../common/dto/lookup-query.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -20,8 +21,8 @@ export class CompaniesController {
 
   @RequirePermission('companies:read')
   @Get()
-  findAll() {
-    return this.companies.findAll();
+  findAll(@Query() query: LookupQueryDto) {
+    return this.companies.findAll(query.q);
   }
 
   @RequirePermission('companies:read')

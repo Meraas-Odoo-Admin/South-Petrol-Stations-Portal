@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { arabicCount } from '@fuel-tracking/shared-types';
 import { apiClient } from '../lib/apiClient';
 import { Icon, ICONS } from './icons';
 
@@ -18,14 +19,16 @@ interface NotificationItem {
   link: string | null;
   readAt: string | null;
   createdAt: string;
+  // Identical events collapsed into this row.
+  count?: number;
 }
 interface NotificationList {
   unreadCount: number;
   items: NotificationItem[];
 }
 
-const RELATIVE = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
-const ABSOLUTE = new Intl.DateTimeFormat('ar-LY', {
+const RELATIVE = new Intl.RelativeTimeFormat('ar-u-nu-latn', { numeric: 'auto' });
+const ABSOLUTE = new Intl.DateTimeFormat('ar-u-nu-latn', {
   timeZone: 'Africa/Tripoli',
   day: 'numeric',
   month: 'short',
@@ -44,8 +47,32 @@ export function timeAgo(iso: string, now = Date.now()): string {
   return ABSOLUTE.format(new Date(iso));
 }
 
+const PANEL_WIDTH = 400;
+const EDGE = 12;
+const PHONE_BREAKPOINT = 1024;
+
+// Where the desktop panel goes: under the bell, towards the page interior, and
+// always inside the viewport. The bell sits at the far left of the page in RTL,
+// so the panel opens rightwards from its left edge; if the bell is in the right
+// half it opens leftwards from its right edge. Clamped either way, so it can
+// never run off a screen edge (it used to overflow the left edge).
+export function panelPlacement(
+  rect: { left: number; right: number; bottom: number },
+  viewport: { width: number; height: number },
+): { left: number; top: number; width: number; maxHeight: number } {
+  const width = Math.min(PANEL_WIDTH, viewport.width - EDGE * 2);
+  const bellInLeftHalf = rect.left + (rect.right - rect.left) / 2 < viewport.width / 2;
+  const wanted = bellInLeftHalf ? rect.left : rect.right - width;
+  const left = Math.max(EDGE, Math.min(wanted, viewport.width - EDGE - width));
+  const top = rect.bottom + 8;
+  return { left, top, width, maxHeight: Math.max(240, viewport.height - top - EDGE) };
+}
+
 export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' }) {
+  void align; // placement is computed from the bell's position now
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<ReturnType<typeof panelPlacement> | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -67,6 +94,20 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
     mutationFn: async () => apiClient.post('/notifications/read-all'),
     onSuccess: refresh,
   });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      if (window.innerWidth >= PHONE_BREAKPOINT && buttonRef.current) {
+        setPlacement(panelPlacement(buttonRef.current.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight }));
+      } else {
+        setPlacement(null); // phone: a full-width sheet, styled by class
+      }
+    }
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +137,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         data-testid="notification-bell"
         aria-label={unread > 0 ? `الإشعارات: ${unread} غير مقروءة` : 'الإشعارات'}
@@ -116,12 +158,23 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
       </button>
 
       {open && (
+        <>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-40 bg-ink/30 lg:hidden"
+        />
         <div
           role="dialog"
           aria-label="الإشعارات"
           data-testid="notification-panel"
-          className={`fixed inset-x-3 top-16 z-50 max-h-[75vh] overflow-hidden rounded-md bg-surface shadow-lg lg:absolute lg:inset-x-auto lg:top-12 lg:w-[400px] ${
-            align === 'end' ? 'lg:end-0' : 'lg:start-0'
+          style={placement ?? undefined}
+          className={`fixed z-50 flex flex-col overflow-hidden bg-surface shadow-lg ${
+            placement
+              ? 'rounded-md'
+              : 'inset-x-0 bottom-0 max-h-[80vh] rounded-t-lg pb-[env(safe-area-inset-bottom)]'
           }`}
         >
           <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
@@ -137,7 +190,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
             </button>
           </div>
 
-          <div className="max-h-[calc(75vh-64px)] overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {query.isLoading && <p className="p-5 text-center text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
             {query.isError && (
               <p role="alert" className="p-5 text-center text-[15px] font-bold text-danger-dark lg:text-[13px]">
@@ -165,6 +218,11 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
                         </span>
                       )}
                       <span className="text-[16px] font-bold leading-snug text-ink lg:text-[14px]">{item.title}</span>
+                      {(item.count ?? 1) > 1 && (
+                        <span className="shrink-0 rounded-full bg-surface-alt px-2 text-[14px] font-bold text-ink-soft lg:text-[12px]">
+                          تكرّر {arabicCount(item.count ?? 1, 'time')}
+                        </span>
+                      )}
                     </span>
                     <span className="mt-1 block text-[15px] leading-[1.7] text-ink-soft lg:text-[13px]">{item.body}</span>
                     <span className="mt-1 flex items-center justify-between gap-2 text-[14px] text-ink-soft lg:text-[12px]">
@@ -177,6 +235,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
             </ul>
           </div>
         </div>
+        </>
       )}
     </div>
   );

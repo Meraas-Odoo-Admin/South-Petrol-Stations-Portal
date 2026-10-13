@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { LookupSearch, useLookup } from '../../lib/useLookup';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient';
 import { formatLicensePlate, normalizePlateSearchTerm } from '../../lib/libyanFormats';
-import { PrevNext } from '../../components/PrevNext';
+import { Pagination } from '../../components/Pagination';
+import { usePageParam } from '../../lib/usePageParam';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
@@ -65,7 +67,8 @@ export function VehiclesListPage() {
   // (/registration), used at registration stations only — this list just
   // links there for those who can register.
   const canRegisterVehicles = hasPermission('vehicles:manage') && hasPermission('registration_stations:read');
-  const [skip, setSkip] = useState(0);
+  // The page is in the address (?page=2): refresh and back keep your place.
+  const { skip, setSkip } = usePageParam(TAKE);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
@@ -73,25 +76,32 @@ export function VehiclesListPage() {
   const [ownerStatusFilter, setOwnerStatusFilter] = useState<OwnerIdentityStatusFilter | ''>('');
   const [sort, setSort] = useState<VehicleSortField>('CREATED_AT');
 
-  const { data: vehicleTypes } = useQuery({
-    queryKey: ['vehicle-types'],
-    queryFn: async () => (await apiClient.get<{ id: string; name: string; isActive: boolean }[]>('/vehicle-types')).data,
-  });
+  const typeLookup = useLookup<{ id: string; name: string; isActive: boolean }>('/vehicle-types', 'vehicle-types');
+  const vehicleTypes = typeLookup.items;
 
+  // The search settles 300 ms after typing. The page goes back to the first
+  // only when the search text really changed - not when the list is merely
+  // opened (that reset used to navigate, on a timer, after the person had left).
+  const lastSearch = useRef('');
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebounced(normalizePlateSearchTerm(query));
-      setSkip(0);
+      const next = normalizePlateSearchTerm(query);
+      setDebounced(next);
+      if (next !== lastSearch.current) {
+        lastSearch.current = next;
+        setSkip(0);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data: pageData, isLoading, isError } = useQuery({
     queryKey: ['vehicles', 'list', skip, debounced, brandFilter, vehicleTypeFilter, ownerStatusFilter, sort],
     queryFn: async () =>
       (
-        await apiClient.get<VehicleBasicInfo[]>('/vehicles', {
+        await apiClient.get<{ total: number; items: VehicleBasicInfo[] }>('/vehicles', {
           params: {
+            paged: true,
             skip,
             take: TAKE,
             search: debounced || undefined,
@@ -131,6 +141,8 @@ export function VehiclesListPage() {
   // Round 11 item 2: filtering moved server-side (see the useQuery above) —
   // `filtered` is now just `data` itself, kept as the JSX's own local name
   // rather than renaming every usage below.
+  const data = pageData?.items;
+  const totalVehicles = pageData?.total ?? 0;
   const filtered = data;
 
   const selectClass =
@@ -140,7 +152,7 @@ export function VehiclesListPage() {
     <div>
       <PageHeader
         title="المركبات"
-        subtitle={data ? `${data.length} مركبة في هذه الصفحة` : undefined}
+        subtitle={pageData ? `${totalVehicles.toLocaleString('en-US')} مركبة` : undefined}
         actions={
           canRegisterVehicles ? (
             <Link to="/registration">
@@ -234,6 +246,7 @@ export function VehiclesListPage() {
               </option>
             ))}
         </select>
+        <LookupSearch id="vl-type-search" q={typeLookup.q} onChange={typeLookup.setQ} capped={typeLookup.capped} />
         <select
           value={ownerStatusFilter}
           onChange={(e) => {
@@ -383,7 +396,7 @@ export function VehiclesListPage() {
             )}
           </div>
 
-          <PrevNext skip={skip} take={TAKE} rowCount={data?.length ?? 0} onSkipChange={setSkip} />
+          <Pagination skip={skip} take={TAKE} total={totalVehicles} onSkipChange={setSkip} alwaysShow={totalVehicles > 0} testId="vehicles-pager" />
         </>
       )}
     </div>

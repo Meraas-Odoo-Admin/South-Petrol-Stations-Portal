@@ -1,4 +1,5 @@
 import { VEHICLE_FUEL_TYPE_LABELS_AR } from '@fuel-tracking/shared-types';
+import { formatDate, formatDateTime } from '../../lib/dateFormat';
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -368,11 +369,11 @@ export function VehicleDetailPage() {
                       <LtrText>{formatLicensePlate(entry.plate)}</LtrText>
                     </td>
                     <td className="px-[18px] py-3">
-                      <CodeText>{new Date(entry.validFrom).toLocaleDateString('en-GB')}</CodeText>
+                      <CodeText>{formatDate(entry.validFrom)}</CodeText>
                     </td>
                     <td className="px-[18px] py-3">
                       {entry.validTo ? (
-                        <CodeText>{new Date(entry.validTo).toLocaleDateString('en-GB')}</CodeText>
+                        <CodeText>{formatDate(entry.validTo)}</CodeText>
                       ) : (
                         <StatusPill variant="ok">حاليًا سارية</StatusPill>
                       )}
@@ -417,7 +418,7 @@ export function VehicleDetailPage() {
                   {historyQuery.data.rows.map((row) => (
                     <tr key={row.id} className="border-b border-surface-alt last:border-0">
                       <td className="px-[18px] py-3">
-                        <CodeText>{new Date(row.occurredAt).toLocaleString('en-GB')}</CodeText>
+                        <CodeText>{formatDateTime(row.occurredAt)}</CodeText>
                       </td>
                       <td className="px-[18px] py-3">{row.station.internalCode}</td>
                       <td className="px-[18px] py-3">{row.vehicle?.owner?.fullName ?? '—'}</td>

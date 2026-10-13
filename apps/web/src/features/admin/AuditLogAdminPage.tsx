@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatShortDateTime } from '../../lib/dateFormat';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { Card, CardHeader } from '../../components/design/Card';
@@ -89,12 +90,7 @@ export function AuditLogAdminPage() {
                 <div className="w-24 shrink-0 pt-0.5">
                   <LtrText>
                     <span className="font-mono text-[13px] lg:text-[12px] font-semibold text-ink-faint">
-                      {new Date(row.createdAt).toLocaleString('en-GB', {
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatShortDateTime(row.createdAt)}
                     </span>
                   </LtrText>
                 </div>

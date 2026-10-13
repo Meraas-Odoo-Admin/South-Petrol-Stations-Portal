@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Municipality, Prisma } from '@prisma/client';
+import { Prisma, type Municipality } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -13,6 +13,38 @@ import {
 import { CreateMunicipalityDto } from './dto/create-municipality.dto';
 import { UpdateMunicipalityDto } from './dto/update-municipality.dto';
 import { ListMunicipalitiesQueryDto } from './dto/list-municipalities-query.dto';
+import { MunicipalityPeopleQueryDto, MunicipalityPlacesQueryDto } from './dto/municipality-lists-query.dto';
+import { PICKER_LIMIT, PageQueryDto, pageOf, type Paged } from '../common/dto/page-query.dto';
+
+export interface PlaceRow {
+  kind: 'STATION' | 'OFFICE';
+  id: string;
+  code: string;
+  name: string;
+  number: string | null;
+  company: string | null;
+  locality: string | null;
+  status: string;
+  archivedAt: Date | null;
+  address: string | null;
+}
+export interface PersonRow {
+  id: string;
+  fullName: string;
+  username: string;
+  isActive: boolean;
+  locked: boolean;
+  lastLoginAt: Date | null;
+  job: { id: string; name: string } | null;
+}
+export interface ActivityRow {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  createdAt: Date;
+  actorName: string | null;
+}
 
 // The name the security directorate of a municipality is created with. The
 // super admin may rename it afterwards.
@@ -139,6 +171,7 @@ export class MunicipalitiesService {
         _count: { select: { stations: true, registrationStations: true } },
       },
       orderBy: { name: 'asc' },
+      take: PICKER_LIMIT,
     });
     const dir = query.dir === 'desc' ? -1 : 1;
     const sorted = [...rows];
@@ -168,88 +201,224 @@ export class MunicipalitiesService {
     return municipality;
   }
 
-  // Everything about one municipality in one place: its stations and
-  // offices, its people (by job), its stage and dates and its activity.
+  // The municipality, its stage and dates, and COUNTS of what is in it (the
+  // lists themselves are paged: places(), people(), activity()).
   async overview(id: string, userId: string) {
     await this.assertCanRead(userId, id);
     const municipality = await this.findRaw(id);
 
-    const [stations, offices, people] = await Promise.all([
-      this.prisma.station.findMany({
-        where: { municipalityId: id },
-        select: { id: true, internalCode: true, name: true, stationNumber: true, status: true, archivedAt: true, company: { select: { name: true } } },
-        orderBy: { internalCode: 'asc' },
+    const [stationCount, officeCount, byJob, peopleTotal] = await Promise.all([
+      this.prisma.station.count({ where: { municipalityId: id, archivedAt: null } }),
+      this.prisma.registrationStation.count({ where: { municipalityId: id, archivedAt: null } }),
+      this.prisma.userRole.groupBy({
+        by: ['roleId'],
+        where: { user: this.peopleWhere(id) },
+        _count: { _all: true },
       }),
-      this.prisma.registrationStation.findMany({
-        where: { municipalityId: id },
-        select: { id: true, internalCode: true, name: true, status: true, archivedAt: true, address: true },
-        orderBy: { internalCode: 'asc' },
-      }),
+      this.prisma.user.count({ where: this.peopleWhere(id) }),
+    ]);
+    const roles = await this.prisma.role.findMany({
+      where: { id: { in: byJob.map((j) => j.roleId) } },
+      select: { id: true, name: true },
+    });
+    const roleName = new Map(roles.map((r) => [r.id, r.name]));
+
+    return {
+      municipality: this.present(municipality),
+      counts: { stations: stationCount, offices: officeCount, people: peopleTotal },
+      people: {
+        total: peopleTotal,
+        byJob: byJob
+          .map((j) => ({ roleId: j.roleId, name: roleName.get(j.roleId) ?? '', count: j._count._all }))
+          .sort((a, b) => b.count - a.count),
+      },
+    };
+  }
+
+  // The people of a municipality: its managers, and everyone with a station or
+  // office of it in their scope. Archived accounts are left out.
+  private peopleWhere(id: string): Prisma.UserWhereInput {
+    return {
+      archivedAt: null,
+      OR: [
+        { municipalityScope: { some: { municipalityId: id } } },
+        { stationScope: { some: { station: { municipalityId: id } } } },
+        { registrationStationScope: { some: { registrationStation: { municipalityId: id } } } },
+      ],
+    };
+  }
+
+  // «المحطات والمكاتب»: petrol stations and registration offices in ONE list,
+  // paged, searched, filtered and sorted in the database (a parameterised UNION;
+  // sort columns come from a fixed map, never from the request).
+  async places(id: string, userId: string, query: MunicipalityPlacesQueryDto): Promise<Paged<PlaceRow>> {
+    await this.assertCanRead(userId, id);
+    await this.findRaw(id);
+    const { skip, take } = pageOf(query);
+    const q = query.q?.trim();
+    const locality = query.locality?.trim();
+    const archivedOnly = query.status === 'ARCHIVED';
+    const like = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+    const stationWhere: Prisma.Sql[] = [Prisma.sql`s."municipalityId" = ${id}`];
+    const officeWhere: Prisma.Sql[] = [Prisma.sql`r."municipalityId" = ${id}`];
+    if (q) {
+      stationWhere.push(
+        Prisma.sql`(s."name" ILIKE ${like(q)} OR s."internalCode" ILIKE ${like(q)} OR s."stationNumber" ILIKE ${like(q)})`,
+      );
+      officeWhere.push(Prisma.sql`(r."name" ILIKE ${like(q)} OR r."internalCode" ILIKE ${like(q)})`);
+    }
+    if (locality) {
+      stationWhere.push(Prisma.sql`s."locality" ILIKE ${like(locality)}`);
+      officeWhere.push(Prisma.sql`r."locality" ILIKE ${like(locality)}`);
+    }
+    stationWhere.push(archivedOnly ? Prisma.sql`s."archivedAt" IS NOT NULL` : Prisma.sql`s."archivedAt" IS NULL`);
+    officeWhere.push(archivedOnly ? Prisma.sql`r."archivedAt" IS NOT NULL` : Prisma.sql`r."archivedAt" IS NULL`);
+    if (query.status && !archivedOnly) {
+      stationWhere.push(Prisma.sql`s."status"::text = ${query.status}`);
+      officeWhere.push(Prisma.sql`r."status"::text = ${query.status}`);
+    }
+    if (query.companyId) stationWhere.push(Prisma.sql`s."companyId" = ${query.companyId}`);
+
+    const stationSelect = Prisma.sql`
+      SELECT 'STATION' AS "kind", s."id", s."internalCode" AS "code", s."name", s."stationNumber" AS "number",
+             c."name" AS "company", s."locality", s."status"::text AS "status", s."archivedAt", NULL::text AS "address"
+      FROM "Station" s JOIN "Company" c ON c."id" = s."companyId"
+      WHERE ${Prisma.join(stationWhere, ' AND ')}`;
+    const officeSelect = Prisma.sql`
+      SELECT 'OFFICE' AS "kind", r."id", r."internalCode" AS "code", r."name", NULL::text AS "number",
+             NULL::text AS "company", r."locality", r."status"::text AS "status", r."archivedAt", r."address"
+      FROM "RegistrationStation" r
+      WHERE ${Prisma.join(officeWhere, ' AND ')}`;
+
+    // A company filter only ever matches stations (an office has no company).
+    const wantStations = query.kind !== 'OFFICE';
+    const wantOffices = query.kind !== 'STATION' && !query.companyId;
+    if (!wantStations && !wantOffices) return { total: 0, skip, take, items: [] };
+    const union =
+      wantStations && wantOffices
+        ? Prisma.sql`${stationSelect} UNION ALL ${officeSelect}`
+        : wantStations
+          ? stationSelect
+          : officeSelect;
+
+    const dir = query.dir === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`;
+    const column = {
+      name: Prisma.sql`"name"`,
+      code: Prisma.sql`"code"`,
+      type: Prisma.sql`"kind"`,
+      status: Prisma.sql`"status"`,
+      company: Prisma.sql`"company"`,
+      locality: Prisma.sql`"locality"`,
+    }[query.sort ?? 'code'];
+    const orderBy = Prisma.sql`ORDER BY ${column} ${dir} NULLS LAST, "code" ASC`;
+
+    const [rows, count] = await Promise.all([
+      this.prisma.$queryRaw<PlaceRow[]>`SELECT * FROM (${union}) p ${orderBy} LIMIT ${take} OFFSET ${skip}`,
+      this.prisma.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM (${union}) p`,
+    ]);
+    return { total: Number(count[0]?.n ?? 0), skip, take, items: rows };
+  }
+
+  // «الأشخاص»: a page of the municipality's people.
+  async people(id: string, userId: string, query: MunicipalityPeopleQueryDto): Promise<Paged<PersonRow>> {
+    await this.assertCanRead(userId, id);
+    await this.findRaw(id);
+    const { skip, take } = pageOf(query);
+    const now = new Date();
+    const and: Prisma.UserWhereInput[] = [this.peopleWhere(id)];
+    if (query.q?.trim()) {
+      const q = query.q.trim();
+      and.push({
+        OR: [
+          { fullName: { contains: q, mode: 'insensitive' } },
+          { username: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (query.roleId) and.push({ roles: { some: { roleId: query.roleId } } });
+    if (query.status === 'deactivated') and.push({ isActive: false });
+    if (query.status === 'locked') and.push({ isActive: true, lockedUntil: { gt: now } });
+    if (query.status === 'active') {
+      and.push({ isActive: true, OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }] });
+    }
+    const dir = query.dir === 'desc' ? 'desc' : 'asc';
+    const orderBy: Prisma.UserOrderByWithRelationInput[] =
+      query.sort === 'username'
+        ? [{ username: dir }, { id: 'asc' }]
+        : query.sort === 'lastLogin'
+          ? [{ lastLoginAt: { sort: dir, nulls: 'last' } }, { id: 'asc' }]
+          : [{ fullName: dir }, { id: 'asc' }];
+    const where: Prisma.UserWhereInput = { AND: and };
+    const [total, rows] = await Promise.all([
+      this.prisma.user.count({ where }),
       this.prisma.user.findMany({
-        where: {
-          archivedAt: null,
-          OR: [
-            { municipalityScope: { some: { municipalityId: id } } },
-            { stationScope: { some: { station: { municipalityId: id } } } },
-            { registrationStationScope: { some: { registrationStation: { municipalityId: id } } } },
-          ],
-        },
+        where,
+        orderBy,
+        skip,
+        take,
         select: {
           id: true,
           fullName: true,
           username: true,
           isActive: true,
+          lockedUntil: true,
           lastLoginAt: true,
           roles: { select: { role: { select: { id: true, name: true } } } },
         },
-        orderBy: { fullName: 'asc' },
       }),
     ]);
-
-    const byJob = new Map<string, { roleId: string; name: string; count: number }>();
-    for (const person of people) {
-      const job = person.roles[0]?.role;
-      if (!job) continue;
-      const entry = byJob.get(job.id) ?? { roleId: job.id, name: job.name, count: 0 };
-      entry.count += 1;
-      byJob.set(job.id, entry);
-    }
-
-    const stationIds = stations.map((s) => s.id);
-    const officeIds = offices.map((o) => o.id);
-    const userIds = people.map((p) => p.id);
-    const activity = await this.prisma.auditLog.findMany({
-      where: {
-        action: { not: 'LOGIN' },
-        OR: [
-          { entityType: 'Municipality', entityId: id },
-          { entityType: 'Station', entityId: { in: stationIds } },
-          { entityType: 'RegistrationStation', entityId: { in: officeIds } },
-          { entityType: 'User', entityId: { in: userIds } },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 30,
-      include: { user: { select: { fullName: true } } },
-    });
-
     return {
-      municipality: this.present(municipality),
-      stations,
-      offices,
-      people: {
-        total: people.length,
-        byJob: [...byJob.values()],
-        items: people.slice(0, 200).map((p) => ({
-          id: p.id,
-          fullName: p.fullName,
-          username: p.username,
-          isActive: p.isActive,
-          lastLoginAt: p.lastLoginAt,
-          job: p.roles[0]?.role ?? null,
-        })),
-      },
-      activity: activity.map((row) => ({
+      total,
+      skip,
+      take,
+      items: rows.map((p) => ({
+        id: p.id,
+        fullName: p.fullName,
+        username: p.username,
+        isActive: p.isActive,
+        locked: Boolean(p.lockedUntil && p.lockedUntil > now),
+        lastLoginAt: p.lastLoginAt,
+        job: p.roles[0]?.role ?? null,
+      })),
+    };
+  }
+
+  // «سجل النشاط»: what happened in the municipality, its stations, offices and
+  // people, newest first, a page at a time.
+  async activity(id: string, userId: string, query: PageQueryDto): Promise<Paged<ActivityRow>> {
+    await this.assertCanRead(userId, id);
+    await this.findRaw(id);
+    const { skip, take } = pageOf(query);
+    const [stations, offices, users] = await Promise.all([
+      this.prisma.station.findMany({ where: { municipalityId: id }, select: { id: true } }),
+      this.prisma.registrationStation.findMany({ where: { municipalityId: id }, select: { id: true } }),
+      this.prisma.user.findMany({ where: this.peopleWhere(id), select: { id: true } }),
+    ]);
+    const where: Prisma.AuditLogWhereInput = {
+      action: { not: 'LOGIN' },
+      OR: [
+        { entityType: 'Municipality', entityId: id },
+        { entityType: 'Station', entityId: { in: stations.map((s) => s.id) } },
+        { entityType: 'RegistrationStation', entityId: { in: offices.map((o) => o.id) } },
+        { entityType: 'User', entityId: { in: users.map((u) => u.id) } },
+      ],
+    };
+    const [total, rows] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
+        include: { user: { select: { fullName: true } } },
+      }),
+    ]);
+    return {
+      total,
+      skip,
+      take,
+      items: rows.map((row) => ({
         id: row.id,
         action: row.action,
         entityType: row.entityType,

@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
+import { downloadCsv } from '../../lib/csv';
+import { usePageParam } from '../../lib/usePageParam';
+import { Pagination } from '../../components/Pagination';
 import { useAuth } from '../auth/AuthProvider';
 import { Card } from '../../components/design/Card';
 import { Dialog } from '../../components/design/Dialog';
@@ -9,6 +12,8 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { FieldLabel, TextAreaField, TextField } from '../../components/design/TextField';
 import { Icon, ICONS } from '../../components/icons';
 import { CsvButton, ErrorNote, Loading, PdfButton, RangeBar, SectionTitle, dayLabel, errorText, num, stamp, useRange } from './common';
+const ENTRIES_PAGE_SIZE = 25;
+
 import type { EntriesResponse, ReconciliationResponse, StockEntryRow, StockPool, StockWindow } from './types';
 
 // Phase 4c, report 2: blank-card stock. Deliveries and physical counts are
@@ -82,9 +87,12 @@ export function CardStockPanel({ fixedOfficeId }: { fixedOfficeId?: string }) {
     queryKey: ['card-stock', 'reconciliation', params],
     queryFn: async () => (await apiClient.get<ReconciliationResponse>('/card-stock/reconciliation', { params })).data,
   });
+  const entriesPage = usePageParam(ENTRIES_PAGE_SIZE);
   const entries = useQuery({
-    queryKey: ['card-stock', 'entries', params],
-    queryFn: async () => (await apiClient.get<EntriesResponse>('/card-stock/entries', { params })).data,
+    queryKey: ['card-stock', 'entries', params, entriesPage.skip],
+    placeholderData: (prev) => prev,
+    queryFn: async () =>
+      (await apiClient.get<EntriesResponse>('/card-stock/entries', { params: { ...params, skip: entriesPage.skip, take: ENTRIES_PAGE_SIZE } })).data,
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['card-stock'] });
 
@@ -92,7 +100,19 @@ export function CardStockPanel({ fixedOfficeId }: { fixedOfficeId?: string }) {
   const csvRows = pools.flatMap((p) =>
     p.windows.map((w) => [poolTitle(p), stamp(w.from.at), stamp(w.to.at), w.from.quantity, w.received, w.to.quantity, w.used, w.prints.card, w.prints.test, w.prints.total, w.difference, w.status === 'OK' ? 'مطابق' : w.status === 'UNACCOUNTED' ? 'بطاقات غير مبرَّرة' : 'احتمال خطأ في العدّ']),
   );
-  const entryRows = (entries.data?.entries ?? []).map((e) => [stamp(e.occurredAt), KIND_LABEL[e.kind], e.registrationStation.name, e.desk?.name ?? 'المكتب كله', e.quantity, e.corrected ? e.originalQuantity : '', e.createdBy.fullName, e.note ?? '']);
+  // The CSV holds EVERY entry of the period, not just the page on screen: it is
+  // read page by page when the button is pressed.
+  async function allEntryRows(): Promise<Array<Array<string | number>>> {
+    const rows: Array<Array<string | number>> = [];
+    for (let skip = 0; skip < 5000; skip += 100) {
+      const res = (await apiClient.get<EntriesResponse>('/card-stock/entries', { params: { ...params, skip, take: 100 } })).data;
+      for (const e of res.entries) {
+        rows.push([stamp(e.occurredAt), KIND_LABEL[e.kind], e.registrationStation.name, e.desk?.name ?? 'المكتب كله', e.quantity, e.corrected ? e.originalQuantity : '', e.createdBy.fullName, e.note ?? '']);
+      }
+      if (res.entries.length < 100 || skip + 100 >= (res.total ?? 0)) break;
+    }
+    return rows;
+  }
 
   return (
     <div>
@@ -247,11 +267,25 @@ export function CardStockPanel({ fixedOfficeId }: { fixedOfficeId?: string }) {
             </ul>
           </Card>
           <div className="mt-3">
-            <CsvButton
-              filename={`card-stock-entries_${range.from}_${range.to}.csv`}
-              headers={['الوقت', 'النوع', 'المكتب', 'الشباك', 'الكمية', 'الكمية الأصلية (إن صُحّحت)', 'سجّله', 'ملاحظة']}
-              rows={entryRows}
-              label="تنزيل السجل CSV"
+            <PillButton
+              size="field"
+              variant="secondary"
+              onClick={async () =>
+                downloadCsv(
+                  `card-stock-entries_${range.from}_${range.to}.csv`,
+                  ['الوقت', 'النوع', 'المكتب', 'الشباك', 'الكمية', 'الكمية الأصلية (إن صُحّحت)', 'سجّله', 'ملاحظة'],
+                  await allEntryRows(),
+                )
+              }
+            >
+              تنزيل السجل CSV
+            </PillButton>
+            <Pagination
+              skip={entriesPage.skip}
+              take={ENTRIES_PAGE_SIZE}
+              total={entries.data.total ?? entries.data.entries.length}
+              onSkipChange={entriesPage.setSkip}
+              testId="card-stock-pager"
             />
           </div>
         </>

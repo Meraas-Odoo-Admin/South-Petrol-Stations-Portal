@@ -9,8 +9,8 @@ import type { ReactNode } from 'react';
 // not something a pure string formatter like formatLicensePlate can fix.
 export function LtrText({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span dir="ltr" className={`inline-block${className ? ` ${className}` : ''}`}>
+    <bdi dir="ltr" className={`inline-block${className ? ` ${className}` : ''}`}>
       {children}
-    </span>
+    </bdi>
   );
 }

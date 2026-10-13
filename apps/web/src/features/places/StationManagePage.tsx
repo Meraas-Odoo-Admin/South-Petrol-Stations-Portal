@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { usePageParam } from '../../lib/usePageParam';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
@@ -15,6 +16,7 @@ import {
   ActivityCard,
   ArchiveRestoreButton,
   ArchivedBanner,
+  ACTIVITY_PAGE_SIZE,
   usePlaceActivity,
   useStation,
   useMunicipalityList,
@@ -99,7 +101,8 @@ export function StationManagePage() {
   const { stationId } = useParams();
   const queryClient = useQueryClient();
   const station = useStation(stationId);
-  const activity = usePlaceActivity('stations', stationId);
+  const activityPage = usePageParam(ACTIVITY_PAGE_SIZE);
+  const activity = usePlaceActivity('stations', stationId, activityPage.skip);
   const [values, setValues] = useState<StationFormValues>(EMPTY_STATION);
   const [errors, setErrors] = useState<ReturnType<typeof validateStation>>({});
   const [saved, setSaved] = useState(false);
@@ -184,6 +187,7 @@ export function StationManagePage() {
 
       <ActivityCard
         activity={activity.data}
+        paging={{ skip: activityPage.skip, setSkip: activityPage.setSkip }}
         loading={activity.isLoading}
         summary={
           activity.data && (

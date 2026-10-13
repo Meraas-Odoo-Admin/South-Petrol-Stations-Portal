@@ -74,3 +74,28 @@ test('the shared rules give one answer to both sides', () => {
   assert.equal(shared.checkChassis('ABC123', false).ok, false);
   assert.equal(shared.checkChassis('ABC123', true).ok, true);
 });
+
+// UX round: one Arabic number-agreement helper for days, cards, liters ...
+test('arabicCount follows Arabic number agreement', () => {
+  const { arabicCount } = require(path.join(root, 'packages/shared-types/dist/index.js'));
+  assert.equal(arabicCount(0, 'day'), '0 يوم');
+  assert.equal(arabicCount(1, 'day'), 'يوم واحد');
+  assert.equal(arabicCount(2, 'day'), 'يومان');
+  assert.equal(arabicCount(3, 'day'), '3 أيام');
+  assert.equal(arabicCount(10, 'day'), '10 أيام');
+  assert.equal(arabicCount(11, 'day'), '11 يومًا');
+  assert.equal(arabicCount(25, 'day'), '25 يومًا');
+  assert.equal(arabicCount(103, 'day'), '103 أيام');
+  assert.equal(arabicCount(1, 'card'), 'بطاقة واحدة');
+  assert.equal(arabicCount(2, 'card'), 'بطاقتان');
+  assert.equal(arabicCount(4, 'card'), '4 بطاقات');
+  assert.equal(arabicCount(12, 'card'), '12 بطاقة');
+  assert.equal(arabicCount(1, 'liter'), 'لتر واحد');
+  assert.equal(arabicCount(1500, 'liter'), '1,500 لترًا');
+  assert.equal(arabicCount(1.5, 'liter'), '1.5 لتر');
+  assert.equal(arabicCount(5, 'station'), '5 محطات');
+  assert.equal(arabicCount(1, 'station'), 'محطة واحدة');
+  assert.equal(arabicCount(2, 'day', { oblique: true }), 'يومين');
+  assert.equal(arabicCount(4, 'employee', { oblique: true }), '4 موظفين');
+  assert.equal(arabicCount(4, 'employee'), '4 موظفون');
+});

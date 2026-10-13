@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { usePageParam } from '../../lib/usePageParam';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { FUEL_TYPE_LABELS, STATION_STATUS_LABELS, STATION_STATUS_VARIANT } from '../../lib/labels';
@@ -14,6 +15,7 @@ import {
   OFFICE_STATUS_LABELS,
   OFFICE_STATUS_VARIANT,
   useOfficeList,
+  ACTIVITY_PAGE_SIZE,
   usePlaceActivity,
   useStationList,
   type OfficeRow,
@@ -75,7 +77,8 @@ export function MyStationPage() {
 
 function MyStation({ station }: { station: StationRow }) {
   const queryClient = useQueryClient();
-  const activity = usePlaceActivity('stations', station.id);
+  const activityPage = usePageParam(ACTIVITY_PAGE_SIZE);
+  const activity = usePlaceActivity('stations', station.id, activityPage.skip);
   const available = station.fuelAvailability.filter((f) => f.isAvailable).map((f) => f.fuelType);
   const [fuelTypes, setFuelTypes] = useState<string[]>(available);
   const [saved, setSaved] = useState(false);
@@ -157,6 +160,7 @@ function MyStation({ station }: { station: StationRow }) {
 
       <ActivityCard
         activity={activity.data}
+        paging={{ skip: activityPage.skip, setSkip: activityPage.setSkip }}
         loading={activity.isLoading}
         summary={
           activity.data && (
@@ -180,7 +184,8 @@ export function MyOfficePage() {
   const [chosen, setChosen] = useState('');
   const list = offices.data ?? [];
   const office: OfficeRow | undefined = list.length === 1 ? list[0] : list.find((o) => o.id === chosen);
-  const activity = usePlaceActivity('registration-stations', office?.id);
+  const activityPage = usePageParam(ACTIVITY_PAGE_SIZE);
+  const activity = usePlaceActivity('registration-stations', office?.id, activityPage.skip);
 
   if (offices.isLoading) return <p className="p-4 text-[15px] text-ink-soft">جارٍ التحميل…</p>;
   if (offices.isError) return <Notice kind="error">تعذّر تحميل مكتبك. تأكد من الاتصال ثم أعد المحاولة.</Notice>;
@@ -241,6 +246,7 @@ export function MyOfficePage() {
 
           <ActivityCard
             activity={activity.data}
+            paging={{ skip: activityPage.skip, setSkip: activityPage.setSkip }}
             loading={activity.isLoading}
             summary={
               activity.data && (

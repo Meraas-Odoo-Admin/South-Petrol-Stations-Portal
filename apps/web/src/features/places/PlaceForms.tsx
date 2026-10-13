@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LookupSearch, useLookup } from '../../lib/useLookup';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { checkLibyanMobile } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { FUEL_TYPE_LABELS, STATION_STATUS_LABELS } from '../../lib/labels';
@@ -180,14 +181,10 @@ export function StationForm({
   const set = <K extends keyof StationFormValues>(key: K, value: StationFormValues[K]) =>
     onChange({ ...values, [key]: value });
 
-  const companies = useQuery({
-    queryKey: ['companies'],
-    queryFn: async () => (await apiClient.get<Lookup[]>('/companies')).data,
-  });
-  const routes = useQuery({
-    queryKey: ['routes'],
-    queryFn: async () => (await apiClient.get<Lookup[]>('/routes')).data,
-  });
+  const companyLookup = useLookup<Lookup>('/companies', 'companies');
+  const routeLookup = useLookup<Lookup>('/routes', 'routes');
+  const companies = { data: companyLookup.items };
+  const routes = { data: routeLookup.items };
   const municipalities = useMunicipalityList();
   const municipalityOptions = municipalities.data ?? [];
   const oneMunicipality = municipalityOptions.length === 1;
@@ -232,6 +229,7 @@ export function StationForm({
               </option>
             ))}
           </SelectField>
+          <LookupSearch id="st-company-search" q={companyLookup.q} onChange={companyLookup.setQ} capped={companyLookup.capped} />
           {!lockCompany && (
             <div className="mt-2 flex items-end gap-2">
               <div className="flex-1">
@@ -292,6 +290,7 @@ export function StationForm({
             </option>
           ))}
         </SelectField>
+        <LookupSearch id="st-route-search" q={routeLookup.q} onChange={routeLookup.setQ} capped={routeLookup.capped} />
         <SelectField id="st-status" label="حالة المحطة" value={values.status} onChange={(v) => set('status', v)}>
           {Object.entries(STATION_STATUS_LABELS).map(([value, label]) => (
             <option key={value} value={value}>

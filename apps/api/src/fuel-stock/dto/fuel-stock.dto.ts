@@ -121,10 +121,17 @@ export class StockEntriesQueryDto {
   @IsIn(['PETROL_95', 'DIESEL', 'KEROSENE'])
   fuelType?: 'PETROL_95' | 'DIESEL' | 'KEROSENE';
 
+  // A page of the deliveries (newest first): skip/take, at most 100 per page.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  skip?: number;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @Type(() => Number)
   @Min(1)
-  @Max(500)
-  limit?: number;
+  @Max(100)
+  take?: number;
 }

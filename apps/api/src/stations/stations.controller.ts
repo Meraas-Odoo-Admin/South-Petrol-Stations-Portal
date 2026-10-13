@@ -4,6 +4,7 @@ import { StationsService } from './stations.service';
 import { CreateStationDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
 import { ListStationsQueryDto } from './dto/list-stations-query.dto';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import { RestoreDto } from '../municipalities/dto/archive-municipality.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -22,14 +23,18 @@ export class StationsController {
 
   @RequirePermission('stations:read')
   @Get()
+  // With skip/take: one page and the total, {total, skip, take, items}. Without:
+  // the picker list (every station the caller may choose, at most 200).
   findAll(@Query() query: ListStationsQueryDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.stations.findAll(user.id, query);
+    return query.skip !== undefined || query.take !== undefined
+      ? this.stations.findPage(user.id, query)
+      : this.stations.findAll(user.id, query);
   }
 
   @RequirePermission('stations:read')
   @Get(':id/activity')
-  activity(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.stations.activity(id, user.id);
+  activity(@Param('id') id: string, @Query() query: PageQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.stations.activity(id, user.id, query);
   }
 
   @RequirePermission('stations:read')

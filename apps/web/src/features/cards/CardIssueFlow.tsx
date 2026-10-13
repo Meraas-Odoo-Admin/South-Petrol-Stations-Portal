@@ -95,7 +95,7 @@ export function CardIssueFlow({
   async function print(target: VehicleCardRow) {
     setError(null);
     try {
-      setFallbackUrl(printPdfBlob(await printCardPdf(target.id, printMode)));
+      setFallbackUrl(printPdfBlob(await printCardPdf(target.id, printMode, { registrationStationId, deskId: deskId ?? undefined })));
       setStep('confirm');
     } catch (err) {
       setError(cardErrorMessage(err, 'تعذرت الطباعة. حاول مرة أخرى.'));
@@ -122,7 +122,7 @@ export function CardIssueFlow({
 
   const failedPrint = useMutation({
     mutationFn: async (target: VehicleCardRow) =>
-      (await apiClient.post<VehicleCardRow>(`/cards/${target.id}/failed-print`)).data,
+      (await apiClient.post<VehicleCardRow>(`/cards/${target.id}/failed-print`, { registrationStationId, deskId })).data,
     onSuccess: async (replacement) => {
       setCard(replacement);
       invalidateCards();

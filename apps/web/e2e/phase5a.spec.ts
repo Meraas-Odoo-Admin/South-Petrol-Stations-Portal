@@ -49,7 +49,7 @@ test('super admin: creates a municipality (its directorate appears by itself) an
   await shots(page, '02-municipality-created-with-directorate');
 
   // Its manager is created here, already assigned to this municipality.
-  await page.getByRole('link', { name: 'حساب جديد' }).or(page.getByRole('button', { name: 'حساب جديد' })).first().click();
+  await page.getByRole('link', { name: 'إضافة مدير بلدية' }).first().click();
   await expect(page).toHaveURL(/\/people\/new\?/);
   await page.getByLabel('الاسم الكامل').fill(`مدير ${tag(5)}`);
   await page.getByLabel('اسم المستخدم').fill(`pw_mm_${fixtures.runId}_${random(3)}`);
@@ -121,6 +121,8 @@ test('municipality manager: station, its supervisor, an office manager, archive 
 
   // The office manager of the fixture office.
   await navigateInApp(page, '/manage');
+  // The list is paged (25 a page): search for the one wanted.
+  await page.locator('#pl-search').fill(fixtures.registrationStationName);
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByRole('heading', { name: fixtures.registrationStationName })).toBeVisible();
   // Phase 5B: the people of a place are in its «الموظفون» tab.

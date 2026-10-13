@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Patch, Body } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Body, Query } from '@nestjs/common';
+import { LookupQueryDto } from '../common/dto/lookup-query.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { SecurityAuthoritiesService } from './security-authorities.service';
 import { UpdateSecurityAuthorityDto } from './dto/update-security-authority.dto';
@@ -16,8 +17,8 @@ export class SecurityAuthoritiesController {
 
   @RequirePermission('security_authorities:read')
   @Get()
-  findAll() {
-    return this.authorities.findAll();
+  findAll(@Query() query: LookupQueryDto) {
+    return this.authorities.findAll(query.q);
   }
 
   @RequirePermission('security_authorities:read')

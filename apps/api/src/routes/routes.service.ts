@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PICKER_LIMIT } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -32,8 +33,8 @@ export class RoutesService {
     return route;
   }
 
-  findAll() {
-    return this.prisma.route.findMany({ orderBy: { name: 'asc' } });
+  findAll(q?: string) {
+    return this.prisma.route.findMany({ where: q?.trim() ? { name: { contains: q.trim(), mode: 'insensitive' as const } } : undefined, orderBy: { name: 'asc' }, take: PICKER_LIMIT });
   }
 
   async findOne(id: string) {

@@ -1,7 +1,10 @@
 import { FillUpPlate } from '../../components/FillUpPlate';
-import { useState } from 'react';
+import { usePageParam } from '../../lib/usePageParam';
+import { Pagination } from '../../components/Pagination';
+import { formatTime } from '../../lib/dateFormat';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Label, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { DailyReportResponse, FuelType, ReportExportFormat } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { downloadBlob } from '../../lib/download';
@@ -36,6 +39,8 @@ const tintedSelectClass =
 // optional filters narrowed the set, KPI tiles + a fuel-type breakdown
 // chart + the results table are all computed from the SAME filtered
 // response the backend returns — never a separately hardcoded number.
+const DAILY_PAGE_SIZE = 25;
+
 export function DailyReportPage() {
   const { user, hasPermission } = useAuth();
   const canViewAllStations = hasPermission('reports:view_all_stations');
@@ -55,10 +60,23 @@ export function DailyReportPage() {
     fuelType: fuelType || undefined,
     ownerId: ownerId || undefined,
   };
+  // 25 results a page, the page in the address; changing a filter returns to page 1.
+  const { skip, setSkip } = usePageParam(DAILY_PAGE_SIZE);
+  // A new filter starts again from page 1 (but a refresh keeps the page).
+  const filterKey = `${stationId}|${date}|${fuelType}|${ownerId}`;
+  const lastFilterKey = useRef(filterKey);
+  useEffect(() => {
+    if (lastFilterKey.current !== filterKey) {
+      lastFilterKey.current = filterKey;
+      setSkip(0);
+    }
+  });
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['reports', 'daily', stationId, date, fuelType, ownerId],
-    queryFn: async () => (await apiClient.get<DailyReportResponse>('/reports/daily', { params: exportParams })).data,
+    queryKey: ['reports', 'daily', stationId, date, fuelType, ownerId, skip],
+    placeholderData: (prev) => prev,
+    queryFn: async () =>
+      (await apiClient.get<DailyReportResponse>('/reports/daily', { params: { ...exportParams, skip, take: DAILY_PAGE_SIZE } })).data,
   });
 
   async function handleExport(format: ReportExportFormat) {
@@ -88,7 +106,7 @@ export function DailyReportPage() {
     ? (Object.keys(FUEL_TYPE_LABELS) as FuelType[]).map((ft) => ({
         fuelType: ft,
         label: fuelTypeLabel(ft),
-        count: data.rows.filter((r) => r.fuelType === ft).length,
+        count: data.byFuelType?.find((r) => r.fuelType === ft)?.count ?? 0,
       }))
     : [];
 
@@ -212,14 +230,18 @@ export function DailyReportPage() {
           {data.rows.length > 0 && (
             <Card className="mb-4">
               <CardHeader title="التوزيع حسب نوع الوقود" />
-              <div className="h-56 p-4">
+              {/* Fuel names sit under the bars in their own row, and the count axis
+                  is named: the labels used to be drawn on top of the bars. */}
+              <div className="h-64 p-4" data-testid="daily-fuel-chart">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={fuelBreakdown} layout="vertical" margin={{ left: 8, right: 24 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} fontSize={11} />
-                    <YAxis type="category" dataKey="label" width={70} fontSize={12} />
-                    <Tooltip formatter={(value) => [`${value} تعبئة`, '']} labelFormatter={() => ''} />
-                    <Bar dataKey="count" fill="#0d5c52" radius={[0, 4, 4, 0]} />
+                  <BarChart data={fuelBreakdown} margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" fontSize={13} tickMargin={8} interval={0} height={36} />
+                    <YAxis allowDecimals={false} fontSize={12} width={56}>
+                      <Label value="عدد التعبئات" angle={-90} position="insideLeft" offset={-4} style={{ textAnchor: 'middle', fontSize: 12 }} />
+                    </YAxis>
+                    <Tooltip formatter={(value) => [`${value} تعبئة`, '']} labelFormatter={(label) => String(label)} />
+                    <Bar dataKey="count" fill="#0d5c52" radius={[4, 4, 0, 0]} maxBarSize={72} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -245,7 +267,7 @@ export function DailyReportPage() {
                   {data.rows.map((row) => (
                     <tr key={row.id} className="border-b border-surface-alt last:border-0">
                       <td className="px-[18px] py-3">
-                        <CodeText>{new Date(row.occurredAt).toLocaleTimeString('en-GB')}</CodeText>
+                        <CodeText>{formatTime(row.occurredAt)}</CodeText>
                       </td>
                       <td className="px-[18px] py-3">{row.station.internalCode}</td>
                       <td className="px-[18px] py-3">
@@ -283,6 +305,13 @@ export function DailyReportPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              skip={skip}
+              take={DAILY_PAGE_SIZE}
+              total={data.rowsTotal ?? data.rows.length}
+              onSkipChange={setSkip}
+              testId="daily-pager"
+            />
           </Card>
         </>
       )}

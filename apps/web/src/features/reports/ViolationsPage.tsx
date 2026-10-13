@@ -1,4 +1,5 @@
 import { FillUpPlate } from '../../components/FillUpPlate';
+import { formatDateTime } from '../../lib/dateFormat';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -168,7 +169,7 @@ export function ViolationsPage() {
                 </div>
 
                 <p className="mt-2 text-[13px] lg:text-[12px] text-ink-faint">
-                  <CodeText>{new Date(row.fillUpTransaction.occurredAt).toLocaleString('en-GB')}</CodeText>
+                  <CodeText>{formatDateTime(row.fillUpTransaction.occurredAt)}</CodeText>
                   {' · '}
                   {row.exceptionType.name}
                 </p>
@@ -226,7 +227,7 @@ export function ViolationsPage() {
               {data.rows.map((row) => (
                 <tr key={row.id} className="border-b border-surface-alt align-top last:border-0">
                   <td className="px-[18px] py-3">
-                    <CodeText>{new Date(row.fillUpTransaction.occurredAt).toLocaleString('en-GB')}</CodeText>
+                    <CodeText>{formatDateTime(row.fillUpTransaction.occurredAt)}</CodeText>
                   </td>
                   <td className="px-[18px] py-3">{row.fillUpTransaction.station.internalCode}</td>
                   <td className="px-[18px] py-3">

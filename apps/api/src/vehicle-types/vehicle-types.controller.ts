@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { LookupQueryDto } from '../common/dto/lookup-query.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { VehicleTypesService } from './vehicle-types.service';
 import { CreateVehicleTypeDto } from './dto/create-vehicle-type.dto';
@@ -20,8 +21,8 @@ export class VehicleTypesController {
 
   @RequirePermission('vehicle_types:read')
   @Get()
-  findAll() {
-    return this.vehicleTypes.findAll();
+  findAll(@Query() query: LookupQueryDto) {
+    return this.vehicleTypes.findAll(query.q);
   }
 
   @RequirePermission('vehicle_types:read')

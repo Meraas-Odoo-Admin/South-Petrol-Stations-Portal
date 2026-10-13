@@ -6,6 +6,7 @@ import { RbacService } from '../rbac/rbac.service';
 import { CreateStationDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
 import { ListStationsQueryDto } from './dto/list-stations-query.dto';
+import { PICKER_LIMIT, pageOf } from '../common/dto/page-query.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 
 // Station-scoped access is enforced HERE, in the service layer — not in the
@@ -163,7 +164,25 @@ export class StationsService {
   // Phase 5A: archived stations are left out of every daily list; a manager
   // reaches them under the "archived" filter (and only a holder of
   // stations:create may ask for it - a supervisor never sees archived ones).
+  // The PICKER list: every station the caller may choose from, capped at
+  // PICKER_LIMIT rows. Screens that show rows use findPage().
   async findAll(userId: string, query: ListStationsQueryDto = {}) {
+    const { where, orderBy } = await this.listQuery(userId, query);
+    return this.prisma.station.findMany({ where, include: this.cardInclude, orderBy, take: PICKER_LIMIT });
+  }
+
+  // One page of the list, with the total: search, filters and sort run here.
+  async findPage(userId: string, query: ListStationsQueryDto = {}) {
+    const { where, orderBy } = await this.listQuery(userId, query);
+    const { skip, take } = pageOf(query);
+    const [total, items] = await Promise.all([
+      this.prisma.station.count({ where }),
+      this.prisma.station.findMany({ where, include: this.cardInclude, orderBy, skip, take }),
+    ]);
+    return { total, skip, take, items };
+  }
+
+  private async listQuery(userId: string, query: ListStationsQueryDto) {
     const scope = await this.rbac.getStationScope(userId);
     const permissions = await this.rbac.getPermissionsForUser(userId);
     const includePreparing = permissions.has('stations:view_preparing');
@@ -198,11 +217,7 @@ export class StationsService {
             : query.sort === 'municipality'
               ? [{ municipality: { name: dir } }, { internalCode: 'asc' }]
               : [{ internalCode: dir }];
-    return this.prisma.station.findMany({
-      where: { AND: and },
-      include: this.cardInclude,
-      orderBy,
-    });
+    return { where: { AND: and } satisfies Prisma.StationWhereInput, orderBy };
   }
 
   async findOne(id: string, userId: string) {
@@ -229,19 +244,26 @@ export class StationsService {
   // The station's own page: what happened to it lately (audit entries about
   // the station, and the people changes at it) and how busy it has been.
   // Scope-checked like findOne.
-  async activity(id: string, userId: string) {
+  async activity(id: string, userId: string, query: { skip?: number; take?: number } = {}) {
     await this.findOne(id, userId);
+    const { skip, take } = pageOf(query);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [rows, fillUpsLast30Days] = await Promise.all([
+    const where = { entityType: 'Station', entityId: id };
+    const [total, rows, fillUpsLast30Days] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
       this.prisma.auditLog.findMany({
-        where: { entityType: 'Station', entityId: id },
-        orderBy: { createdAt: 'desc' },
-        take: 30,
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take,
         include: { user: { select: { fullName: true } } },
       }),
       this.prisma.fillUpTransaction.count({ where: { stationId: id, occurredAt: { gte: since } } }),
     ]);
     return {
+      total,
+      skip,
+      take,
       fillUpsLast30Days,
       items: rows.map((r) => ({
         id: r.id,

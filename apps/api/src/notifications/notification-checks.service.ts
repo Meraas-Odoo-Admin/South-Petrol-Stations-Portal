@@ -1,3 +1,4 @@
+import { arabicCount } from '@fuel-tracking/shared-types';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
@@ -73,10 +74,10 @@ export class NotificationChecksService {
           if (headline && wontFinish) {
             await this.notifications.notifyUsers([userId], {
               kind: 'DEADLINE_AT_RISK',
-              title: `الموعد النهائي في ${municipality.name} بعد ${remaining} أيام والتسجيل لن يكتمل`,
+              title: `الموعد النهائي في ${municipality.name} بعد ${arabicCount(remaining, 'day', { oblique: true })} والتسجيل لن يكتمل`,
               body:
                 headline.daysNeeded !== null
-                  ? `يحتاج التسجيل نحو ${headline.daysNeeded} يومًا بالوتيرة الحالية، والباقي ${remaining} أيام.`
+                  ? `يحتاج التسجيل نحو ${arabicCount(headline.daysNeeded, 'day', { oblique: true })} بالوتيرة الحالية، والباقي ${arabicCount(remaining, 'day')}.`
                   : 'لم تُصدر البطاقات في الأيام الأخيرة، فلا يمكن تقدير المدة.',
               link: '/manage',
               entityType: 'Municipality',
@@ -116,7 +117,7 @@ export class NotificationChecksService {
     await this.notifications.notifyUsers([userId], {
       kind: 'CARD_SHORTFALL',
       title: `نقص في بطاقات ${office}`,
-      body: `${unaccounted} بطاقة خرجت من الصندوق دون طباعة مسجّلة في المنظومة.`,
+      body: `${arabicCount(unaccounted, 'card')} خرجت من الصندوق دون طباعة مسجّلة في المنظومة.`,
       link,
       entityType: 'RegistrationStation',
       entityId: officeId,
@@ -133,7 +134,7 @@ export class NotificationChecksService {
     await this.notifications.notifyUsers([userId], {
       kind: 'LOW_BLANK_CARDS',
       title: `بطاقات فارغة قليلة في ${pool.registrationStation.name}`,
-      body: `المتبقي المتوقع ${Math.max(0, position.expectedRemaining)} بطاقة، أقل من الحد ${threshold}.`,
+      body: `المتبقي المتوقع ${arabicCount(Math.max(0, position.expectedRemaining), 'card')}، أقل من الحد ${arabicCount(threshold, 'card')}.`,
       link: '/my-office?tab=cards',
       entityType: 'RegistrationStation',
       entityId: officeId,

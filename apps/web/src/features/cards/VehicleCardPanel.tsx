@@ -8,6 +8,9 @@ import { LtrText } from '../../components/LtrText';
 import { useAuth } from '../auth/AuthProvider';
 import { CardIssueFlow } from './CardIssueFlow';
 import {
+  rememberDesk,
+  rememberedDeskId,
+  type RegistrationDeskRow,
   CARD_REASON_LABELS,
   CARD_STATUS_LABELS,
   cardErrorMessage,
@@ -50,6 +53,7 @@ export function VehicleCardPanel({
 
   const [issuing, setIssuing] = useState<null | { reason: IssuableReason; note: string; started: boolean }>(null);
   const [chosenStationId, setChosenStationId] = useState('');
+  const [reprinting, setReprinting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -85,11 +89,25 @@ export function VehicleCardPanel({
   const active = cards.find((c) => c.status === 'ACTIVE') ?? null;
   const hasHistory = cards.length > 0;
 
+  // A reprint is made at the office and desk the employee works at, which may
+  // not be the office that issued the card: the print is counted here.
   async function reprint(card: VehicleCardRow) {
     setError(null);
+    const deskId = rememberedDeskId(stationId);
+    if (!stationId || !deskId) {
+      setReprinting(true);
+      return;
+    }
+    await sendReprint(card, stationId, deskId);
+  }
+
+  async function sendReprint(card: VehicleCardRow, registrationStationId: string, deskId: string) {
+    setError(null);
     try {
-      printPdfBlob(await printCardPdf(card.id, rememberedPrintMode()));
+      printPdfBlob(await printCardPdf(card.id, rememberedPrintMode(), { registrationStationId, deskId }));
+      setReprinting(false);
       setMessage('أُرسلت البطاقة الحالية للطباعة مرة أخرى (بنفس الرقم والبيانات).');
+      queryClient.invalidateQueries({ queryKey: ['vehicle-cards', vehicleId] });
     } catch (err) {
       setError(cardErrorMessage(err, 'تعذرت الطباعة.'));
     }
@@ -164,6 +182,16 @@ export function VehicleCardPanel({
           <PillButton size="sm" variant="danger" onClick={() => setCancelling(true)} data-testid="vehicle-card-cancel">
             إلغاء البطاقة
           </PillButton>
+        )}
+
+        {reprinting && active && (
+          <ReprintChooser
+            stations={openStations}
+            stationId={stationId}
+            onStationChange={setChosenStationId}
+            onCancel={() => setReprinting(false)}
+            onPrint={(deskId) => sendReprint(active, stationId, deskId)}
+          />
         )}
 
         {cancelling && active && (
@@ -285,5 +313,87 @@ export function VehicleCardPanel({
         )}
       </div>
     </Card>
+  );
+}
+
+// Which office and desk this reprint is made at (the desk is remembered per
+// device). Shown the first time on a device, or when the employee works at
+// more than one office.
+function ReprintChooser({
+  stations,
+  stationId,
+  onStationChange,
+  onPrint,
+  onCancel,
+}: {
+  stations: RegistrationStationOption[];
+  stationId: string;
+  onStationChange: (id: string) => void;
+  onPrint: (deskId: string) => void;
+  onCancel: () => void;
+}) {
+  const [deskId, setDeskId] = useState('');
+  const desksQuery = useQuery({
+    queryKey: ['registration-desks', stationId],
+    queryFn: async () => (await apiClient.get<RegistrationDeskRow[]>(`/registration-stations/${stationId}/desks`)).data,
+    enabled: Boolean(stationId),
+  });
+  const desks = (desksQuery.data ?? []).filter((d) => d.isActive);
+  return (
+    <div className="space-y-2 rounded-sm border border-line p-3" data-testid="vehicle-card-reprint-chooser">
+      <p className="text-[13px] lg:text-[12.5px] font-bold text-ink">اختر المكتب الذي تطبع منه</p>
+      {stations.length === 0 && (
+        <p className="text-[13px] lg:text-[12px] text-danger">لا يوجد مكتب تسجيل مفتوح في نطاق حسابك للطباعة منه.</p>
+      )}
+      {stations.length > 1 && (
+        <select
+          value={stationId}
+          onChange={(e) => {
+            onStationChange(e.target.value);
+            setDeskId('');
+          }}
+          className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] sm:w-80"
+        >
+          <option value="">اختر مكتب التسجيل الذي تعمل فيه</option>
+          {stations.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {stationId && (
+        <select
+          value={deskId}
+          onChange={(e) => setDeskId(e.target.value)}
+          className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] sm:w-80"
+          data-testid="vehicle-card-reprint-desk"
+        >
+          <option value="">اختر مكتب الطباعة</option>
+          {desks.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+              {d.printerModel ? ` — ${d.printerModel}` : ''}
+            </option>
+          ))}
+        </select>
+      )}
+      <div className="flex gap-2">
+        <PillButton
+          size="sm"
+          disabled={!stationId || !deskId}
+          data-testid="vehicle-card-reprint-confirm"
+          onClick={() => {
+            rememberDesk(stationId, deskId);
+            onPrint(deskId);
+          }}
+        >
+          طباعة
+        </PillButton>
+        <PillButton size="sm" variant="ghost" onClick={onCancel}>
+          تراجع
+        </PillButton>
+      </div>
+    </div>
   );
 }

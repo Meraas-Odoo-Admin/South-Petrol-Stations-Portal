@@ -13,3 +13,4 @@ export * from './reports';
 export * from './fillups';
 export * from './plate';
 export * from './validation';
+export * from './arabicCount';

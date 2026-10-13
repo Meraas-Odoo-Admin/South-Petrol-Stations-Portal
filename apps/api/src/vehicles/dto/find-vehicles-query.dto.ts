@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 import { VehicleUsageType } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
@@ -78,4 +79,12 @@ export class FindVehiclesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(VehicleSortField)
   sort?: VehicleSortField;
+
+  // true: answer {total, skip, take, items} (the vehicles list screen). Left
+  // out: the bare array of one page that the pickers read.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  paged?: boolean;
 }

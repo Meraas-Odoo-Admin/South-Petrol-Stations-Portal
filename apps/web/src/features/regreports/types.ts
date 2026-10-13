@@ -138,6 +138,7 @@ export interface StockEntryRow {
 
 export interface EntriesResponse {
   range: { from: string; to: string };
+  total?: number;
   entries: StockEntryRow[];
 }
 

@@ -50,6 +50,8 @@ export const ICONS = {
     'M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm9 8v-1a4 4 0 0 0-3-3.9M15 4.3a3.5 3.5 0 0 1 0 6.4',
   // Points to the reading-start side (right in RTL): "back".
   arrowBack: 'M5 12h14M13 6l6 6-6 6',
+  // Points left: «next» in a right-to-left layout.
+  arrowNext: 'M19 12H5M11 6l-6 6 6 6',
   chevronDown: 'M6 9l6 6 6-6',
   filter: 'M4 5h16l-6 8v6l-4-2v-4L4 5Z',
   bell: 'M6 9a6 6 0 1 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9Zm4 9.5a2 2 0 0 0 4 0',

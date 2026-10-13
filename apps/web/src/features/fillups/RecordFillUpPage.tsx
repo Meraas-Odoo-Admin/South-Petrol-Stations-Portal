@@ -1,4 +1,5 @@
 import { PrintRegistrationSheetButton } from '../../components/PrintRegistrationSheetButton';
+import { formatDateTime, formatDay, formatTime } from '../../lib/dateFormat';
 import { FillUpPlate } from '../../components/FillUpPlate';
 import { useEffect, useRef, useState } from 'react';
 import { useForm, type FieldErrors, type UseFormReturn } from 'react-hook-form';
@@ -64,7 +65,7 @@ export function TriggerDetail({ trigger }: { trigger: RuleTriggerDetail | null }
       <LtrText>
         {trigger.vehicleCurrentPlate ? formatLicensePlate(trigger.vehicleCurrentPlate) : trigger.vehicleInternalCode}
       </LtrText>{' '}
-      بتاريخ <LtrText>{new Date(trigger.occurredAt).toLocaleString('ar')}</LtrText>
+      بتاريخ <LtrText>{formatDateTime(trigger.occurredAt)}</LtrText>
     </p>
   );
 }
@@ -302,7 +303,7 @@ function DayListRail({
                   {i === 0 ? (
                     <span className="text-[13px] lg:text-[12px] font-bold text-ok">الآن</span>
                   ) : (
-                    <CodeText>{new Date(row.occurredAt).toLocaleTimeString('en-GB')}</CodeText>
+                    <CodeText>{formatTime(row.occurredAt)}</CodeText>
                   )}
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2 text-ink-soft">
@@ -1172,15 +1173,7 @@ export function RecordFillUpPage() {
               <span className="text-[13px] lg:text-[12.5px] text-ink-soft">الوقت</span>
               <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">
                 <LtrText>
-                  {new Date(success.occurredAt).toLocaleString('en-GB', {
-                    timeZone: 'Africa/Tripoli',
-                    hour12: false,
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatDateTime(success.occurredAt)}
                 </LtrText>
               </span>
             </div>
@@ -1999,11 +1992,11 @@ function OverrideNotice({ onCancel }: { onCancel: () => void }) {
 function AwarenessBlock({ awareness }: { awareness: AwarenessNotice }) {
   // The deadline is a calendar day, not an instant — format it as UTC so the
   // viewer's timezone can never shift it by a day.
-  const date = new Date(`${awareness.cardRequiredFromDate}T00:00:00Z`).toLocaleDateString('ar', { timeZone: 'UTC' });
+  const date = formatDay(awareness.cardRequiredFromDate);
   return (
     <div className="mt-4 w-full rounded-sm bg-accent-100 p-4 text-start" data-testid="fillup-awareness">
       <p className="text-[15px] lg:text-[13px] font-bold leading-[1.9] text-accent-ink">
-        ابتداءً من {date} لن تتم تعبئة أي مركبة بدون بطاقة. استلم بطاقتك من أحد مكاتب التسجيل التالية:
+        ابتداءً من <LtrText>{date}</LtrText> لن تتم تعبئة أي مركبة بدون بطاقة. استلم بطاقتك من أحد مكاتب التسجيل التالية:
       </p>
       <RegistrationStationList stations={awareness.registrationStations} />
       <p className="mt-3 text-[15px] lg:text-[13px] font-extrabold text-ink" data-testid="fillup-awareness-flyer">

@@ -1,81 +1,61 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { arabicCount } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
-import { STATION_STATUS_LABELS } from '../../lib/labels';
 import { roleLabel } from '../../lib/labels';
 import { Dialog } from '../../components/design/Dialog';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { TextField } from '../../components/design/TextField';
-import { CodeText } from '../../components/design/CodeText';
+import { TabPanel, Tabs, useTab, type TabDef } from '../../components/design/Tabs';
 import { Icon, ICONS } from '../../components/icons';
 import { Notice, SectionCard } from '../users/parts';
-import { UsersListPage } from '../users/UsersListPage';
-import { formatWhen } from '../users/format';
 import { PlaceSummaryRow, ReadinessPanel } from '../places/MunicipalitySummary';
-import { OpsReportPanel } from '../reports/OpsReportPanel';
+import { PlacesList } from '../places/PlacesList';
 import { StageCard } from '../places/StageCard';
-import {
-  ArchiveRestoreButton,
-  ArchivedBanner,
-  OFFICE_STATUS_LABELS,
-  placeActionLabel,
-  type MunicipalityLite,
-} from '../places/placesShared';
+import { ArchiveRestoreButton, ArchivedBanner, type MunicipalityLite } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
+import { ActivityTab, PeopleTab, ReportsTab } from './MunicipalityTabs';
 
 interface Overview {
   municipality: MunicipalityLite;
-  stations: { id: string; internalCode: string; name: string; stationNumber: string; status: string; archivedAt: string | null; company: { name: string } }[];
-  offices: { id: string; internalCode: string; name: string; status: 'ACTIVE' | 'TEMPORARILY_CLOSED' | 'CLOSED'; archivedAt: string | null; address: string }[];
+  counts: { stations: number; offices: number; people: number };
   people: { total: number; byJob: { roleId: string; name: string; count: number }[] };
-  activity: { id: string; action: string; entityType: string; createdAt: string; actorName: string | null }[];
 }
 
-const ENTITY_LABELS: Record<string, string> = {
-  Municipality: 'البلدية',
-  Station: 'محطة',
-  RegistrationStation: 'مكتب تسجيل',
-  User: 'حساب',
-};
+const TABS: TabDef[] = [
+  { key: 'overview', label: 'نظرة عامة' },
+  { key: 'places', label: 'المحطات والمكاتب' },
+  { key: 'people', label: 'الأشخاص' },
+  { key: 'reports', label: 'التقارير' },
+  { key: 'activity', label: 'سجل النشاط' },
+  { key: 'settings', label: 'الإعدادات' },
+];
 
-// One municipality, everything about it: its status and security directorate,
-// stage and dates, its stations and offices, its people by job (and a button
-// to add its manager), and its activity. The super admin creates the manager
-// here, already assigned to this municipality.
+// One municipality, split into tabs so no tab is a wall of rows (UX round):
+//   نظرة عامة            the summary figures and the readiness panel
+//   المحطات والمكاتب      one paged list with search, filters and sort
+//   الأشخاص              paged, by job, with search and status
+//   التقارير              one report at a time
+//   سجل النشاط            the activity log, paged
+//   الإعدادات             name, directorate, status, stage dates, archive
+// The tab and the page are in the address; a tab's data is asked for only
+// when the tab is opened.
 export function MunicipalityDetailPage() {
   const { municipalityId } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const justCreated = searchParams.get('created') === '1';
+  const [urlTab, setTab] = useTab(TABS);
+  // A municipality that was just created opens on its people, where its
+  // manager is added.
+  const tab = justCreated && !searchParams.get('tab') ? 'people' : urlTab;
 
   const overview = useQuery({
     queryKey: ['municipalities', 'overview', municipalityId],
     enabled: Boolean(municipalityId),
     retry: false,
     queryFn: async () => (await apiClient.get<Overview>(`/municipalities/${municipalityId}/overview`)).data,
-  });
-
-  const [authorityName, setAuthorityName] = useState<string | null>(null);
-  const [code, setCode] = useState<string | null>(null);
-  const [switchOpen, setSwitchOpen] = useState(false);
-  const [typed, setTyped] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-
-  const patch = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => apiClient.patch(`/municipalities/${municipalityId}`, body),
-    onSuccess: async () => {
-      setProblem(null);
-      await queryClient.invalidateQueries({ queryKey: ['municipalities'] });
-      await queryClient.invalidateQueries({ queryKey: ['stations'] });
-    },
-    onError: (err) => {
-      setSaved(null);
-      setProblem(adminErrorMessage(err, 'تعذّر حفظ التغيير.'));
-    },
   });
 
   if (overview.isLoading) return <p className="text-[15px] text-ink-soft">جارٍ التحميل…</p>;
@@ -88,14 +68,12 @@ export function MunicipalityDetailPage() {
     );
   }
 
-  const { municipality: m, stations, offices, people, activity } = overview.data;
+  const { municipality: m, counts, people } = overview.data;
   const archived = Boolean(m.archivedAt);
   const live = m.status === 'LIVE';
-  const authorityValue = authorityName ?? m.securityAuthority?.name ?? '';
-  const codeValue = code ?? m.code ?? '';
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="mx-auto max-w-5xl space-y-4">
       <Link
         to="/admin/municipalities"
         className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline lg:text-[14px]"
@@ -116,29 +94,120 @@ export function MunicipalityDetailPage() {
             <StatusPill variant={live ? 'ok' : 'neutral'} size="md">{live ? 'مفعّلة' : 'قيد الإعداد'}</StatusPill>
           )}
         </div>
+        {/* The headline numbers stay in view on every tab. */}
+        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-surface-alt pt-4" data-testid="municipality-counts">
+          {[
+            ['المحطات', counts.stations, 'station'],
+            ['المكاتب', counts.offices, 'office'],
+            ['الأشخاص', counts.people, 'person'],
+          ].map(([label, value, unit]) => (
+            <div key={String(label)}>
+              <dt className="text-[14px] text-ink-soft lg:text-[12px]">{label}</dt>
+              <dd className="text-[24px] font-extrabold tabular-nums leading-tight text-ink lg:text-[20px]">
+                {(value as number).toLocaleString('en-US')}
+                <span className="sr-only"> ({arabicCount(value as number, unit as 'station' | 'office' | 'person')})</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
       </header>
 
       {justCreated && (
         <Notice kind="success">
-          أُنشئت البلدية وأُنشئت معها جهتها الأمنية «{m.securityAuthority?.name}». أضف مدير البلدية من قسم «مديرو البلدية» أدناه.
+          أُنشئت البلدية وأُنشئت معها جهتها الأمنية «{m.securityAuthority?.name}». أضف مدير البلدية من تبويب «الأشخاص».
         </Notice>
       )}
       {archived && <ArchivedBanner what="هذه البلدية" />}
+
+      <Tabs tabs={TABS} value={tab} onChange={setTab} label="أقسام البلدية" />
+
+      <TabPanel tab="overview" value={tab}>
+        {archived ? (
+          <Notice kind="info">هذه البلدية مؤرشفة؛ لا تظهر لها أرقام ولا استعداد. يمكن استعادتها من «الإعدادات».</Notice>
+        ) : (
+          <>
+            <PlaceSummaryRow municipalityId={m.id} />
+            <ReadinessPanel municipalityId={m.id} />
+          </>
+        )}
+      </TabPanel>
+
+      <TabPanel tab="places" value={tab}>
+        <PlacesList municipalityId={m.id} emptyHint="لا توجد محطات بعد. يضيفها مدير البلدية من «إدارة المحطات»." />
+      </TabPanel>
+
+      <TabPanel tab="people" value={tab}>
+        <PeopleTab municipalityId={m.id} municipalityName={m.name} byJob={people.byJob} archived={archived} />
+      </TabPanel>
+
+      <TabPanel tab="reports" value={tab}>
+        <ReportsTab municipalityId={m.id} />
+      </TabPanel>
+
+      <TabPanel tab="activity" value={tab}>
+        <ActivityTab municipalityId={m.id} />
+      </TabPanel>
+
+      <TabPanel tab="settings" value={tab}>
+        <SettingsTab municipality={m} live={live} archived={archived} peopleByJob={people.byJob} />
+      </TabPanel>
+    </div>
+  );
+}
+
+// «الإعدادات»: name, directorate name and the card code, status, stage dates,
+// and the archive - the one destructive action - set apart at the bottom.
+function SettingsTab({
+  municipality: m,
+  live,
+  archived,
+  peopleByJob,
+}: {
+  municipality: MunicipalityLite;
+  live: boolean;
+  archived: boolean;
+  peopleByJob: Array<{ roleId: string; name: string; count: number }>;
+}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState<string | null>(null);
+  const [authorityName, setAuthorityName] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+
+  const patch = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => apiClient.patch(`/municipalities/${m.id}`, body),
+    onSuccess: async () => {
+      setProblem(null);
+      await queryClient.invalidateQueries({ queryKey: ['municipalities'] });
+      await queryClient.invalidateQueries({ queryKey: ['stations'] });
+    },
+    onError: (err) => {
+      setSaved(null);
+      setProblem(adminErrorMessage(err, 'تعذّر حفظ التغيير.'));
+    },
+  });
+
+  const nameValue = name ?? m.name;
+  const authorityValue = authorityName ?? m.securityAuthority?.name ?? '';
+  const codeValue = code ?? m.code ?? '';
+  const dirty = name !== null || authorityName !== null || code !== null;
+  const jobsLine = peopleByJob.length === 0 ? '' : peopleByJob.map((j) => `${roleLabel(j.name)}: ${j.count}`).join(' · ');
+
+  return (
+    <div className="space-y-4" data-testid="municipality-settings">
       {problem && <Notice kind="error">{problem}</Notice>}
       {saved && <Notice kind="success">{saved}</Notice>}
 
-      {!archived && (
-        <>
-          <PlaceSummaryRow municipalityId={m.id} />
-          <ReadinessPanel municipalityId={m.id} />
-        </>
-      )}
-
-      <SectionCard title="الجهة الأمنية ورمز البطاقات">
+      <SectionCard title="الاسم والجهة الأمنية ورمز البطاقات">
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
+            <TextField label="اسم البلدية" value={nameValue} onChange={(e) => setName(e.target.value)} disabled={archived} />
             <TextField
-              label="اسم الجهة الأمنية"
+              label="اسم الجهة الأمنية (المديرية)"
               value={authorityValue}
               onChange={(e) => setAuthorityName(e.target.value)}
               hint="تُنشأ تلقائيًا مع البلدية، ويمكنك تعديل اسمها."
@@ -154,13 +223,14 @@ export function MunicipalityDetailPage() {
               disabled={archived}
             />
           </div>
-          {!archived && (authorityName !== null || code !== null) && (
+          {!archived && dirty && (
             <PillButton
               size="field"
               disabled={patch.isPending}
               onClick={() => {
                 setSaved(null);
                 const body: Record<string, unknown> = {};
+                if (name !== null && name.trim() && name.trim() !== m.name) body.name = name.trim();
                 if (authorityName !== null && authorityName.trim() !== (m.securityAuthority?.name ?? '')) {
                   body.securityAuthorityName = authorityName.trim();
                 }
@@ -168,6 +238,7 @@ export function MunicipalityDetailPage() {
                 if (Object.keys(body).length === 0) return;
                 patch.mutate(body, {
                   onSuccess: () => {
+                    setName(null);
                     setAuthorityName(null);
                     setCode(null);
                     setSaved('تم حفظ التغييرات.');
@@ -204,96 +275,17 @@ export function MunicipalityDetailPage() {
         </SectionCard>
       )}
 
-      <SectionCard title="محطات الوقود" description={`${stations.length} محطة`}>
-        {stations.length === 0 ? (
-          <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد محطات بعد. يضيفها مدير البلدية من «إدارة المحطات».</p>
-        ) : (
-          <ul className="divide-y divide-surface-alt">
-            {stations.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <div className="min-w-0">
-                  <Link to={`/manage/stations/${s.id}`} className="text-[16px] font-bold text-ink hover:text-primary lg:text-[14px]">
-                    {s.name}
-                  </Link>
-                  <p className="text-[14px] text-ink-soft lg:text-[12px]">
-                    {s.company.name} · <CodeText>{s.internalCode}</CodeText>
-                  </p>
-                </div>
-                <StatusPill variant={s.archivedAt ? 'neutral' : s.status === 'ACTIVE' ? 'ok' : 'accent'} size="md">
-                  {s.archivedAt ? 'مؤرشفة' : (STATION_STATUS_LABELS[s.status] ?? s.status)}
-                </StatusPill>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <SectionCard title="مكاتب التسجيل" description={`${offices.length} مكتب`}>
-        {offices.length === 0 ? (
-          <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد مكاتب تسجيل بعد.</p>
-        ) : (
-          <ul className="divide-y divide-surface-alt">
-            {offices.map((o) => (
-              <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <div className="min-w-0">
-                  <Link to={`/manage/offices/${o.id}`} className="text-[16px] font-bold text-ink hover:text-primary lg:text-[14px]">
-                    {o.name}
-                  </Link>
-                  <p className="text-[14px] text-ink-soft lg:text-[12px]">{o.address}</p>
-                </div>
-                <StatusPill variant={o.archivedAt ? 'neutral' : o.status === 'ACTIVE' ? 'ok' : 'accent'} size="md">
-                  {o.archivedAt ? 'مؤرشف' : OFFICE_STATUS_LABELS[o.status]}
-                </StatusPill>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <SectionCard title="الأشخاص" description={`${people.total} شخص في هذه البلدية`}>
-        {people.byJob.length === 0 ? (
-          <p className="text-[15px] text-ink-soft lg:text-[13px]">لا يوجد أشخاص بعد.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            {people.byJob.map((j) => (
-              <li key={j.roleId}>
-                <StatusPill variant="neutral" size="md">
-                  {roleLabel(j.name)}: {j.count}
-                </StatusPill>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <UsersListPage
-        basePath="/people"
-        fixedPlaceId={m.id}
-        title="مديرو البلدية"
-        createParams={{ kind: 'MUNICIPALITY', place: m.id, placeName: m.name }}
-        emptyText="لا يوجد مدير لهذه البلدية بعد. أنشئ حسابه من الزر أعلاه."
-      />
-
-      <SectionCard title="النشاط" description="آخر ما جرى في البلدية ومحطاتها ومكاتبها وأشخاصها.">
-        {activity.length === 0 ? (
-          <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد تغييرات مسجّلة بعد.</p>
-        ) : (
-          <ul className="divide-y divide-surface-alt">
-            {activity.map((a) => (
-              <li key={a.id} className="py-3">
-                <p className="text-[16px] font-bold text-ink lg:text-[14px]">
-                  {ENTITY_LABELS[a.entityType] ?? ''}: {placeActionLabel(a.action)}
-                </p>
-                <p className="text-[14px] text-ink-soft lg:text-[12px]">
-                  {a.actorName ?? 'النظام'} · <span dir="ltr">{formatWhen(a.createdAt)}</span>
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <SectionCard title="الأرشفة" description="لا تُحذف البلديات؛ تُؤرشف ويبقى كل سجلها محفوظًا ويمكن استعادتها.">
+      {/* The danger zone: the only destructive action, set apart. */}
+      <section
+        aria-label="منطقة الخطر"
+        data-testid="municipality-danger-zone"
+        className="rounded-md border-2 border-danger bg-danger-100/30 p-4 lg:p-5"
+      >
+        <h2 className="text-[18px] font-extrabold text-danger-dark lg:text-[15px]">منطقة الخطر: الأرشفة</h2>
+        <p className="mt-1 mb-4 text-[15px] leading-[1.8] text-ink lg:text-[13px]">
+          لا تُحذف البلديات؛ تُؤرشف ويبقى كل سجلها محفوظًا ويمكن استعادتها.
+          {jobsLine && !archived ? ` يعمل فيها الآن: ${jobsLine}.` : ''}
+        </p>
         <ArchiveRestoreButton
           kind="municipalities"
           id={m.id}
@@ -302,7 +294,7 @@ export function MunicipalityDetailPage() {
           confirmName={live ? m.name : undefined}
           onDone={() => navigate('/admin/municipalities')}
         />
-      </SectionCard>
+      </section>
 
       <Dialog
         open={switchOpen}
@@ -338,21 +330,6 @@ export function MunicipalityDetailPage() {
           <TextField label={`اكتب: ${m.name}`} value={typed} onChange={(e) => setTyped(e.target.value)} data-testid="municipality-confirm-name" />
         </div>
       </Dialog>
-
-      <SectionCard
-        title="تقارير البلدية"
-        description="التقارير نفسها التي يقرؤها مدير البلدية، لهذه البلدية وحدها. للمقارنة بين البلديات انتقل إلى ملخص البلديات، ولسجل التغييرات إلى سجل المراجعة."
-      >
-        <div className="mb-4 flex flex-wrap gap-2.5">
-          <Link to="/reports?report=summary">
-            <PillButton size="field" variant="secondary">ملخص مقارنة البلديات</PillButton>
-          </Link>
-          <Link to="/admin/audit-log">
-            <PillButton size="field" variant="secondary">سجل المراجعة</PillButton>
-          </Link>
-        </div>
-        <OpsReportPanel report="municipality" fixedMunicipalityId={m.id} />
-      </SectionCard>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { arabicCount } from '@fuel-tracking/shared-types';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -119,27 +120,27 @@ function sentence(h: NonNullable<ReadinessResponse['headline']>): { text: string
       return { text: 'لا توجد مركبات بلا بطاقة الآن.', badge: 'لا أحد بلا بطاقة', tone: 'ok' };
     case 'NO_ISSUANCE':
       return {
-        text: `لم تُصدر بطاقات أولى في آخر ${num(h.windowDays)} يومًا، فلا يمكن تقدير المدة — ${num(h.cardlessPlates)} مركبة بلا بطاقة.`,
+        text: `لم تُصدر بطاقات أولى في آخر ${arabicCount(h.windowDays, 'day', { oblique: true })}، فلا يمكن تقدير المدة — ${arabicCount(h.cardlessPlates, 'vehicle')} بلا بطاقة.`,
         badge: 'لم تُصدر بطاقات',
         tone: 'warn',
       };
     case 'NO_DEADLINE':
       return {
-        text: `يحتاج التسجيل نحو ${num(h.daysNeeded ?? 0)} يومًا — لم يُحدَّد موعد نهائي بعد.`,
+        text: `يحتاج التسجيل نحو ${arabicCount(h.daysNeeded ?? 0, 'day', { oblique: true })} — لم يُحدَّد موعد نهائي بعد.`,
         badge: 'بلا موعد نهائي',
         tone: 'neutral',
       };
     case 'DEADLINE_PASSED':
-      return { text: `انقضى الموعد النهائي وما زالت ${num(h.cardlessPlates)} مركبة بلا بطاقة.`, badge: 'فات الموعد', tone: 'danger' };
+      return { text: `انقضى الموعد النهائي وما زالت ${arabicCount(h.cardlessPlates, 'vehicle')} بلا بطاقة.`, badge: 'فات الموعد', tone: 'danger' };
     case 'ON_TRACK':
       return {
-        text: `يحتاج التسجيل نحو ${num(h.daysNeeded ?? 0)} يومًا — باقٍ على الموعد ${num(h.daysLeft ?? 0)} يومًا.`,
+        text: `يحتاج التسجيل نحو ${arabicCount(h.daysNeeded ?? 0, 'day', { oblique: true })} — باقٍ على الموعد ${arabicCount(h.daysLeft ?? 0, 'day')}.`,
         badge: 'في المسار',
         tone: 'ok',
       };
     default:
       return {
-        text: `يحتاج التسجيل نحو ${num(h.daysNeeded ?? 0)} يومًا — باقٍ على الموعد ${num(h.daysLeft ?? 0)} يومًا فقط.`,
+        text: `يحتاج التسجيل نحو ${arabicCount(h.daysNeeded ?? 0, 'day', { oblique: true })} — باقٍ على الموعد ${arabicCount(h.daysLeft ?? 0, 'day')} فقط.`,
         badge: 'معرّض للتأخر',
         tone: 'danger',
       };
