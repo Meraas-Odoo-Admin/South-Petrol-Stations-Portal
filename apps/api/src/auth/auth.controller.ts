@@ -26,7 +26,10 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  // 5 a minute per USERNAME, and a looser 60 a minute per IP as a backstop: one
+  // office behind one address must not lock itself out, and the lockout after 5
+  // wrong passwords (AuthService) is a separate, per-account rule.
+  @Throttle({ account: { limit: 5, ttl: 60_000 }, default: { limit: 60, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -37,7 +40,8 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  // 10 a minute per refresh token (one session), 60 a minute per IP backstop.
+  @Throttle({ account: { limit: 10, ttl: 60_000 }, default: { limit: 60, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

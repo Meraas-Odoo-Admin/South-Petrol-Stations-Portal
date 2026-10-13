@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { FUEL_TYPE_LABELS, STATION_STATUS_LABELS, STATION_STATUS_VARIANT } from '../../lib/labels';
@@ -8,10 +7,8 @@ import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { adminErrorMessage } from '../admin/adminErrors';
-import { RegistrationDesksEditor } from '../admin/RegistrationDesksEditor';
-import { useAuth } from '../auth/AuthProvider';
 import { Notice, SectionCard } from '../users/parts';
-import { UsersListPage } from '../users/UsersListPage';
+import { OfficeWorkspace, StationWorkspace } from './Workspaces';
 import {
   ActivityCard,
   OFFICE_STATUS_LABELS,
@@ -57,7 +54,7 @@ export function MyStationPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title="محطتي" subtitle="موظفو المحطة والوقود الذي تبيعه والنشاط" />
+      <PageHeader title="محطتي" subtitle="موظفو المحطة والوقود والمخزون والتقارير" />
       {list.length > 1 && (
         <div>
           <label htmlFor="my-station" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">المحطة</label>
@@ -114,6 +111,14 @@ function MyStation({ station }: { station: StationRow }) {
         </dl>
       </header>
 
+      <StationWorkspace
+        stationId={station.id}
+        stationName={station.name}
+        staffTitle="موظفو المحطة"
+        staffEmpty="لا يوجد موظفون في محطتك بعد. أنشئ أول حساب وسيظهر هنا."
+        createParams={{ kind: 'PETROL_STATION', place: station.id, placeName: station.name }}
+        overview={
+          <>
       <SectionCard title="الوقود الذي تبيعه المحطة" description="هذا ما تتحكم به أنت في محطتك. بقية بيانات المحطة لمدير البلدية.">
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3">
@@ -145,17 +150,10 @@ function MyStation({ station }: { station: StationRow }) {
           <PillButton size="field" disabled={!changed || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? 'جارٍ الحفظ…' : 'حفظ أنواع الوقود'}
           </PillButton>
-          <p className="text-[14px] text-ink-soft lg:text-[12px]">سعة التخزين لكل نوع وقود تُضاف لاحقًا في هذه الصفحة.</p>
+          <p className="text-[14px] text-ink-soft lg:text-[12px]">سعة الخزانات والتوريد والمستوى في تبويب «الوقود والمخزون».</p>
         </div>
       </SectionCard>
 
-      <UsersListPage
-        basePath="/people"
-        fixedPlaceId={station.id}
-        title="موظفو المحطة"
-        createParams={{ kind: 'PETROL_STATION', place: station.id, placeName: station.name }}
-        emptyText="لا يوجد موظفون في محطتك بعد. أنشئ أول حساب وسيظهر هنا."
-      />
 
       <ActivityCard
         activity={activity.data}
@@ -168,6 +166,9 @@ function MyStation({ station }: { station: StationRow }) {
           )
         }
       />
+          </>
+        }
+      />
     </>
   );
 }
@@ -175,7 +176,6 @@ function MyStation({ station }: { station: StationRow }) {
 // «مكتبي» — the office manager's own office: its details, desks and printers,
 // card stock, its employees, and what happened there.
 export function MyOfficePage() {
-  const { hasPermission } = useAuth();
   const offices = useOfficeList({});
   const [chosen, setChosen] = useState('');
   const list = offices.data ?? [];
@@ -195,7 +195,7 @@ export function MyOfficePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title="مكتبي" subtitle="موظفو المكتب والمكاتب والطابعات ومخزون البطاقات" />
+      <PageHeader title="مكتبي" subtitle="موظفو المكتب والبطاقات والمخزون والطابعات" />
       {list.length > 1 && (
         <div>
           <label htmlFor="my-office" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">المكتب</label>
@@ -230,36 +230,14 @@ export function MyOfficePage() {
             </dl>
           </header>
 
-          {hasPermission('registration_desks:manage') && (
-            <SectionCard title="المكاتب والطابعات" description="مكتب الموظف والطابعة المتصلة به؛ كل بطاقة تسجّل المكتب الذي طُبعت عليه.">
-              <RegistrationDesksEditor registrationStationId={office.id} />
-            </SectionCard>
-          )}
-
-          {(hasPermission('card_stock:read') || hasPermission('registration_reports:view')) && (
-            <SectionCard title="المخزون والمتابعة">
-              <div className="flex flex-col gap-2.5 lg:flex-row">
-                {hasPermission('card_stock:read') && (
-                  <Link to="/reports/card-stock">
-                    <PillButton size="field" variant="secondary">مخزون البطاقات</PillButton>
-                  </Link>
-                )}
-                {hasPermission('registration_reports:view') && (
-                  <Link to="/reports/registration">
-                    <PillButton size="field" variant="secondary">متابعة المكتب وموظفيه</PillButton>
-                  </Link>
-                )}
-              </div>
-            </SectionCard>
-          )}
-
-          <UsersListPage
-            basePath="/people"
-            fixedPlaceId={office.id}
-            title="موظفو المكتب"
+          <OfficeWorkspace
+            officeId={office.id}
+            officeName={office.name}
+            staffTitle="موظفو المكتب"
+            staffEmpty="لا يوجد موظفو تسجيل في مكتبك بعد. أنشئ أول حساب وسيظهر هنا."
             createParams={{ kind: 'REGISTRATION', place: office.id, placeName: office.name }}
-            emptyText="لا يوجد موظفو تسجيل في مكتبك بعد. أنشئ أول حساب وسيظهر هنا."
-          />
+            overview={
+              <>
 
           <ActivityCard
             activity={activity.data}
@@ -271,6 +249,9 @@ export function MyOfficePage() {
                   مُصدرة <span className="font-extrabold">{activity.data.cardsLast30Days ?? 0}</span>
                 </p>
               )
+            }
+          />
+              </>
             }
           />
         </>

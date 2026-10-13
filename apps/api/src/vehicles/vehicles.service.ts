@@ -14,6 +14,7 @@ import { SystemSettingsService } from '../system-settings/system-settings.servic
 import { resolveWeekWindowStrategy } from '../fillups/rule-engine/week-window.strategy';
 import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
 import { DuplicateCheckQueryDto } from './dto/duplicate-check-query.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // One clash between a value being registered and an already-registered
 // vehicle — which field, and whose vehicle it is. The registration screen
@@ -117,6 +118,7 @@ export class VehiclesService {
     private readonly audit: AuditService,
     private readonly settings: SystemSettingsService,
     private readonly registrationStations: RegistrationStationsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // Phase 4c: a registration attempt refused because the plate, chassis number
@@ -591,6 +593,21 @@ export class VehiclesService {
   // registrationBooklet specifically.
 
   async setOrRequestChange(vehicleId: string, dto: CreateVehicleChangeRequestDto, actorId: string) {
+    const result = await this.setOrRequestChangeCore(vehicleId, dto, actorId);
+    if (result.requiresApproval) {
+      await this.notifications.notifyOfficesOf(actorId, ['notifications:office_events'], {
+        kind: 'CORRECTION_REQUESTED',
+        title: 'طلب تصحيح بيانات مركبة بانتظار الموافقة',
+        body: 'قدّم موظف تسجيل طلب تصحيح لرقم الهيكل أو الدفتر أو المالك أو اللوحة.',
+        link: '/vehicles/change-requests',
+        entityType: 'Vehicle',
+        entityId: vehicleId,
+      });
+    }
+    return result;
+  }
+
+  private async setOrRequestChangeCore(vehicleId: string, dto: CreateVehicleChangeRequestDto, actorId: string) {
     const vehicle = await this.findOne(vehicleId);
     const field = CHANGE_TYPE_FIELD[dto.changeType];
     const currentValue = vehicle[field];
@@ -713,6 +730,19 @@ export class VehiclesService {
   }
 
   async approveChangeRequest(id: string, actorId: string) {
+    const decided = await this.approveChangeRequestCore(id, actorId);
+    await this.notifications.notifyUsers([decided.requestedById], {
+      kind: 'CORRECTION_APPROVED',
+      title: 'تمت الموافقة على طلب التصحيح',
+      body: 'طُبّق التصحيح الذي طلبته على بيانات المركبة.',
+      link: `/vehicles/${decided.vehicleId}`,
+      entityType: 'Vehicle',
+      entityId: decided.vehicleId,
+    });
+    return decided;
+  }
+
+  private async approveChangeRequestCore(id: string, actorId: string) {
     const request = await this.findChangeRequestOrThrow(id);
     if (request.status !== 'PENDING') {
       throw new ConflictException(`This change request has already been ${request.status.toLowerCase()}.`);
@@ -831,6 +861,19 @@ export class VehiclesService {
   }
 
   async rejectChangeRequest(id: string, dto: RejectVehicleChangeRequestDto, actorId: string) {
+    const decided = await this.rejectChangeRequestCore(id, dto, actorId);
+    await this.notifications.notifyUsers([decided.requestedById], {
+      kind: 'CORRECTION_REJECTED',
+      title: 'رُفض طلب التصحيح',
+      body: decided.rejectionReason ? `السبب: ${decided.rejectionReason}` : 'رفضه مدير المكتب.',
+      link: `/vehicles/${decided.vehicleId}`,
+      entityType: 'Vehicle',
+      entityId: decided.vehicleId,
+    });
+    return decided;
+  }
+
+  private async rejectChangeRequestCore(id: string, dto: RejectVehicleChangeRequestDto, actorId: string) {
     const request = await this.findChangeRequestOrThrow(id);
     if (request.status !== 'PENDING') {
       throw new ConflictException(`This change request has already been ${request.status.toLowerCase()}.`);

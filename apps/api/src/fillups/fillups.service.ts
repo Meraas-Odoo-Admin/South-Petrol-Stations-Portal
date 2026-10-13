@@ -12,6 +12,8 @@ import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
+import { FuelStockService } from '../fuel-stock/fuel-stock.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { calendarDayString, computeStage, type MunicipalityStage } from '../common/utils/grace-stage';
 import { normalizeScannedCardNumber } from '../cards/card-number';
 import { FillUpsRepository, StandingExceptionsRepository } from './fillups.repository';
@@ -91,6 +93,8 @@ export class FillUpsService {
     private readonly repo: FillUpsRepository,
     private readonly standingExceptionsRepo: StandingExceptionsRepository,
     private readonly registrationStations: RegistrationStationsService,
+    private readonly fuelStock: FuelStockService,
+    private readonly notifications: NotificationsService,
   ) {
     // Constructed directly rather than DI-injected: FillUpRuleEngine takes
     // plain SettingsReader/FillUpHistoryReader/StandingExceptionReader
@@ -213,6 +217,73 @@ export class FillUpsService {
       stage: computeStage(new Date(), station.municipality),
       cardRequiredFromDate: calendarDayString(station.municipality.cardRequiredFromDate),
     };
+  }
+
+  // Phase 5B: the station's supervisor chooses which fuel types it sells now.
+  // A station with none chosen yet is unrestricted (nothing has been set up);
+  // once any is set, a fuel type not offered is refused here, not just hidden.
+  private async assertFuelTypeSold(stationId: string, fuelType: string) {
+    const rows = await this.prisma.stationFuelAvailability.findMany({
+      where: { stationId },
+      select: { fuelType: true, isAvailable: true },
+    });
+    if (rows.length === 0) return;
+    const offered = rows.some((r) => r.fuelType === fuelType && r.isAvailable);
+    if (!offered) {
+      throw new ConflictException('FUEL_TYPE_NOT_SOLD_HERE');
+    }
+  }
+
+  // Phase 5B: what a recorded fill-up sets in motion. Best effort - none of it
+  // may fail a fill-up that is already recorded.
+  private async afterRecorded(input: {
+    stationId: string;
+    fuelType: 'PETROL_95' | 'DIESEL' | 'KEROSENE';
+    identifiedBy: FillUpIdentification;
+    fuelMismatch: boolean;
+    actorId: string;
+    normalizedPlate: string | null;
+  }) {
+    try {
+      await this.fuelStock.afterChange(input.stationId, input.fuelType);
+      const station = await this.prisma.station.findUnique({
+        where: { id: input.stationId },
+        select: { name: true },
+      });
+      const where = station?.name ?? '';
+      if (input.identifiedBy === 'EMERGENCY_OVERRIDE') {
+        await this.notifications.notifyScope(
+          { stationId: input.stationId },
+          ['notifications:station_events', 'notifications:municipality_events'],
+          {
+            kind: 'EMERGENCY_OVERRIDE',
+            title: `تعبئة بتجاوز طارئ في ${where}`,
+            body: 'سُجّلت تعبئة بدون بطاقة بعد الموعد النهائي بإذن المشرف، مع سبب مكتوب.',
+            link: '/reports',
+            entityType: 'Station',
+            entityId: input.stationId,
+          },
+          { exceptUserId: input.actorId },
+        );
+      }
+      if (input.fuelMismatch) {
+        await this.notifications.notifyScope(
+          { stationId: input.stationId },
+          ['notifications:station_events'],
+          {
+            kind: 'FUEL_MISMATCH',
+            title: `نوع وقود لا يطابق المركبة في ${where}`,
+            body: 'سُجّلت تعبئة بنوع وقود مختلف عن نوع وقود المركبة المسجّل.',
+            link: '/reports',
+            entityType: 'Station',
+            entityId: input.stationId,
+          },
+          { exceptUserId: input.actorId },
+        );
+      }
+    } catch {
+      // never fails the fill-up
+    }
   }
 
   // Decides who the fill-up is for, from what the client sent:
@@ -459,6 +530,7 @@ export class FillUpsService {
     // exception-mode submission can't bypass it either.
     const context = await this.resolveRecordingContext(dto.stationId);
     const municipalityId = context.municipalityId;
+    await this.assertFuelTypeSold(dto.stationId, dto.fuelType);
     const subject = await this.resolveSubject(dto, context);
     const identifiedBy = await this.enforceCardRequirement(subject, context, {
       emergencyOverride: dto.emergencyOverride,
@@ -590,6 +662,14 @@ export class FillUpsService {
         where: { id: outcome.id },
         include: FILL_UP_WITH_EXCEPTION_INCLUDE,
       });
+      await this.afterRecorded({
+        stationId: dto.stationId,
+        fuelType: dto.fuelType,
+        identifiedBy,
+        fuelMismatch: baseData.fuelMismatch,
+        actorId,
+        normalizedPlate: baseData.normalizedPlate,
+      });
       return { status: 'created' as const, transaction, awareness: await this.awarenessFor(municipalityId, identifiedBy) };
     }
 
@@ -686,6 +766,14 @@ export class FillUpsService {
     const transaction = await this.prisma.fillUpTransaction.findUniqueOrThrow({
       where: { id: created.id },
       include: FILL_UP_WITH_EXCEPTION_INCLUDE,
+    });
+    await this.afterRecorded({
+      stationId: dto.stationId,
+      fuelType: dto.fuelType,
+      identifiedBy,
+      fuelMismatch: baseData.fuelMismatch,
+      actorId,
+      normalizedPlate: baseData.normalizedPlate,
     });
     return { status: 'created' as const, transaction, awareness: await this.awarenessFor(municipalityId, identifiedBy) };
   }

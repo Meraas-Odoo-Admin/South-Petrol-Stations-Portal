@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { useAuth } from '../auth/AuthProvider';
-import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
 import { Dialog } from '../../components/design/Dialog';
 import { PillButton } from '../../components/design/PillButton';
@@ -62,19 +61,21 @@ function windowText(w: StockWindow) {
   return `من ${stamp(w.from.at)} إلى ${stamp(w.to.at)}`;
 }
 
-export function CardStockPage() {
+// Phase 5B: no longer a page of its own. It lives in the «البطاقات والمخزون» tab
+// of one office (`fixedOfficeId`), where the office is already chosen.
+export function CardStockPanel({ fixedOfficeId }: { fixedOfficeId?: string }) {
   const { hasPermission } = useAuth();
   const canRecord = hasPermission('card_stock:record');
   const queryClient = useQueryClient();
   const [range, setRange] = useRange(30);
-  const [officeId, setOfficeId] = useState('');
+  const [officeId, setOfficeId] = useState(fixedOfficeId ?? '');
   const [form, setForm] = useState<null | 'RECEIVED' | 'COUNT'>(null);
   const [correcting, setCorrecting] = useState<StockEntryRow | null>(null);
 
   const officesQuery = useQuery({
     queryKey: ['registration-stations', 'for-stock'],
     queryFn: async () => (await apiClient.get<Office[]>('/registration-stations')).data,
-    enabled: hasPermission('registration_stations:read'),
+    enabled: hasPermission('registration_stations:read') && !fixedOfficeId,
   });
   const params = { ...range, registrationStationId: officeId || undefined };
   const reconciliation = useQuery({
@@ -95,23 +96,20 @@ export function CardStockPage() {
 
   return (
     <div>
-      <PageHeader
-        title="مخزون البطاقات"
-        subtitle="ما وصل وما عُدّ وما طُبع، وأي نقص غير مبرَّر"
-        actions={
-          canRecord && (
-            <>
-              <PillButton size="field" onClick={() => setForm('RECEIVED')}>تسجيل دفعة مستلمة</PillButton>
-              <PillButton size="field" variant="secondary" onClick={() => setForm('COUNT')}>تسجيل جرد</PillButton>
-            </>
-          )
-        }
-      />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[16px] text-ink-soft lg:text-[14px]">ما وصل وما عُدّ وما طُبع، وأي نقص غير مبرَّر</p>
+        {canRecord && (
+          <div className="flex flex-wrap gap-2.5">
+            <PillButton size="field" onClick={() => setForm('RECEIVED')}>تسجيل دفعة مستلمة</PillButton>
+            <PillButton size="field" variant="secondary" onClick={() => setForm('COUNT')}>تسجيل جرد</PillButton>
+          </div>
+        )}
+      </div>
       <RangeBar
         range={range}
         onChange={setRange}
         extra={
-          (officesQuery.data?.length ?? 0) > 1 ? (
+          !fixedOfficeId && (officesQuery.data?.length ?? 0) > 1 ? (
             <div className="col-span-2 lg:col-span-1">
               <FieldLabel htmlFor="stock-office">المكتب</FieldLabel>
               <select id="stock-office" className={SELECT} value={officeId} onChange={(e) => setOfficeId(e.target.value)}>

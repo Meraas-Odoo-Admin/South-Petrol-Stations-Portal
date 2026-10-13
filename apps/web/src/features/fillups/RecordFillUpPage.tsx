@@ -34,6 +34,7 @@ import {
   plateSearchTerm,
 } from '@fuel-tracking/shared-types';
 import { fuelTypeLabel } from '../../lib/labels';
+import { StockStrip, StockWarning } from '../stock/StockStrip';
 import { useAuth } from '../auth/AuthProvider';
 import { useStations } from '../stations/useStations';
 import { Card } from '../../components/design/Card';
@@ -642,6 +643,17 @@ export function RecordFillUpPage() {
   const chosenFuel = fillUpForm.watch('fuelType');
   const vehicleFuelType = selectedVehicle?.fuelType ?? rulePreviewQuery.data?.vehicleFuelType ?? null;
   const fuelMismatch = fuelTypeMismatch(vehicleFuelType, chosenFuel);
+  // Phase 5B: only the fuel types this station sells now are offered. A station
+  // whose supervisor has chosen none yet offers all three (nothing is set up).
+  const stationOfFillUp = stations?.find((s) => s.id === previewStationId);
+  const soldFuels = (stationOfFillUp?.fuelAvailability ?? []).filter((f) => f.isAvailable).map((f) => f.fuelType);
+  const availableFuelTypes = soldFuels.length > 0 ? FUEL_TYPES.filter((ft) => soldFuels.includes(ft.value)) : FUEL_TYPES;
+  const chosenIsOffered = availableFuelTypes.some((ft) => ft.value === chosenFuel);
+  useEffect(() => {
+    if (!chosenIsOffered && availableFuelTypes[0]) {
+      fillUpForm.setValue('fuelType', availableFuelTypes[0].value, { shouldValidate: true });
+    }
+  }, [chosenIsOffered, availableFuelTypes.map((f) => f.value).join(',')]);
   const previewCardRequired = isAxiosError(rulePreviewQuery.error) ? cardRequiredFrom(rulePreviewQuery.error) : null;
   const activeCardRequired = cardRequired ?? previewCardRequired;
   const rulePreviewErrorMessage = isAxiosError(rulePreviewQuery.error)
@@ -1431,6 +1443,12 @@ export function RecordFillUpPage() {
           </Card>
         )}
 
+        {mobileStep === 'plate' && (
+          <div className="mt-3">
+            <StockStrip stationId={previewStationId || undefined} title="مخزون المحطة الآن" />
+          </div>
+        )}
+
         {mobileStep === 'match' && vehicleSelected && scannedCard?.vehicle.id === vehicleSelected && (
           <ScanConfirmView
             card={scannedCard}
@@ -1536,7 +1554,7 @@ export function RecordFillUpPage() {
           <Card className="p-4">
             <label className={fieldLabelClass}>نوع الوقود</label>
             <div className="flex gap-2">
-              {FUEL_TYPES.map((ft) => {
+              {availableFuelTypes.map((ft) => {
                 const selected = fillUpForm.watch('fuelType') === ft.value;
                 return (
                   <button
@@ -1556,6 +1574,9 @@ export function RecordFillUpPage() {
                   </button>
                 );
               })}
+            </div>
+            <div className="mt-3">
+              <StockWarning stationId={previewStationId || undefined} fuelType={chosenFuel} />
             </div>
             {fuelMismatch && vehicleFuelType && (
               <div

@@ -10,7 +10,7 @@ import { Icon, ICONS } from '../../components/icons';
 import { STATION_STATUS_LABELS, STATION_STATUS_VARIANT } from '../../lib/labels';
 import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
-import { UsersListPage } from '../users/UsersListPage';
+import { StationWorkspace } from './Workspaces';
 import {
   ActivityCard,
   ArchiveRestoreButton,
@@ -160,6 +160,14 @@ export function StationManagePage() {
 
       {archived && <ArchivedBanner what="هذه المحطة" />}
 
+      <StationWorkspace
+        stationId={s.id}
+        stationName={s.name}
+        staffTitle="مشرفو المحطة"
+        staffEmpty="لا يوجد مشرف لهذه المحطة بعد. أضف مشرفًا، وهو يضيف موظفيه."
+        createParams={{ kind: 'PETROL_STATION', place: s.id, placeName: s.name }}
+        overview={
+          <>
       <SectionCard title="بيانات المحطة">
         <div className="space-y-4">
           <StationForm values={values} onChange={setValues} errors={errors} existingInternalCode={s.internalCode} lockCompany />
@@ -173,13 +181,6 @@ export function StationManagePage() {
         </div>
       </SectionCard>
 
-      <UsersListPage
-        basePath="/people"
-        fixedPlaceId={s.id}
-        title="مشرفو المحطة"
-        createParams={{ kind: 'PETROL_STATION', place: s.id, placeName: s.name }}
-        emptyText="لا يوجد مشرف لهذه المحطة بعد. أضف مشرفًا، وهو يضيف موظفيه."
-      />
 
       <ActivityCard
         activity={activity.data}
@@ -196,6 +197,9 @@ export function StationManagePage() {
       <SectionCard title="الأرشفة" description="لا تُحذف المحطات؛ تُؤرشف ويبقى سجلها محفوظًا.">
         <ArchiveRestoreButton kind="stations" id={s.id} name={s.name} archived={archived} />
       </SectionCard>
+          </>
+        }
+      />
     </div>
   );
 }

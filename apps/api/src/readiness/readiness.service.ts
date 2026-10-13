@@ -51,8 +51,6 @@ export class ReadinessService {
     const officeScope = await this.rbac.getRegistrationStationScope(actorId);
     const stationReach = reachOf(stationScope);
     const officeReach = reachOf(officeScope);
-    // The headline needs both halves of the picture, so only the admins get it.
-    const headlineAllowed = stationReach === 'all' && officeReach === 'all';
 
     // Municipalities this caller can look at: all for the admins, otherwise the
     // ones their own stations / offices belong to.
@@ -76,6 +74,13 @@ export class ReadinessService {
       municipalities.find((m) => m.id === query.municipalityId) ??
       (query.municipalityId ? null : (municipalities.find((m) => m.status === 'LIVE') ?? municipalities[0]!));
     if (!chosen) throw new NotFoundException('Municipality not found.');
+
+    // The headline needs both halves of the picture: the super admin has them
+    // everywhere, a municipality manager inside their own municipality.
+    const municipalityScope = await this.rbac.getMunicipalityScope(actorId);
+    const headlineAllowed =
+      (stationReach === 'all' && officeReach === 'all') ||
+      (municipalityScope !== null && municipalityScope.includes(chosen.id));
 
     const range = resolveReportRange(query, 21);
     const days = query.days ?? 14;

@@ -59,9 +59,16 @@ export class RegistrationReportsService {
 
   // ── offices side by side ─────────────────────────────────────────────
 
-  async offices(query: DateRangeQueryDto, actorId: string) {
+  async offices(query: DateRangeQueryDto & { officeId?: string }, actorId: string) {
     const range = resolveReportRange(query, 30);
-    const ids = await this.officeIds(actorId);
+    let ids = await this.officeIds(actorId);
+    if (query.officeId) {
+      // Only an office inside the caller's own scope can be asked for.
+      if (!ids.includes(query.officeId)) {
+        throw new ForbiddenException('You do not have access to this registration station.');
+      }
+      ids = [query.officeId];
+    }
     if (ids.length === 0) {
       return { range: { from: range.from, to: range.to }, duplicatesRecordedSince: await this.duplicateRecordingSince(), offices: [] };
     }

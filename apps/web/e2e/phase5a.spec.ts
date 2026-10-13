@@ -1,7 +1,7 @@
 import { mkdirSync } from 'fs';
 import path from 'path';
 import { test, expect, type Page } from '@playwright/test';
-import { fillDigitBoxes, loadFixtures, loginAs } from './helpers';
+import { fillDigitBoxes, loadFixtures, loginAs, navigateInApp } from './helpers';
 
 const fixtures = loadFixtures();
 
@@ -35,7 +35,7 @@ test('super admin: creates a municipality (its directorate appears by itself) an
   const page = await context.newPage();
   await loginAs(page, 'sysadmin1', fixtures.sysadminPassword);
 
-  await page.goto('/admin/municipalities');
+  await navigateInApp(page, '/admin/municipalities');
   await expect(page.getByRole('heading', { name: 'إدارة البلديات' })).toBeVisible();
   await shots(page, '01-municipalities-list');
 
@@ -59,7 +59,7 @@ test('super admin: creates a municipality (its directorate appears by itself) an
   await shots(page, '04-municipality-manager-created');
 
   // The rule switches live in settings.
-  await page.goto('/admin/settings');
+  await navigateInApp(page, '/admin/settings');
   await expect(page.getByTestId('rule-switches')).toBeVisible();
   const liters = page.getByTestId('rule-switch-fillup.rule.owner_liters.enabled');
   await expect(liters).toHaveAttribute('aria-checked', 'false');
@@ -95,6 +95,8 @@ test('municipality manager: station, its supervisor, an office manager, archive 
   await expect(page.getByRole('heading', { name: stationName })).toBeVisible();
 
   // Its supervisor, created from inside the station (the place is fixed).
+  // Phase 5B: the people of a place are in its «الموظفون» tab.
+  await page.getByTestId('tab-staff').click();
   await page.getByRole('button', { name: /حساب جديد/ }).first().click();
   await expect(page).toHaveURL(/kind=PETROL_STATION/);
   await page.getByLabel('الاسم الكامل').fill(`مشرف ${tag(5)}`);
@@ -106,6 +108,7 @@ test('municipality manager: station, its supervisor, an office manager, archive 
   // Back to the station: archive it, find it under the archived filter, restore it.
   await page.getByRole('button', { name: 'العودة إلى القائمة' }).click();
   await expect(page.getByRole('heading', { name: stationName })).toBeVisible();
+  await page.getByTestId('tab-overview').click();
   await page.getByRole('button', { name: 'أرشفة المحطة' }).click();
   await page.getByLabel('السبب (مطلوب)').fill('تجربة الأرشفة');
   await page.getByRole('dialog').getByRole('button', { name: 'أرشفة', exact: true }).click();
@@ -117,9 +120,11 @@ test('municipality manager: station, its supervisor, an office manager, archive 
   await expect(page.getByRole('button', { name: 'أرشفة المحطة' })).toBeVisible();
 
   // The office manager of the fixture office.
-  await page.goto('/manage');
+  await navigateInApp(page, '/manage');
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByRole('heading', { name: fixtures.registrationStationName })).toBeVisible();
+  // Phase 5B: the people of a place are in its «الموظفون» tab.
+  await page.getByTestId('tab-staff').click();
   await page.getByRole('button', { name: /حساب جديد/ }).first().click();
   await expect(page).toHaveURL(/kind=REGISTRATION/);
   await page.getByLabel('الاسم الكامل').fill(`مدير مكتب ${tag(4)}`);
@@ -138,6 +143,7 @@ test('station supervisor creates an employee in «محطتي»; office manager o
   await sup.getByRole('link', { name: 'محطتي' }).first().click();
   await expect(sup).toHaveURL('/my-station');
   await shots(sup, '20-my-station');
+  await sup.getByTestId('tab-staff').click();
   await sup.getByRole('button', { name: /حساب جديد/ }).first().click();
   await sup.getByLabel('الاسم الكامل').fill(`موظف ${tag(5)}`);
   await sup.getByLabel('اسم المستخدم').fill(`pw_emp_${fixtures.runId}_${random(3)}`);
@@ -152,6 +158,7 @@ test('station supervisor creates an employee in «محطتي»; office manager o
   await om.getByRole('link', { name: 'مكتبي' }).first().click();
   await expect(om).toHaveURL('/my-office');
   await shots(om, '22-my-office');
+  await om.getByTestId('tab-staff').click();
   await om.getByRole('button', { name: /حساب جديد/ }).first().click();
   await om.getByLabel('الاسم الكامل').fill(`موظف تسجيل ${tag(4)}`);
   await om.getByLabel('اسم المستخدم').fill(`pw_regemp_${fixtures.runId}_${random(3)}`);

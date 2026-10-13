@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createRefreshCoordinator } from './refreshCoordinator';
 
 // Access token lives in memory ONLY — never localStorage. Putting it there
 // would undermine the entire reason the refresh token is httpOnly in the
@@ -42,34 +43,19 @@ export function setOnAuthFailure(callback: (() => void) | null): void {
   onAuthFailure = callback;
 }
 
-let refreshPromise: Promise<string> | null = null;
+// ONE refresh per expiry, however many requests came back 401 at once and
+// whenever their responses arrive (see refreshCoordinator.ts, which has the
+// reasoning and the unit test). AuthProvider's mount-time refresh uses the
+// same coordinator, so React 18 StrictMode's double-invoked effect shares one
+// call too.
+const coordinator = createRefreshCoordinator({
+  doRefresh: async () => (await publicClient.post<{ accessToken: string }>('/auth/refresh')).data.accessToken,
+  getToken: getAccessToken,
+  setToken: setAccessToken,
+});
 
-// Coalesces ALL concurrent callers (the 401-retry path below, AND
-// AuthProvider's mount-time silent refresh) into a single in-flight
-// /auth/refresh call, sharing one promise rather than each firing its own
-// request. This isn't just an optimization: refresh tokens are single-use
-// (rotated on every call), so two concurrent real requests race — one
-// succeeds and rotates the cookie, the other 401s using the now-revoked
-// token. React 18 StrictMode double-invokes effects in development, so
-// AuthProvider's mount effect genuinely fires twice on every page load;
-// without this coalescing, the second (losing) call's 401 would leave
-// React state believing there's no session, even though the first call's
-// response had already established a perfectly valid one — a real bug,
-// caught by an actual browser reload in Playwright testing, not something
-// tsc/eslint could ever have caught.
-export async function silentRefresh(): Promise<string> {
-  if (!refreshPromise) {
-    refreshPromise = publicClient
-      .post<{ accessToken: string }>('/auth/refresh')
-      .then((res) => {
-        setAccessToken(res.data.accessToken);
-        return res.data.accessToken;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
-  }
-  return refreshPromise;
+export function silentRefresh(): Promise<string> {
+  return coordinator.refresh();
 }
 
 apiClient.interceptors.response.use(
@@ -80,7 +66,11 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const token = await silentRefresh();
+        // The token this request was SENT with: if it is no longer the current
+        // one, a refresh already happened and no new call is made.
+        const header = String(originalRequest.headers?.Authorization ?? '');
+        const sentToken = header.startsWith('Bearer ') ? header.slice(7) : null;
+        const token = await coordinator.tokenAfterUnauthorized(sentToken);
         originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return apiClient(originalRequest);

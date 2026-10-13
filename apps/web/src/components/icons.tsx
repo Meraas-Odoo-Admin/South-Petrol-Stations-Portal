@@ -52,4 +52,5 @@ export const ICONS = {
   arrowBack: 'M5 12h14M13 6l6 6-6 6',
   chevronDown: 'M6 9l6 6 6-6',
   filter: 'M4 5h16l-6 8v6l-4-2v-4L4 5Z',
+  bell: 'M6 9a6 6 0 1 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9Zm4 9.5a2 2 0 0 0 4 0',
 } as const;

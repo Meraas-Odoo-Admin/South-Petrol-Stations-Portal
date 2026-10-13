@@ -86,13 +86,19 @@ model Station {
   // municipality manager's station list filter. Free text, optional.
   locality String?
 
+  // Phase 5B: the supervisor's switch «إظهار المخزون للموظفين». When false the
+  // API itself refuses to show fuel levels to the station's employees.
+  showStockToEmployees Boolean @default(true)
+
   archivedAt   DateTime?
   archivedById String?
 
-  userScopes UserStationScope[]
-  fillUps    FillUpTransaction[]
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  userScopes       UserStationScope[]
+  fillUps          FillUpTransaction[]
+  fuelStorages     StationFuelStorage[]
+  fuelStockEntries FuelStockEntry[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   @@unique([companyId, stationNumber]) // the composite key that encodes the lesson learned
 }
@@ -449,6 +455,8 @@ model User {
   standingExceptionsGranted    StandingException[]            @relation("StandingExceptionGrantedBy")
   standingExceptionsRevoked    StandingException[]            @relation("StandingExceptionRevokedBy")
   auditLogs                    AuditLog[]
+  notifications                Notification[]
+  fuelStockEntriesCreated      FuelStockEntry[]               @relation("FuelStockEntryCreatedBy")
   createdAt                    DateTime                       @default(now())
   updatedAt                    DateTime                       @updatedAt
 }
@@ -1111,4 +1119,81 @@ model DuplicateCatch {
 
   @@index([registrationStationId, occurredAt])
   @@index([userId, occurredAt])
+}
+
+// ── Registration pivot, phase 5B: fuel storage and notifications ──────
+
+// One tank (or group of tanks) of one fuel type at one station. The level is
+// never stored: it is opening level + deliveries - liters dispensed since,
+// computed by the server (see fuel-stock/stock-level.ts).
+model StationFuelStorage {
+  id                 String   @id @default(cuid())
+  stationId          String
+  station            Station  @relation(fields: [stationId], references: [id])
+  fuelType           FuelType
+  capacityLiters     Decimal
+  openingLevelLiters Decimal
+  // Fill-ups before this moment are not subtracted from the opening level.
+  openedAt           DateTime @default(now())
+  // Alert state, so a crossing alerts once: true while the level is below the
+  // low-stock threshold (or below zero) and the alert for it has been sent.
+  lowStockAlerted    Boolean  @default(false)
+  negativeAlerted    Boolean  @default(false)
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([stationId, fuelType])
+}
+
+enum FuelStockEntryKind {
+  DELIVERY // a truck delivery (liters delivered)
+  CORRECTION // replaces the liters of the delivery it points to
+  RESET // the supervisor set the level to zero (liters = the level it had)
+}
+
+// INSERT-ONLY (database trigger, as for card stock): a mistake is fixed by a
+// linked CORRECTION entry with a reason.
+model FuelStockEntry {
+  id              String             @id @default(cuid())
+  stationId       String
+  station         Station            @relation(fields: [stationId], references: [id])
+  fuelType        FuelType
+  kind            FuelStockEntryKind
+  liters          Decimal
+  occurredAt      DateTime
+  truckPlate      String?
+  waybillNumber   String?
+  driverName      String?
+  correctsEntryId String?
+  corrects        FuelStockEntry?    @relation("FuelStockEntryCorrection", fields: [correctsEntryId], references: [id])
+  corrections     FuelStockEntry[]   @relation("FuelStockEntryCorrection")
+  reason          String?
+  createdById     String
+  createdBy       User               @relation("FuelStockEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime           @default(now())
+
+  @@index([stationId, fuelType, occurredAt])
+  @@index([correctsEntryId])
+}
+
+// In-app notification, one row per recipient, kept 90 days.
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String // stable code, e.g. LOW_STOCK
+  title      String
+  body       String
+  link       String? // in-app path of the thing it is about
+  entityType String?
+  entityId   String?
+  // Same event, same user, once: a second row with this key is not written.
+  dedupeKey  String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+  @@index([createdAt])
 }

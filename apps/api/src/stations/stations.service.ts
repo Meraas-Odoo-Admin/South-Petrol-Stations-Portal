@@ -6,6 +6,7 @@ import { RbacService } from '../rbac/rbac.service';
 import { CreateStationDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
 import { ListStationsQueryDto } from './dto/list-stations-query.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Station-scoped access is enforced HERE, in the service layer — not in the
 // controller and not in the UI. Every read goes through the caller's scope
@@ -26,6 +27,7 @@ export class StationsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // Same pattern as VehiclesService.generateInternalCode — station-card-
@@ -251,7 +253,7 @@ export class StationsService {
     if (before.archivedAt) {
       throw new ConflictException('ALREADY_ARCHIVED');
     }
-    return this.prisma.$transaction(async (tx) => {
+    const archived = await this.prisma.$transaction(async (tx) => {
       const station = await tx.station.update({
         where: { id },
         data: { archivedAt: new Date(), archivedById: actorId },
@@ -269,6 +271,20 @@ export class StationsService {
       );
       return station;
     });
+    await this.notifications.notifyScope(
+      { stationId: id },
+      ['notifications:municipality_events'],
+      {
+        kind: 'STATION_ARCHIVED',
+        title: `أُرشف محطة ${archived.name}`,
+        body: `السبب: ${reason}`,
+        link: `/manage/stations/${id}`,
+        entityType: 'Station',
+        entityId: id,
+      },
+      { exceptUserId: actorId },
+    );
+    return archived;
   }
 
   async restore(id: string, reason: string, actorId: string) {

@@ -53,6 +53,30 @@ export const PERMISSIONS = [
     key: 'readiness:view',
     description: 'View the deadline-readiness report: cards vs no-card fill-ups and card issuance (subject to station / registration-station scope)',
   },
+  {
+    key: 'fuel_stock:read',
+    description: 'See fuel levels, deliveries and history at the stations in your scope (supervisors, municipality managers)',
+  },
+  {
+    key: 'fuel_stock:read_visible',
+    description: 'See the current fuel level per fuel type at your own station, while the supervisor shows stock to employees',
+  },
+  {
+    key: 'fuel_stock:manage',
+    description: 'Set up tanks, record and correct deliveries, reset a level to zero, and show or hide stock from employees (station supervisors)',
+  },
+  { key: 'notifications:read', description: 'Read your own notifications (the bell)' },
+  { key: 'notifications:station_events', description: 'Receive station notifications: low or negative stock, overrides, fuel mismatches, lockouts' },
+  { key: 'notifications:office_events', description: 'Receive office notifications: corrections waiting, card shortfall, low blank cards, lockouts' },
+  {
+    key: 'notifications:municipality_events',
+    description: 'Receive municipality notifications: stock, resets, card shortfall, overrides, archives, deadline readiness',
+  },
+  { key: 'notifications:system_events', description: 'Receive system notifications: no manager, rule or setting changes, failed manager logins' },
+  { key: 'reports:municipality', description: 'View the municipality-wide reports: stations, fuel reconciliation, registration progress' },
+  { key: 'reports:cross_municipality', description: 'View the cross-municipality summary (super admin)' },
+  { key: 'reports:own_shift', description: "View your own shift's fill-ups (station employees)" },
+  { key: 'registration_reports:own_day', description: "View your own day's registrations, cards and failed prints (registration employees)" },
   { key: 'stations:read', description: 'View stations (subject to station scope)' },
   {
     key: 'stations:manage',
@@ -224,6 +248,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'cards:scan',
     'fillups:create',
     'fillups:record_exception',
+    'fuel_stock:read_visible',
+    'notifications:read',
+    'reports:own_shift',
   ],
   station_supervisor: [
     'companies:read',
@@ -247,6 +274,10 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'reports:view',
     'users:manage_staff',
     'readiness:view',
+    'fuel_stock:read',
+    'fuel_stock:manage',
+    'notifications:read',
+    'notifications:station_events',
   ],
   // Search the registry (to avoid duplicates), register owners and
   // vehicles at their registration station(s), request corrections to
@@ -262,6 +293,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'owners:request_change',
     'cards:read',
     'cards:issue',
+    'notifications:read',
+    'registration_reports:own_day',
   ],
   // Everything a registration employee can do, plus approving those
   // corrections and revealing full owner identity numbers. No fillups:*.
@@ -286,6 +319,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'card_stock:read',
     'card_stock:record',
     'readiness:view',
+    'notifications:read',
+    'notifications:office_events',
   ],
   // Phase 5A: "مدير البلدية" - the municipality manager. The internal key
   // stays directorate_admin; the role is now scoped to ONE municipality
@@ -334,6 +369,10 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'registration_reports:view',
     'card_stock:read',
     'readiness:view',
+    'fuel_stock:read',
+    'notifications:read',
+    'notifications:municipality_events',
+    'reports:municipality',
   ],
   system_admin: PERMISSIONS.map((p) => p.key),
 };
@@ -413,6 +452,16 @@ export const SYSTEM_SETTINGS = [
     key: 'fillup.rule.owner_liters.enabled',
     value: 'false',
     description: 'Rule switch: weekly liters per owner',
+  },
+  {
+    key: 'stock.low_threshold_liters',
+    value: '1000',
+    description: 'Low-stock alert: a fuel type at a station below this many liters notifies the supervisor and the municipality managers',
+  },
+  {
+    key: 'cards.low_blank_threshold',
+    value: '100',
+    description: 'PLACEHOLDER: low blank-card alert: an office below this many blank cards notifies its manager',
   },
   {
     key: 'fillup.week_window_mode',

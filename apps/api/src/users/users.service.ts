@@ -1,4 +1,5 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { RoleKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -176,6 +177,11 @@ export class UsersService {
   async revokePermission(userId: string, permissionId: string, actorId: string) {
     await this.ensureUserExists(userId);
     await this.assertMayEdit(actorId, userId);
+    // A permission that comes from the person's job is locked.
+    const fromJob = await this.prisma.rolePermission.count({
+      where: { permissionId, role: { users: { some: { userId } } } },
+    });
+    if (fromJob > 0) throw new BadRequestException('PERMISSION_FROM_JOB_LOCKED');
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userPermission.deleteMany({ where: { userId, permissionId } });

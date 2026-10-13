@@ -9,6 +9,7 @@ import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
 import { OnboardingTour } from './OnboardingTour';
 import { NAV_ACCESS } from '../lib/navAccess';
+import { NotificationBell } from './NotificationBell';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
 // artboard 2a ("تنقّل الهاتف — نمط مقصود، لا قائمة سطح مكتب ملتفّة"): the
@@ -114,29 +115,16 @@ export function Layout() {
       badge: changeRequestsBadgeQuery.data,
     },
     {
-      to: '/reports/daily',
+      to: '/reports',
       label: 'التقارير',
       icon: <Icon d={ICONS.reports} />,
-      show: NAV_ACCESS.dailyReport(hasPermission),
+      show: NAV_ACCESS.reports(hasPermission),
     },
-    // Phase 4c: the monitoring reports, under the reports area.
     {
-      to: '/reports/registration',
-      label: 'متابعة مكاتب التسجيل',
+      to: '/reports/daily',
+      label: 'تقرير المحطة اليومي',
       icon: <Icon d={ICONS.reports} />,
-      show: NAV_ACCESS.registrationReports(hasPermission),
-    },
-    {
-      to: '/reports/card-stock',
-      label: 'مخزون البطاقات',
-      icon: <Icon d={ICONS.register} />,
-      show: NAV_ACCESS.cardStock(hasPermission),
-    },
-    {
-      to: '/reports/readiness',
-      label: 'الجاهزية للموعد النهائي',
-      icon: <Icon d={ICONS.dashboard} />,
-      show: NAV_ACCESS.readiness(hasPermission),
+      show: NAV_ACCESS.dailyReport(hasPermission),
     },
     // Phase 5A: each level's own place for its places and people.
     { to: '/manage', label: 'إدارة المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.manage(hasPermission) },
@@ -168,8 +156,7 @@ export function Layout() {
   // («تسجيل المركبات» was).
   const SHEET_GROUPS: Array<{ title: string; paths: string[] }> = [
     { title: '', paths: ['/'] },
-    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
-    { title: 'تقارير المتابعة', paths: ['/reports/registration', '/reports/card-stock', '/reports/readiness'] },
+    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
     { title: 'محطتي ومكتبي', paths: ['/manage', '/my-station', '/my-office'] },
     { title: 'الإدارة', paths: ['/admin'] },
@@ -281,6 +268,7 @@ export function Layout() {
             {user?.fullName ? ` · ${user.fullName}` : ''}
           </p>
         </div>
+        <NotificationBell align="start" />
       </header>
 
       {/* Single shared content outlet — every page mounts exactly once.
@@ -302,6 +290,9 @@ export function Layout() {
           it — a real bug, not a flaky test. lg:p-6 (desktop, no fixed
           nav) is unaffected. */}
       <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:min-h-screen lg:flex-1 lg:p-6">
+        <div className="mb-4 hidden justify-end lg:flex">
+          <NotificationBell align="start" />
+        </div>
         <Outlet />
       </main>
 

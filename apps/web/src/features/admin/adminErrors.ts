@@ -30,6 +30,18 @@ const MESSAGES: Record<string, string> = {
   PLACE_NOT_FOUND: 'أحد الأماكن المختارة غير موجود.',
   ALREADY_INACTIVE: 'هذا الحساب موقوف مسبقًا.',
   ALREADY_ACTIVE: 'هذا الحساب نشط مسبقًا.',
+  // Phase 5B - fuel storage and permissions.
+  STORAGE_NOT_SET_UP: 'اضبط خزان هذا النوع من الوقود أولًا: السعة والمستوى الافتتاحي.',
+  OPENING_LEVEL_LOCKED: 'لا يمكن تغيير المستوى الافتتاحي بعد تسجيل توريد. صحّح التوريد أو صفّر المستوى.',
+  OPENING_ABOVE_CAPACITY: 'المستوى الافتتاحي أكبر من سعة الخزان.',
+  CAPACITY_BELOW_LEVEL: 'السعة أقل من المستوى الافتتاحي.',
+  DATE_IN_THE_FUTURE: 'لا يمكن تسجيل وقت في المستقبل.',
+  DELIVERY_BEFORE_OPENING: 'وقت التوريد قبل لحظة بدء حساب المخزون، فهو محسوب ضمن المستوى الافتتاحي. اختر وقتًا بعد البدء.',
+  CORRECT_THE_DELIVERY: 'صحّح التوريد الأصلي لا سجل التصحيح.',
+  STATION_ARCHIVED: 'هذه المحطة مؤرشفة، فلا يُسجَّل فيها شيء.',
+  FUEL_TYPE_NOT_SOLD_HERE: 'هذه المحطة لا تبيع هذا النوع من الوقود حاليًا.',
+  PERMISSION_FROM_JOB_LOCKED: 'هذه الصلاحية من الوظيفة نفسها ولا تُسحب وحدها. غيّر الوظيفة بدلًا من ذلك.',
+  PERMISSION_NOT_DELEGABLE: 'لا يمكنك منح هذه الصلاحية.',
 };
 
 interface SeparationDetails {

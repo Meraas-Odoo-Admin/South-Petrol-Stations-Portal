@@ -13,6 +13,8 @@ import { Icon, ICONS } from '../../components/icons';
 import { Notice, SectionCard } from '../users/parts';
 import { UsersListPage } from '../users/UsersListPage';
 import { formatWhen } from '../users/format';
+import { PlaceSummaryRow, ReadinessPanel } from '../places/MunicipalitySummary';
+import { OpsReportPanel } from '../reports/OpsReportPanel';
 import { StageCard } from '../places/StageCard';
 import {
   ArchiveRestoreButton,
@@ -124,6 +126,13 @@ export function MunicipalityDetailPage() {
       {archived && <ArchivedBanner what="هذه البلدية" />}
       {problem && <Notice kind="error">{problem}</Notice>}
       {saved && <Notice kind="success">{saved}</Notice>}
+
+      {!archived && (
+        <>
+          <PlaceSummaryRow municipalityId={m.id} />
+          <ReadinessPanel municipalityId={m.id} />
+        </>
+      )}
 
       <SectionCard title="الجهة الأمنية ورمز البطاقات">
         <div className="space-y-4">
@@ -329,6 +338,21 @@ export function MunicipalityDetailPage() {
           <TextField label={`اكتب: ${m.name}`} value={typed} onChange={(e) => setTyped(e.target.value)} data-testid="municipality-confirm-name" />
         </div>
       </Dialog>
+
+      <SectionCard
+        title="تقارير البلدية"
+        description="التقارير نفسها التي يقرؤها مدير البلدية، لهذه البلدية وحدها. للمقارنة بين البلديات انتقل إلى ملخص البلديات، ولسجل التغييرات إلى سجل المراجعة."
+      >
+        <div className="mb-4 flex flex-wrap gap-2.5">
+          <Link to="/reports?report=summary">
+            <PillButton size="field" variant="secondary">ملخص مقارنة البلديات</PillButton>
+          </Link>
+          <Link to="/admin/audit-log">
+            <PillButton size="field" variant="secondary">سجل المراجعة</PillButton>
+          </Link>
+        </div>
+        <OpsReportPanel report="municipality" fixedMunicipalityId={m.id} />
+      </SectionCard>
     </div>
   );
 }

@@ -28,8 +28,12 @@ import { FillUpsModule } from './fillups/fillups.module';
 import { ReportsModule } from './reports/reports.module';
 import { RolesModule } from './roles/roles.module';
 import { StandingExceptionsModule } from './standing-exceptions/standing-exceptions.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { FuelStockModule } from './fuel-stock/fuel-stock.module';
+import { OpsReportsModule } from './ops-reports/ops-reports.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './rbac/guards/permissions.guard';
+import { accountThrottleSkip, accountTracker } from './common/throttle/account-throttle';
 
 @Module({
   imports: [
@@ -38,9 +42,21 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
       envFilePath: ['.env'],
     }),
     ThrottlerModule.forRoot([
+      // Every route, per IP.
       {
+        name: 'default',
         ttl: 60_000,
         limit: 100,
+      },
+      // Login (per username) and refresh (per refresh token), see
+      // common/throttle/account-throttle.ts. Skipped on every other route;
+      // the route's own @Throttle sets the limit.
+      {
+        name: 'account',
+        ttl: 60_000,
+        limit: 10,
+        skipIf: accountThrottleSkip,
+        getTracker: (req) => accountTracker(req),
       },
     ]),
     PrismaModule,
@@ -67,6 +83,9 @@ import { PermissionsGuard } from './rbac/guards/permissions.guard';
     ReportsModule,
     RolesModule,
     StandingExceptionsModule,
+    NotificationsModule,
+    FuelStockModule,
+    OpsReportsModule,
     HealthModule,
   ],
   providers: [

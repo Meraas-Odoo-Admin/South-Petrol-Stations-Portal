@@ -55,6 +55,14 @@ export class UsersController {
     return this.accounts.detail(actor.id, id);
   }
 
+  // The person's permissions, grouped by area in plain Arabic: those from
+  // their job ticked and locked, the rest switchable only where this caller may.
+  @RequireAnyPermission('users:manage', 'users:manage_municipality_staff', 'users:manage_staff')
+  @Get(':id/permissions')
+  permissions(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.permissionsOf(actor.id, id);
+  }
+
   @RequireAnyPermission('users:manage', 'users:manage_municipality_staff', 'users:manage_staff')
   @Get(':id/activity')
   activity(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {

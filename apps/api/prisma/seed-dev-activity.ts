@@ -25,6 +25,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { devScriptRefusal } from '../src/common/utils/local-database';
 import { tripoliDay } from '../src/common/utils/grace-stage';
 import { addDays, tripoliMidnight } from '../src/common/utils/tripoli';
+import { computeLevel, levelAt, type FuelEntryRaw } from '../src/fuel-stock/stock-level';
 
 const SYN = '[synthetic]';
 const DAYS = 21;
@@ -73,6 +74,27 @@ async function resetSynthetic(prisma: PrismaClient) {
   } finally {
     await prisma.$executeRawUnsafe('ALTER TABLE "StockEntry" ENABLE TRIGGER "stock_entry_no_update_delete"');
   }
+  // Phase 5B: synthetic fuel deliveries, a reset, and the notifications written
+  // for them. Fuel stock entries are insert-only too; same guarded removal.
+  const fuelEntries = await prisma.fuelStockEntry.findMany({
+    where: { OR: [{ waybillNumber: { startsWith: 'SYN-' } }, { reason: { startsWith: SYN } }] },
+    select: { stationId: true, fuelType: true },
+  });
+  await prisma.$executeRawUnsafe('ALTER TABLE "FuelStockEntry" DISABLE TRIGGER "fuel_stock_entry_no_update_delete"');
+  try {
+    const marked: Prisma.FuelStockEntryWhereInput = {
+      OR: [{ waybillNumber: { startsWith: 'SYN-' } }, { reason: { startsWith: SYN } }],
+    };
+    await prisma.fuelStockEntry.deleteMany({ where: { AND: [marked, { correctsEntryId: { not: null } }] } });
+    await prisma.fuelStockEntry.deleteMany({ where: marked });
+  } finally {
+    await prisma.$executeRawUnsafe('ALTER TABLE "FuelStockEntry" ENABLE TRIGGER "fuel_stock_entry_no_update_delete"');
+  }
+  for (const e of fuelEntries) {
+    await prisma.stationFuelStorage.deleteMany({ where: { stationId: e.stationId, fuelType: e.fuelType } });
+  }
+  await prisma.stationFuelStorage.deleteMany({ where: { createdById: { in: userIds } } });
+  await prisma.notification.deleteMany({ where: { dedupeKey: { startsWith: 'syn-' } } });
   await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { entityId: { startsWith: 'syn_' } }] } });
   await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
@@ -389,6 +411,152 @@ async function main() {
       }
     }
     await chunk(fillUps, (r) => prisma.fillUpTransaction.createMany({ data: r, skipDuplicates: true }));
+
+    // ── Fuel storage (phase 5B): four stations, four situations ─────────
+    // 0 healthy · 1 a low-stock crossing near the end · 2 a supervisor reset
+    // · 3 a negative level (an unrecorded delivery or a wrong opening level).
+    const stockOwner = (await prisma.user.findUnique({ where: { username: 'supervisor1' } }))?.id ?? recorder;
+    const threshold = 1000;
+    const dispensedBy = (stationId: string) =>
+      fillUps
+        .filter((f) => f.stationId === stationId && f.fuelType === 'PETROL_95')
+        .map((f) => ({ occurredAt: f.occurredAt as Date, liters: Number(f.quantityLiters) }));
+    const openedAt = at(addDays(today, -(DAYS - 1)), 5);
+    const fuelNotes: Array<{ station: number; kind: string; title: string; body: string }> = [];
+
+    for (const [index, station] of stations.slice(0, 4).entries()) {
+      // A station that already has a tank (set up by hand or by a test run) is left alone.
+      const already = await prisma.stationFuelStorage.findUnique({
+        where: { stationId_fuelType: { stationId: station.id, fuelType: 'PETROL_95' } },
+      });
+      if (already) continue;
+      const spent = dispensedBy(station.id);
+      const total = spent.reduce((t, d) => t + d.liters, 0);
+      const opening =
+        index === 0 ? Math.round(total * 0.4) : index === 1 ? Math.round(total * 0.5) : index === 2 ? Math.round(total * 0.6) : 200;
+      const capacity = Math.max(opening * 2, Math.round(total * 1.5), 20000);
+      await prisma.stationFuelStorage.create({
+        data: {
+          stationId: station.id,
+          fuelType: 'PETROL_95',
+          capacityLiters: capacity,
+          openingLevelLiters: opening,
+          openedAt,
+          createdById: stockOwner,
+          lowStockAlerted: index === 1 || index === 2,
+          negativeAlerted: index === 3,
+        },
+      });
+
+      const entries: Prisma.FuelStockEntryCreateManyInput[] = [];
+      const deliver = (daysAgo: number, liters: number, n: number) =>
+        entries.push({
+          stationId: station.id,
+          fuelType: 'PETROL_95',
+          kind: 'DELIVERY',
+          liters: Math.max(1, Math.round(liters)),
+          occurredAt: at(addDays(today, -daysAgo), 9),
+          truckPlate: `${between(1, 9)}-${between(100000, 999999)}`,
+          waybillNumber: `SYN-${index + 1}${String(n).padStart(3, '0')}`,
+          driverName: index === 0 ? 'سائق اصطناعي' : null,
+          createdById: stockOwner,
+        });
+      if (index === 0) {
+        deliver(15, total * 0.3, 1);
+        deliver(8, total * 0.3, 2);
+        deliver(2, total * 0.3, 3);
+      } else if (index === 1) {
+        deliver(15, total * 0.25, 1);
+        deliver(7, total * 0.25 - 600, 2); // ends about 600 L short: below the 1000 L line
+      } else if (index === 2) {
+        deliver(14, total * 0.3, 1);
+        deliver(4, total * 0.2, 2);
+      }
+      // index 3: no delivery at all, so the level goes negative.
+      await prisma.fuelStockEntry.createMany({ data: entries });
+
+      if (index === 2) {
+        // The supervisor reset the level to zero eight days ago.
+        const raw: FuelEntryRaw[] = entries.map((e, i) => ({
+          id: `e${i}`,
+          kind: 'DELIVERY',
+          liters: Number(e.liters),
+          occurredAt: e.occurredAt as Date,
+          createdAt: e.occurredAt as Date,
+          correctsEntryId: null,
+        }));
+        const resetAt = at(addDays(today, -8), 12);
+        const previous = levelAt({ openingLevel: opening, openedAt }, raw, spent, resetAt).level;
+        await prisma.fuelStockEntry.create({
+          data: {
+            stationId: station.id,
+            fuelType: 'PETROL_95',
+            kind: 'RESET',
+            liters: Math.max(0, Math.round(previous)),
+            occurredAt: resetAt,
+            reason: `${SYN} جرد فعلي أظهر خزانًا فارغًا`,
+            createdById: stockOwner,
+          },
+        });
+        fuelNotes.push({
+          station: index,
+          kind: 'FUEL_RESET',
+          title: 'تصفير مخزون بنزين 95',
+          body: `المخزون المسجّل قبل التصفير: ${Math.max(0, Math.round(previous)).toLocaleString('en')} لتر.`,
+        });
+      }
+      if (index === 1) {
+        fuelNotes.push({
+          station: index,
+          kind: 'LOW_STOCK',
+          title: 'مخزون بنزين 95 منخفض',
+          body: `المتبقي أقل من ${threshold.toLocaleString('en')} لتر.`,
+        });
+      }
+      if (index === 3) {
+        fuelNotes.push({
+          station: index,
+          kind: 'NEGATIVE_STOCK',
+          title: 'مخزون بنزين 95: بيانات تحتاج مراجعة',
+          body: 'المخزون المحسوب أقل من الصفر: يوجد توريد غير مسجّل أو مستوى افتتاحي غير صحيح.',
+        });
+      }
+      void computeLevel;
+    }
+
+    // Real-looking notifications for the people who would receive them.
+    const watchers = await prisma.user.findMany({
+      where: { username: { in: ['supervisor1', 'admin1', 'regsupervisor1'] } },
+      select: { id: true, username: true },
+    });
+    const notifications: Prisma.NotificationCreateManyInput[] = [];
+    for (const note of fuelNotes) {
+      for (const w of watchers.filter((u) => u.username !== 'regsupervisor1')) {
+        notifications.push({
+          userId: w.id,
+          kind: note.kind,
+          title: note.title,
+          body: note.body,
+          link: w.username === 'admin1' ? `/manage/stations/${stations[note.station]!.id}?tab=fuel` : '/my-station?tab=fuel',
+          entityType: 'Station',
+          entityId: stations[note.station]!.id,
+          dedupeKey: `syn-${note.kind}-${note.station}-${w.username}`,
+        });
+      }
+    }
+    for (const w of watchers.filter((u) => u.username === 'regsupervisor1')) {
+      notifications.push({
+        userId: w.id,
+        kind: 'CARD_SHORTFALL',
+        title: `نقص في بطاقات ${seededOffice.name}`,
+        body: '15 بطاقة خرجت من الصندوق دون طباعة مسجّلة في المنظومة.',
+        link: '/my-office?tab=cards',
+        entityType: 'RegistrationStation',
+        entityId: seededOffice.id,
+        dedupeKey: `syn-shortfall-${w.username}`,
+      });
+    }
+    await prisma.notification.createMany({ data: notifications, skipDuplicates: true });
 
     console.log(
       `Synthetic activity generated (${DAYS} days, scale ${scale}): ${vehicles.length} vehicles, ${cards.length} cards, ` +

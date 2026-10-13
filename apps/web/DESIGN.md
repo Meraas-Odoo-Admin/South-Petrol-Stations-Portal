@@ -82,6 +82,38 @@ typography:
     fontFamily: "Cairo, sans-serif"
     fontSize: "12px"
     fontWeight: 700
+  level-figure-phone:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "34px"
+    fontWeight: 800
+  level-figure-desktop:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "30px"
+    fontWeight: 800
+  summary-figure-phone:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "32px"
+    fontWeight: 800
+  summary-figure-desktop:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "28px"
+    fontWeight: 800
+  detail-figure-phone:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "26px"
+    fontWeight: 800
+  detail-figure-desktop:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "22px"
+    fontWeight: 800
+  answer-phone:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "22px"
+    fontWeight: 800
+  answer-desktop:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "19px"
+    fontWeight: 800
 rounded:
   sm: "10px"
   md: "16px"
@@ -326,6 +358,21 @@ Individual rounded cards: an 11px label on top and a 28px mono figure end-aligne
 
 ### Inline Notices
 A short message tied to what was just done, always an icon plus words: success on Approved Green Tint, a refusal or failure on Violation Red Tint, a pending state on Gauge Amber Tint, plain information on Mist Green. Success is announced politely; a problem interrupts.
+
+### Switch (phase 5B)
+One switch for the whole app: `components/design/Switch.tsx`. An iOS-style track (56×32) and a 24px thumb, with the state always written beside it («مفعّل / موقوف», or the words the use needs: «ظاهر للموظفين / مخفي عن الموظفين», «فعّال / موقوف», «مضافة / غير مضافة»). On is petrol teal, off is line grey, and the state is never carried by colour or position alone. 44px minimum target for the whole control, words included; the thumb moves with `start`, so it flips in RTL. Used for the fill-up rule switches, «إظهار المخزون للموظفين», a person's active state and the extra permissions on the person page. A new switch uses this component; nothing draws its own track.
+
+### Notification Bell (phase 5B)
+A 44px bell in the header (the end of the desktop content strip, the end of the phone top bar). The unread count is a small amber-deep numeral badge. The panel is a card: a title, «تعليم الكل كمقروء», then the list newest first; each row has a short title, one line of detail, the time and «فتح». An unread row carries the word «جديد», so unread is never told by weight or tint alone. Polled every 60 seconds; the phone panel is a full-width sheet under the header.
+
+### Tabs (phase 5B)
+The place pages (a station, an office) use `components/design/Tabs.tsx`: a row of 48px tabs with a 3px teal underline on the chosen one (teal is structure), a small amber count when something is waiting, the chosen tab kept in the address (`?tab=`). Station: نظرة عامة · الموظفون · الوقود والمخزون · التقارير. Office: نظرة عامة · الموظفون · البطاقات والمخزون · المكاتب والطابعات.
+
+### Report Tables (phase 5B)
+Every role report is a set of named tables drawn by one component (`features/reports/OpsReportView.tsx`): a teal-tinted title bar with the one-line note and «تنزيل CSV», a 2px header rule, sortable column headers (a button with ▲ ▼ ↕), row separators, tabular numerals. A row that needs a look says so in words («يحتاج مراجعة», «وقود غير مبرَّر»); the tint only repeats it. On a phone each row becomes a small card, so nothing scrolls sideways.
+
+### Summary Row and Readiness Panel (phase 5B)
+At the top of «إدارة المحطات» and of a municipality: five large figures (32px numerals), each with its state in a pill when it needs a decision (amber tint plus «تحتاج مراجعة»). Below it the readiness panel answers first in one sentence at 22px («يحتاج التسجيل نحو ‹س› يومًا — باقٍ على الموعد ‹ص› يومًا») with a status pill, then the chart, then the four details and the one input, drawn as a row of buttons («آخر 7 / 14 / 21 / 30 يومًا») so nothing is misaligned.
 
 ### Dialogs
 A sheet that rises from the bottom edge on a phone and a centred 24px-radius panel on a desktop. Escape and the backdrop close it, focus moves in and returns, and it cannot be closed while a request is running. A destructive confirmation names the person and what will happen, asks for a reason when one is required, and puts the outlined red action last.
