@@ -25,6 +25,19 @@ describe('test markers', () => {
     }
   });
 
+  it('recognises the Arabic test words anywhere in a name', () => {
+    for (const name of [
+      'بلدية اختبار ربدرت',
+      'محطة اختبار هجشهت',
+      'مكتب تسجيل تجريبي — عنوان',
+      'شركة تجريبية للاختبار',
+      'Registration office — SYNTHETIC FIXTURE',
+      'محطة تجريبي 7',
+    ]) {
+      expect(isTestName(name)).toBe(true);
+    }
+  });
+
   it('does not match Sabha or the client companies', () => {
     for (const name of ['سبها', 'الراحلة', 'ليبيا نفط', 'P', 'PWC Fuel', 'Petrol Co']) {
       expect(isTestName(name)).toBe(false);
