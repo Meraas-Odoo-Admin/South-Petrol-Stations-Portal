@@ -29,8 +29,14 @@ export const isTestUsername = (username: string): boolean =>
 // create: «P4B …», «P5A …», «E2E …», «PW …» followed by a space.
 export const TEST_NAME_PATTERN = /^(P\d[A-Z]?|E2E|PW)( |$)/;
 
+// Words the Playwright runs and the dev tooling put in the Arabic names they give
+// stations, offices, municipalities and companies: «اختبار» (test) and «تجريبي»
+// (trial), anywhere in the name, and «synthetic fixture». A real name never
+// contains them.
+export const TEST_NAME_WORDS = /اختبار|تجريبي|synthetic fixture/i;
+
 export const isTestName = (name: string): boolean =>
-  TEST_NAME_PATTERN.test(name) || /synthetic fixture|^Test Station|مكتب تسجيل تجريبي/.test(name);
+  TEST_NAME_PATTERN.test(name) || TEST_NAME_WORDS.test(name) || /^Test Station/.test(name);
 
 // Internal codes the seeds and Playwright use.
 export const TEST_STATION_CODE_PREFIXES: readonly string[] = ['STN-TEST-', 'PW-STN-', 'STN-EX-'];
