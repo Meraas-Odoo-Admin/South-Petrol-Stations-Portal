@@ -10,6 +10,7 @@
     "refresh": "node scripts/refresh.mjs",
     "dev": "pnpm refresh && pnpm --parallel --filter ./apps/* run dev",
     "dev:phone": "node scripts/refresh.mjs && node scripts/dev-phone.mjs",
+    "dev:lan": "node scripts/dev-lan.mjs",
     "reset:test-users": "pnpm --filter @fuel-tracking/api run dev:reset-test-users",
     "seed:dev-activity": "pnpm --filter @fuel-tracking/api run dev:seed-activity",
     "build:packages": "pnpm --filter @fuel-tracking/shared-types run build",
