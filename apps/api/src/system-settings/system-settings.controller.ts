@@ -21,6 +21,7 @@ import { CreateSettingDto } from './dto/create-setting.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Admin panel, item 7. CLAUDE.md rule 4: tunable business numbers come from
 // SystemSetting, read at request time — this is the screen that actually
@@ -37,6 +38,7 @@ export class SystemSettingsController {
     private readonly audit: AuditService,
     private readonly settingsService: SystemSettingsService,
     private readonly rbac: RbacService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // Phase 5A: the fill-up rule switches (fillup.rule.*) are the super admin's
@@ -125,7 +127,7 @@ export class SystemSettingsController {
       throw new NotFoundException(`SystemSetting "${key}" does not exist — settings are not created here.`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.systemSetting.update({ where: { key }, data: { value: dto.value } });
 
       await this.audit.log(
@@ -142,5 +144,19 @@ export class SystemSettingsController {
 
       return updated;
     });
+    // Another super admin is told that a rule switch or a setting changed.
+    await this.notifications.notifyPermissionHolders(
+      'notifications:system_events',
+      {
+        kind: key.startsWith('fillup.rule.') ? 'RULE_SWITCH_CHANGED' : 'SETTING_CHANGED',
+        title: key.startsWith('fillup.rule.') ? 'تغيّر مفتاح قاعدة تعبئة' : 'تغيّر إعداد من إعدادات المنظومة',
+        body: `${key}: ${before.value} ← ${dto.value}`,
+        link: '/admin/settings',
+        entityType: 'SystemSetting',
+        entityId: key,
+      },
+      actor.id,
+    );
+    return result;
   }
 }

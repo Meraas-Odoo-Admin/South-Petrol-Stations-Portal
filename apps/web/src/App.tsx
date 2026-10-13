@@ -27,11 +27,8 @@ import { ManagePlacesPage } from './features/places/ManagePlacesPage';
 import { StationCreatePage, StationManagePage } from './features/places/StationManagePage';
 import { OfficeCreatePage, OfficeManagePage } from './features/places/OfficeManagePage';
 import { MyOfficePage, MyStationPage } from './features/places/MyPlacePages';
-import { RegistrationReportPage } from './features/regreports/RegistrationReportPage';
-import { OfficeEmployeesPage } from './features/regreports/OfficeEmployeesPage';
 import { EmployeeActivityPage } from './features/regreports/EmployeeActivityPage';
-import { CardStockPage } from './features/regreports/CardStockPage';
-import { ReadinessPage } from './features/regreports/ReadinessPage';
+import { RolesReportsPage } from './features/reports/RolesReportsPage';
 import { useAuth } from './features/auth/AuthProvider';
 import { NAV_ACCESS } from './lib/navAccess';
 
@@ -72,6 +69,21 @@ function PeopleHomeRedirect() {
   return <Navigate to="/" replace />;
 }
 
+// Phase 5B: «متابعة مكاتب التسجيل», «مخزون البطاقات» and «الجاهزية للموعد
+// النهائي» are no longer pages of their own; their content lives in the
+// office and station pages. The old addresses lead each person to the place
+// that now holds what they came for.
+function FoldedReportRedirect({ tab }: { tab: 'overview' | 'cards' }) {
+  const { hasPermission } = useAuth();
+  const { officeId } = useParams();
+  if (NAV_ACCESS.manage(hasPermission)) {
+    return <Navigate to={officeId ? `/manage/offices/${officeId}?tab=${tab}` : '/manage'} replace />;
+  }
+  if (NAV_ACCESS.myOffice(hasPermission)) return <Navigate to={`/my-office?tab=${tab}`} replace />;
+  if (NAV_ACCESS.myStation(hasPermission)) return <Navigate to="/my-station" replace />;
+  return <Navigate to="/reports" replace />;
+}
+
 function StaffRedirect() {
   const { userId } = useParams();
   return <Navigate to={userId ? `/people/${userId}` : '/people'} replace />;
@@ -98,11 +110,12 @@ function App() {
               <Route path="/reports/dashboard" element={<DashboardPage />} />
               <Route path="/reports/daily" element={<DailyReportPage />} />
               <Route path="/reports/violations" element={<ViolationsPage />} />
-              <Route path="/reports/registration" element={<RegistrationReportPage />} />
-              <Route path="/reports/registration/offices/:officeId" element={<OfficeEmployeesPage />} />
+              <Route path="/reports" element={<RolesReportsPage />} />
+              <Route path="/reports/registration" element={<FoldedReportRedirect tab="overview" />} />
+              <Route path="/reports/registration/offices/:officeId" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/employees/:userId" element={<EmployeeActivityPage />} />
-              <Route path="/reports/card-stock" element={<CardStockPage />} />
-              <Route path="/reports/readiness" element={<ReadinessPage />} />
+              <Route path="/reports/card-stock" element={<FoldedReportRedirect tab="cards" />} />
+              <Route path="/reports/readiness" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
               <Route path="/registration" element={<RegistrationPage />} />
               <Route path="/stations" element={<StationsListPage />} />

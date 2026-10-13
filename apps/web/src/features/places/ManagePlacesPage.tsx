@@ -5,6 +5,7 @@ import { apiClient } from '../../lib/apiClient';
 import { STATION_STATUS_LABELS, STATION_STATUS_VARIANT } from '../../lib/labels';
 import { Card } from '../../components/design/Card';
 import { PageHeader } from '../../components/design/PageHeader';
+import { PlaceSummaryRow, ReadinessPanel } from './MunicipalitySummary';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
@@ -181,6 +182,8 @@ export function ManagePlacesPage() {
           </>
         }
       />
+      <PlaceSummaryRow />
+      <ReadinessPanel />
 
       {ownMunicipality && <StageCard municipality={ownMunicipality} />}
 

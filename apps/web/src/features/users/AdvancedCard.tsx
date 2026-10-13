@@ -1,28 +1,55 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
-import { permissionLabel } from '../../lib/labels';
 import { Card } from '../../components/design/Card';
+import { Switch } from '../../components/design/Switch';
 import { Icon, ICONS } from '../../components/icons';
 import { adminErrorMessage } from '../admin/adminErrors';
-import type { AdminPermission } from '../admin/types';
 import { Notice } from './parts';
 import { useAccountMutation } from './useUsers';
 import type { UserDetail } from './types';
 
-// Extra individual permissions, on top of what the job gives. Rarely needed
-// and easy to misuse, so it is closed by default, says what it is for, and is
-// only drawn for someone who may grant permissions at all.
+// A person's permissions, grouped by area, in plain Arabic (phase 5B).
+//
+//  - Those the JOB gives are ticked and locked, labelled «من الوظيفة». They
+//    cannot be taken away one by one: change the job instead, and the locked
+//    ticks follow it at once (the list reloads when the job changes).
+//  - Extra permissions are switches, shown only where this caller may switch
+//    them (the API lists only those; a municipality manager gets the set
+//    supervisors may hold, the super admin anything).
+
+interface PermissionRow {
+  id: string;
+  key: string;
+  label: string;
+  fromJob: boolean;
+  granted: boolean;
+  canSwitch: boolean;
+}
+interface PermissionGroup {
+  area: string;
+  label: string;
+  permissions: PermissionRow[];
+}
+interface PermissionsResponse {
+  userId: string;
+  canManageAdvanced: boolean;
+  groups: PermissionGroup[];
+}
+
 export function AdvancedCard({ user }: { user: UserDetail }) {
   const [open, setOpen] = useState(false);
-  const held = new Set(user.directPermissions.map((p) => p.permissionId));
+  const queryClient = useQueryClient();
+  const jobKey = user.roles.map((r) => r.roleId).join(',');
+  const queryKey = ['users', user.id, 'permissions', jobKey];
 
   const permissions = useQuery({
-    queryKey: ['admin', 'permissions'],
+    queryKey,
     enabled: open,
-    queryFn: async () => (await apiClient.get<AdminPermission[]>('/permissions')).data,
+    queryFn: async () => (await apiClient.get<PermissionsResponse>(`/users/${user.id}/permissions`)).data,
   });
 
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['users', user.id, 'permissions'] });
   const grant = useAccountMutation(user.id, async (permissionId: string) => {
     await apiClient.post(`/users/${user.id}/permissions`, { permissionId });
     return (await apiClient.get<UserDetail>(`/users/${user.id}`)).data;
@@ -32,22 +59,27 @@ export function AdvancedCard({ user }: { user: UserDetail }) {
     return (await apiClient.get<UserDetail>(`/users/${user.id}`)).data;
   });
   const error = grant.error ?? revoke.error;
-  const count = user.directPermissions.length;
+  const busy = grant.isPending || revoke.isPending;
+
+  const all = permissions.data?.groups.flatMap((g) => g.permissions) ?? [];
+  const fromJobCount = all.filter((p) => p.fromJob).length;
+  const extraCount = user.directPermissions.length;
 
   return (
     <Card>
-      <section aria-label="خيارات متقدمة" className="p-4 lg:p-5">
+      <section aria-label="الصلاحيات" className="p-4 lg:p-5">
         <button
           type="button"
           aria-expanded={open}
           aria-controls="advanced-body"
+          data-testid="permissions-toggle"
           onClick={() => setOpen((o) => !o)}
           className="flex min-h-[48px] w-full items-center justify-between gap-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
           <span>
-            <span className="block text-[18px] font-extrabold text-ink lg:text-[15px]">خيارات متقدمة</span>
+            <span className="block text-[18px] font-extrabold text-ink lg:text-[15px]">الصلاحيات</span>
             <span className="block text-[15px] text-ink-soft lg:text-[13px]">
-              {count === 0 ? 'لا توجد صلاحيات إضافية' : count === 1 ? 'صلاحية إضافية واحدة' : `${count} صلاحيات إضافية`}
+              {extraCount === 0 ? 'صلاحيات الوظيفة فقط، بلا إضافات' : extraCount === 1 ? 'صلاحية إضافية واحدة' : `${extraCount} صلاحيات إضافية`}
             </span>
           </span>
           <span className={`text-ink-soft transition-transform ${open ? 'rotate-180' : ''}`}>
@@ -56,33 +88,55 @@ export function AdvancedCard({ user }: { user: UserDetail }) {
         </button>
 
         {open && (
-          <div id="advanced-body" className="mt-4 space-y-4">
+          <div id="advanced-body" className="mt-4 space-y-5" data-testid="permissions-body">
             <Notice kind="pending">
-              للحالات الاستثنائية فقط. تُضاف هذه الصلاحيات فوق صلاحيات الوظيفة ولا تُلغيها، وكل منح أو سحب يُسجَّل
-              باسمك. إن كان الشخص يحتاجها دائمًا فالأصح تغيير وظيفته.
+              صلاحيات الوظيفة ثابتة ولا تُسحب وحدها: لتغييرها غيّر الوظيفة. الصلاحيات الإضافية للحالات الاستثنائية فقط، وكل منح أو سحب يُسجَّل باسمك.
             </Notice>
             {error && <Notice kind="error">{adminErrorMessage(error, 'تعذّر تغيير الصلاحية.')}</Notice>}
             {permissions.isLoading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ تحميل القائمة…</p>}
             {permissions.isError && <Notice kind="error">تعذّر تحميل قائمة الصلاحيات.</Notice>}
-            <ul className="max-h-96 overflow-y-auto rounded-md bg-surface shadow-sm">
-              {permissions.data?.map((permission) => {
-                const on = held.has(permission.id);
-                return (
-                  <li key={permission.id} className="border-b border-surface-alt last:border-0">
-                    <label className="flex min-h-[52px] cursor-pointer items-center gap-3 px-4 py-2 hover:bg-surface-alt lg:min-h-[44px]">
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        disabled={grant.isPending || revoke.isPending}
-                        onChange={(e) => (e.target.checked ? grant.mutate(permission.id) : revoke.mutate(permission.id))}
-                        className="h-5 w-5 shrink-0 accent-primary"
-                      />
-                      <span className="text-[16px] text-ink lg:text-[14px]">{permissionLabel(permission.key)}</span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
+            {permissions.data && fromJobCount === 0 && (
+              <p className="text-[15px] text-ink-soft lg:text-[13px]">لا وظيفة محدّدة لهذا الحساب بعد.</p>
+            )}
+
+            {permissions.data?.groups.map((group) => (
+              <div key={group.area} data-testid={`permission-group-${group.area}`}>
+                <h3 className="mb-1.5 text-[16px] font-extrabold text-primary-dark lg:text-[14px]">{group.label}</h3>
+                <ul className="rounded-md bg-surface shadow-sm">
+                  {group.permissions.map((p) => (
+                    <li
+                      key={p.id}
+                      data-testid={`permission-${p.key}`}
+                      className="flex min-h-[52px] items-center justify-between gap-3 border-b border-line px-4 py-2 last:border-0 lg:min-h-[44px]"
+                    >
+                      <span className="text-[16px] text-ink lg:text-[14px]">{p.label}</span>
+                      {p.fromJob ? (
+                        <span
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-[14px] font-bold text-primary-dark lg:text-[12px]"
+                          data-testid={`permission-locked-${p.key}`}
+                        >
+                          <Icon d={ICONS.lock} size={14} />
+                          من الوظيفة
+                        </span>
+                      ) : (
+                        <Switch
+                          checked={p.granted}
+                          label={p.label}
+                          onLabel="مضافة"
+                          offLabel="غير مضافة"
+                          busy={busy}
+                          disabled={!p.canSwitch}
+                          testId={`permission-switch-${p.key}`}
+                          onChange={(next) =>
+                            (next ? grant : revoke).mutate(p.id, { onSuccess: () => void refresh() })
+                          }
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </section>

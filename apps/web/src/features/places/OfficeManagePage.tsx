@@ -8,10 +8,8 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { Icon, ICONS } from '../../components/icons';
 import { adminErrorMessage } from '../admin/adminErrors';
-import { RegistrationDesksEditor } from '../admin/RegistrationDesksEditor';
-import { useAuth } from '../auth/AuthProvider';
 import { Notice, SectionCard } from '../users/parts';
-import { UsersListPage } from '../users/UsersListPage';
+import { OfficeWorkspace } from './Workspaces';
 import {
   ActivityCard,
   ArchiveRestoreButton,
@@ -98,7 +96,6 @@ export function OfficeCreatePage() {
 export function OfficeManagePage() {
   const { officeId } = useParams();
   const queryClient = useQueryClient();
-  const { hasPermission } = useAuth();
   const office = useOffice(officeId);
   const activity = usePlaceActivity('registration-stations', officeId);
   const [values, setValues] = useState<OfficeFormValues>(EMPTY_OFFICE);
@@ -156,6 +153,14 @@ export function OfficeManagePage() {
 
       {archived && <ArchivedBanner what="هذا المكتب" />}
 
+      <OfficeWorkspace
+        officeId={o.id}
+        officeName={o.name}
+        staffTitle="مدير المكتب وموظفوه"
+        staffEmpty="لا يوجد مدير لهذا المكتب بعد. أضف مديرًا، وهو يضيف موظفي التسجيل."
+        createParams={{ kind: 'REGISTRATION', place: o.id, placeName: o.name }}
+        overview={
+          <>
       <SectionCard title="بيانات المكتب">
         <div className="space-y-4">
           <OfficeForm values={values} onChange={setValues} errors={errors} />
@@ -169,19 +174,6 @@ export function OfficeManagePage() {
         </div>
       </SectionCard>
 
-      {hasPermission('registration_desks:manage') && (
-        <SectionCard title="المكاتب والطابعات" description="مكتب الموظف والطابعة المتصلة به؛ كل بطاقة تسجّل المكتب الذي طُبعت عليه.">
-          <RegistrationDesksEditor registrationStationId={o.id} />
-        </SectionCard>
-      )}
-
-      <UsersListPage
-        basePath="/people"
-        fixedPlaceId={o.id}
-        title="مدير المكتب"
-        createParams={{ kind: 'REGISTRATION', place: o.id, placeName: o.name }}
-        emptyText="لا يوجد مدير لهذا المكتب بعد. أضف مديرًا، وهو يضيف موظفي التسجيل."
-      />
 
       <ActivityCard
         activity={activity.data}
@@ -199,6 +191,9 @@ export function OfficeManagePage() {
       <SectionCard title="الأرشفة" description="لا تُحذف المكاتب؛ تُؤرشف ويبقى سجلها وبطاقاتها محفوظة.">
         <ArchiveRestoreButton kind="registration-stations" id={o.id} name={o.name} archived={archived} />
       </SectionCard>
+          </>
+        }
+      />
     </div>
   );
 }

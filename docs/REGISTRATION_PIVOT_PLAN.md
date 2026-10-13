@@ -15,7 +15,7 @@ This document is the background every phase prompt refers to. Sections 1–14 ar
 | 4b | Accounts: a redesigned users screen (one job per person, searchable places, phone-friendly), edit / deactivate / reset password / unlock, supervisors managing their own employees, stage dates for the directorate admin, developer housekeeping | Built and merged to main (`bc5ed9c`); decisions logged in `OPEN_ITEMS.md` #57 |
 | 4c | Registration-station monitoring reports, card-stock reconciliation, deadline-readiness report | Built and merged to main (`f334707`); decisions logged in `OPEN_ITEMS.md` #58 |
 | 5A | Municipalities as the core, the final user structure (each level creates the one below), archive instead of delete, fill-up rule switches, owner national-ID checks and institutions, vehicle fields, field-validation audit | Built on `feat/p5a-structure`, awaiting review; decisions logged in `OPEN_ITEMS.md` #59 |
-| 5B | Switch style, per-fuel-type storage on stations | Next |
+| 5B | Fuel storage per station and fuel type (deliveries, computed level, low-stock alert, reset), the notification bell, reports per role, the three 4c pages folded into the station and office pages, clearer person settings | Built on `feat/p5b-operations`, awaiting review; decisions logged in `OPEN_ITEMS.md` #60 |
 | 4d | Older screens brought to the DESIGN.md text sizes, ink text on amber buttons, the real-iPhone re-test of the 4b fixes | Next |
 | 5C | Go-live clean-up: remove non-Sabha data, clear test data, make the municipality columns required in the database | Waits on the client's list of which place names belong to Sabha |
 

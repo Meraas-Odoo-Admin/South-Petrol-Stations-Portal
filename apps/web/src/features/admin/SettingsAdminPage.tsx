@@ -26,6 +26,8 @@ const STEPPER_KEYS: Record<string, { step: number; decimals: number }> = {
   'fillup.max_per_week_per_owner': { step: 1, decimals: 0 },
   'fillup.min_gap_days_per_owner': { step: 1, decimals: 0 },
   'fillup.max_liters_per_week_per_owner': { step: 10, decimals: 0 },
+  'stock.low_threshold_liters': { step: 100, decimals: 0 },
+  'cards.low_blank_threshold': { step: 10, decimals: 0 },
   'fillup.price_per_liter.PETROL_95': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.DIESEL': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.KEROSENE': { step: 0.01, decimals: 2 },

@@ -11,6 +11,7 @@ import { RejectOwnerChangeRequestDto } from './dto/reject-owner-change-request.d
 import { FindOwnerChangeRequestsQueryDto } from './dto/find-owner-change-requests-query.dto';
 import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
 import type { Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // An institution has no personal ID of its own, so it gets a generated
 // reference (INS-XXXXXXXX) in the owner's identityNumber slot - random, from
@@ -28,6 +29,7 @@ export class OwnersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly registrationStations: RegistrationStationsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(dto: CreateOwnerDto, actorId: string) {
@@ -225,6 +227,19 @@ export class OwnersService {
   // creation, so every correction here is a genuine displacement of an
   // already-established identity and always goes through approval.
   async requestIdentityChange(ownerId: string, dto: CreateOwnerChangeRequestDto, actorId: string) {
+    const request = await this.requestIdentityChangeCore(ownerId, dto, actorId);
+    await this.notifications.notifyOfficesOf(actorId, ['notifications:office_events'], {
+      kind: 'CORRECTION_REQUESTED',
+      title: 'طلب تصحيح هوية مالك بانتظار الموافقة',
+      body: 'قدّم موظف تسجيل طلب تصحيح لرقم هوية مالك.',
+      link: '/vehicles/change-requests',
+      entityType: 'VehicleOwner',
+      entityId: ownerId,
+    });
+    return request;
+  }
+
+  private async requestIdentityChangeCore(ownerId: string, dto: CreateOwnerChangeRequestDto, actorId: string) {
     const owner = await this.findOne(ownerId);
 
     // An institution has no personal identity number to correct; its
@@ -307,6 +322,19 @@ export class OwnersService {
   }
 
   async approveChangeRequest(id: string, actorId: string) {
+    const decided = await this.approveChangeRequestCore(id, actorId);
+    await this.notifications.notifyUsers([decided.requestedById], {
+      kind: 'CORRECTION_APPROVED',
+      title: 'تمت الموافقة على طلب تصحيح الهوية',
+      body: 'طُبّق التصحيح الذي طلبته على هوية المالك.',
+      link: '/vehicles/change-requests',
+      entityType: 'VehicleOwner',
+      entityId: decided.ownerId,
+    });
+    return decided;
+  }
+
+  private async approveChangeRequestCore(id: string, actorId: string) {
     const request = await this.findChangeRequestOrThrow(id);
     if (request.status !== 'PENDING') {
       throw new ConflictException(`This change request has already been ${request.status.toLowerCase()}.`);
@@ -357,6 +385,19 @@ export class OwnersService {
   }
 
   async rejectChangeRequest(id: string, dto: RejectOwnerChangeRequestDto, actorId: string) {
+    const decided = await this.rejectChangeRequestCore(id, dto, actorId);
+    await this.notifications.notifyUsers([decided.requestedById], {
+      kind: 'CORRECTION_REJECTED',
+      title: 'رُفض طلب تصحيح الهوية',
+      body: decided.rejectionReason ? `السبب: ${decided.rejectionReason}` : 'رفضه مدير المكتب.',
+      link: '/vehicles/change-requests',
+      entityType: 'VehicleOwner',
+      entityId: decided.ownerId,
+    });
+    return decided;
+  }
+
+  private async rejectChangeRequestCore(id: string, dto: RejectOwnerChangeRequestDto, actorId: string) {
     const request = await this.findChangeRequestOrThrow(id);
     if (request.status !== 'PENDING') {
       throw new ConflictException(`This change request has already been ${request.status.toLowerCase()}.`);

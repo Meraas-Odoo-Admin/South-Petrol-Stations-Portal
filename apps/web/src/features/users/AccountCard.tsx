@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { Dialog } from '../../components/design/Dialog';
+import { Switch } from '../../components/design/Switch';
 import { TextAreaField } from '../../components/design/TextField';
 import { adminErrorMessage } from '../admin/adminErrors';
 import { AccountStatusPill } from './AccountStatusPill';
@@ -94,12 +95,30 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
           </div>
         )}
         {can && !archived && (
+          <div className="flex items-center justify-between gap-4 rounded-md bg-surface-alt p-3.5">
+            <div className="min-w-0">
+              <p className="text-[17px] font-bold text-ink lg:text-[14px]">الحساب فعّال</p>
+              <p className="mt-0.5 text-[14px] leading-[1.7] text-ink-soft lg:text-[12px]">
+                عند الإيقاف لا يستطيع صاحبه الدخول، ويُطلب منك سبب يُحفظ في السجل. الأرشفة إجراء منفصل أدناه.
+              </p>
+            </div>
+            <Switch
+              checked={user.isActive}
+              label="الحساب"
+              onLabel="فعّال"
+              offLabel="موقوف"
+              testId="account-active-switch"
+              disabled={busy}
+              onChange={(next) => {
+                setDone(null);
+                setOpen(next ? 'reactivate' : 'deactivate');
+              }}
+            />
+          </div>
+        )}
+        {can && !archived && (
           <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap">
-            {!user.isActive ? (
-              <PillButton size="field" onClick={() => setOpen('reactivate')}>
-                إعادة تفعيل الحساب
-              </PillButton>
-            ) : (
+            {user.isActive && (
               <>
                 <PillButton
                   size="field"
@@ -124,9 +143,6 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
                     {unlock.isPending ? 'جارٍ الفك…' : 'فك القفل'}
                   </PillButton>
                 )}
-                <PillButton size="field" variant="danger" onClick={() => setOpen('deactivate')}>
-                  إيقاف الحساب
-                </PillButton>
               </>
             )}
             <PillButton size="field" variant="danger" onClick={() => setOpen('archive')}>

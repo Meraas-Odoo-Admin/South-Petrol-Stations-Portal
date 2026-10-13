@@ -34,6 +34,8 @@ import {
   placeKindOfRole,
   placesWithinCallerScope,
 } from './user-access';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PERMISSION_AREAS, PERMISSION_LABELS } from './permission-labels';
 
 // Registration pivot, phase 4b: the accounts screen's operations — a list you
 // can search and filter, one person's page, and the actions on an account.
@@ -140,6 +142,7 @@ export class UsersAccountsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── facts ────────────────────────────────────────────────────────────
@@ -664,6 +667,12 @@ export class UsersAccountsService {
       await this.audit.log({ userId: actorId, action: 'RESET_PASSWORD', entityType: 'User', entityId: id }, tx);
     });
     this.rbac.invalidate(id);
+    await this.notifications.notifyUsers([id], {
+      kind: 'PASSWORD_RESET',
+      title: 'أُعيد تعيين كلمة مرورك',
+      body: 'استلم كلمة المرور المؤقتة من مشرفك، وستُطلب منك كلمة مرور جديدة عند الدخول.',
+      link: '/change-password',
+    });
     return { temporaryPassword };
   }
 
@@ -748,6 +757,56 @@ export class UsersAccountsService {
     return this.detail(actorId, id);
   }
 
+  // A permission the person's JOB gives is part of the job: it is shown ticked
+  // and locked, and it cannot be taken away one by one. Change the job instead.
+  private refuseJobPermission(user: FullUser, key: string) {
+    const fromJob = user.roles.some((r) => r.role.permissions.some((p) => p.permission.key === key));
+    if (fromJob) throw new BadRequestException('PERMISSION_FROM_JOB_LOCKED');
+  }
+
+  // The permissions of one person, grouped by area, in plain Arabic. Those the
+  // job gives are `fromJob` (ticked, locked). The others appear only where this
+  // caller may switch them (`canSwitch`), so the page never offers a lever the
+  // server would refuse.
+  async permissionsOf(actorId: string, id: string) {
+    const { user, caps } = await this.loadForCaller(actorId, id);
+    const held = await this.rbac.getPermissionsForUser(actorId);
+    const all = await this.prisma.permission.findMany({ orderBy: { key: 'asc' } });
+    const jobKeys = new Set<string>();
+    for (const r of user.roles) for (const p of r.role.permissions) jobKeys.add(p.permission.key);
+    const extraKeys = new Set(user.directPermissions.map((d) => d.permission.key));
+
+    let switchable: Set<string> | null = null; // null = anything
+    if (!caps.canManageAdvanced) switchable = new Set();
+    else if (!held.has('roles:manage')) switchable = await this.delegablePermissionKeys();
+
+    const rows = all
+      .map((permission) => {
+        const fromJob = jobKeys.has(permission.key);
+        const extra = extraKeys.has(permission.key);
+        const canSwitch = !fromJob && (switchable === null || switchable.has(permission.key)) && caps.canManageAdvanced;
+        return { permission, fromJob, extra, canSwitch };
+      })
+      .filter((r) => r.fromJob || r.extra || r.canSwitch);
+
+    const groups = PERMISSION_AREAS.map((area) => ({
+      area: area.key,
+      label: area.label,
+      permissions: rows
+        .filter((r) => (PERMISSION_LABELS[r.permission.key]?.area ?? 'other') === area.key)
+        .map((r) => ({
+          id: r.permission.id,
+          key: r.permission.key,
+          label: PERMISSION_LABELS[r.permission.key]?.label ?? r.permission.description ?? r.permission.key,
+          fromJob: r.fromJob,
+          granted: r.fromJob || r.extra,
+          canSwitch: r.canSwitch,
+        })),
+    })).filter((g) => g.permissions.length > 0);
+
+    return { userId: user.id, canManageAdvanced: caps.canManageAdvanced, groups };
+  }
+
   async revokeDelegatedPermission(actorId: string, id: string, permissionId: string) {
     const { user, caps } = await this.loadForCaller(actorId, id);
     this.require(caps, 'canManageAdvanced');
@@ -755,6 +814,7 @@ export class UsersAccountsService {
     if (!permission) throw new NotFoundException('Permission not found.');
     const allowed = await this.delegablePermissionKeys();
     if (!allowed.has(permission.key)) throw new ForbiddenException('PERMISSION_NOT_DELEGABLE');
+    this.refuseJobPermission(user, permission.key);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.userPermission.deleteMany({ where: { userId: user.id, permissionId } });

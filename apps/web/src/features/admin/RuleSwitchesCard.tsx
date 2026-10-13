@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { Card } from '../../components/design/Card';
+import { Switch } from '../../components/design/Switch';
 import { adminErrorMessage } from './adminErrors';
 import type { SystemSettingRow } from './types';
 
@@ -79,28 +80,15 @@ export function RuleSwitchesCard({ settings }: { settings: SystemSettingRow[] })
                 <p className="text-[17px] font-bold text-ink lg:text-[14px]">{rule.title}</p>
                 <p className="mt-0.5 text-[15px] leading-[1.7] text-ink-soft lg:text-[12px]">{rule.text}</p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={on}
-                aria-label={`${rule.title}: ${on ? 'مفعّلة' : 'موقوفة'}`}
-                data-testid={`rule-switch-${rule.key}`}
-                disabled={toggle.isPending}
-                onClick={() => toggle.mutate({ key: rule.key, on: !on })}
-                className="flex shrink-0 items-center gap-2.5 rounded-full p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-60"
-              >
-                <span className={`text-[15px] font-bold lg:text-[13px] ${on ? 'text-ok' : 'text-ink-soft'}`}>
-                  {on ? 'مفعّلة' : 'موقوفة'}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className={`relative h-8 w-14 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-line'}`}
-                >
-                  <span
-                    className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all ${on ? 'start-7' : 'start-1'}`}
-                  />
-                </span>
-              </button>
+              <Switch
+                checked={on}
+                label={rule.title}
+                onLabel="مفعّلة"
+                offLabel="موقوفة"
+                testId={`rule-switch-${rule.key}`}
+                busy={toggle.isPending}
+                onChange={(next) => toggle.mutate({ key: rule.key, on: next })}
+              />
             </li>
           );
         })}

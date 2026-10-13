@@ -313,7 +313,7 @@ export function UsersListPage({
                     </button>
                   </th>
                   <th scope="col" className="px-[18px] py-2.5 text-start">الوظيفة</th>
-                  <th scope="col" className="px-[18px] py-2.5 text-start">مكان العمل</th>
+                  {!fixedPlaceId && <th scope="col" className="px-[18px] py-2.5 text-start">مكان العمل</th>}
                   <th scope="col" className="px-[18px] py-2.5 text-start">الحالة</th>
                   <th scope="col" aria-sort={filters.sort === 'lastLogin' ? (filters.dir === 'desc' ? 'descending' : 'ascending') : 'none'} className="px-[18px] py-2.5 text-start">
                     <button type="button" onClick={() => sortBy('lastLogin')} className="font-bold hover:text-primary">
@@ -342,7 +342,8 @@ export function UsersListPage({
                       {u.job ? roleLabel(u.job.name) : <span className="text-ink-soft">بلا وظيفة</span>}
                       {u.jobCount > 1 && <span className="ms-1 text-[12px] text-ink-soft">(+{u.jobCount - 1} وظائف)</span>}
                     </td>
-                    <td className="max-w-[260px] px-[18px] py-3 text-ink">{whereText(u)}</td>
+                    {/* Inside a place's own page the place is the page: not repeated on every row. */}
+                    {!fixedPlaceId && <td className="max-w-[260px] px-[18px] py-3 text-ink">{whereText(u)}</td>}
                     <td className="px-[18px] py-3">
                       <AccountStatusPill status={u.status} />
                     </td>
@@ -385,7 +386,7 @@ export function UsersListPage({
                     <p className="text-[16px] font-bold text-primary-dark">{u.job ? roleLabel(u.job.name) : 'بلا وظيفة'}</p>
                     <AccountStatusPill status={u.status} />
                   </div>
-                  <p className="text-[15px] text-ink">{whereText(u)}</p>
+                  {!fixedPlaceId && <p className="text-[15px] text-ink">{whereText(u)}</p>}
                   <p className="mt-1 text-[14px] text-ink-soft">
                     آخر دخول: {u.lastLoginAt ? <span dir="ltr">{formatWhen(u.lastLoginAt)}</span> : 'لم يسجّل الدخول بعد'}
                   </p>

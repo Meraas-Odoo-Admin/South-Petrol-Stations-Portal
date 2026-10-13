@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { parseDurationToMs } from '../common/utils/duration';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async validateCredentials(username: string, password: string, ipAddress?: string) {
@@ -56,6 +58,9 @@ export class AuthService {
         where: { id: user.id },
         data: { failedLoginAttempts: failedAttempts, lockedUntil },
       });
+      if (lockedUntil) {
+        await this.notifications.lockedOut(user.id).catch(() => undefined);
+      }
       throw new UnauthorizedException('Invalid username or password.');
     }
 

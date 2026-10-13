@@ -17,11 +17,16 @@ export const NAV_ACCESS = {
   violations: (has: HasPermission) => has('reports:view'),
   changeRequests: (has: HasPermission) => has('vehicles:approve_change'),
   dailyReport: (has: HasPermission) => has('reports:view'),
-  // Phase 4c monitoring reports, each its own permission (registration
-  // employees hold none of them).
-  registrationReports: (has: HasPermission) => has('registration_reports:view'),
-  cardStock: (has: HasPermission) => has('card_stock:read'),
-  readiness: (has: HasPermission) => has('readiness:view'),
+  // Phase 5B: ONE reports destination. What it shows is each job's own
+  // reports; the API decides what each may read. The three 4c monitoring pages
+  // (offices, card stock, readiness) became tabs of the office and station pages.
+  reports: (has: HasPermission) =>
+    has('reports:own_shift') ||
+    has('registration_reports:own_day') ||
+    has('registration_reports:view') ||
+    has('reports:view') ||
+    has('reports:municipality') ||
+    has('reports:cross_municipality'),
   // Phase 5A: each level has its own place for its own people, never a
   // free-floating users list.
   //  - «إدارة المحطات»: the municipality manager's stations and offices (and

@@ -6,6 +6,7 @@ import { RbacService } from '../rbac/rbac.service';
 import { CreateRegistrationStationDto } from './dto/create-registration-station.dto';
 import { UpdateRegistrationStationDto } from './dto/update-registration-station.dto';
 import { ListRegistrationStationsQueryDto } from './dto/list-registration-stations-query.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Registration pivot, phase 2: police-station registration desks — the
 // only places a vehicle or owner is registered. Scope is enforced HERE, in
@@ -17,6 +18,7 @@ export class RegistrationStationsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rbac: RbacService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // The station list/detail and the registration screen's picker show the
@@ -201,7 +203,7 @@ export class RegistrationStationsService {
     if (before.archivedAt) {
       throw new ConflictException('ALREADY_ARCHIVED');
     }
-    return this.prisma.$transaction(async (tx) => {
+    const archived = await this.prisma.$transaction(async (tx) => {
       const station = await tx.registrationStation.update({
         where: { id },
         data: { archivedAt: new Date(), archivedById: actorId },
@@ -219,6 +221,20 @@ export class RegistrationStationsService {
       );
       return station;
     });
+    await this.notifications.notifyScope(
+      { registrationStationId: id },
+      ['notifications:municipality_events'],
+      {
+        kind: 'OFFICE_ARCHIVED',
+        title: `أُرشف مكتب تسجيل ${archived.name}`,
+        body: `السبب: ${reason}`,
+        link: `/manage/offices/${id}`,
+        entityType: 'RegistrationStation',
+        entityId: id,
+      },
+      { exceptUserId: actorId },
+    );
+    return archived;
   }
 
   async restore(id: string, reason: string, actorId: string) {

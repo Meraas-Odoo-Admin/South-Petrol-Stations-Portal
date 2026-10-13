@@ -6,6 +6,7 @@ import { roleLabel } from '../../lib/labels';
 import { Icon, ICONS } from '../../components/icons';
 import { replayOnboardingTour } from '../../components/OnboardingTour';
 import { NAV_ACCESS, type HasPermission } from '../../lib/navAccess';
+import { StockStrip } from '../stock/StockStrip';
 
 interface QuickLink {
   to: string;
@@ -22,11 +23,9 @@ const QUICK_LINKS: QuickLink[] = [
   { to: '/registration', label: 'تسجيل المركبات', hint: 'تسجيل مالك ومركبة في مكتب التسجيل', show: NAV_ACCESS.registration, icon: 'register' },
   { to: '/vehicles', label: 'المركبات', hint: 'البحث عن مركبة وعرض سجلها', show: NAV_ACCESS.vehicles, icon: 'vehicles' },
   { to: '/reports/violations', label: 'المخالفات', hint: 'الحالات التي تحتاج قرارك', show: NAV_ACCESS.violations, icon: 'violations' },
+  { to: '/reports', label: 'التقارير', hint: 'التقارير التي تحتاجها وظيفتك', show: NAV_ACCESS.reports, icon: 'reports' },
   { to: '/reports/daily', label: 'التقرير اليومي', hint: 'ملخص تعبئات اليوم', show: NAV_ACCESS.dailyReport, icon: 'reports' },
   { to: '/reports/dashboard', label: 'لوحة المتابعة', hint: 'نظرة عامة على المحطات', show: NAV_ACCESS.dashboard, icon: 'dashboard' },
-  { to: '/reports/registration', label: 'متابعة مكاتب التسجيل', hint: 'البطاقات والمركبات والموظفون في كل مكتب', show: NAV_ACCESS.registrationReports, icon: 'reports' },
-  { to: '/reports/card-stock', label: 'مخزون البطاقات', hint: 'ما وصل وما عُدّ وما طُبع، وأي نقص غير مبرَّر', show: NAV_ACCESS.cardStock, icon: 'register' },
-  { to: '/reports/readiness', label: 'الجاهزية للموعد النهائي', hint: 'التعبئات بالبطاقة وبدونها، وتقدير الأيام المتبقية', show: NAV_ACCESS.readiness, icon: 'dashboard' },
   { to: '/vehicles/change-requests', label: 'طلبات التعديل', hint: 'طلبات تغيير هوية المركبات', show: NAV_ACCESS.changeRequests, icon: 'changeRequests' },
   { to: '/stations', label: 'المحطات', hint: 'قائمة محطات المديرية', show: NAV_ACCESS.stations, icon: 'stations' },
   { to: '/manage', label: 'إدارة المحطات', hint: 'محطات الوقود ومكاتب التسجيل في بلديتك وأشخاصها', show: NAV_ACCESS.manage, icon: 'stations' },
@@ -72,6 +71,12 @@ export function HomePage() {
             : undefined
         }
       />
+
+      {(user?.stationScope ?? []).slice(0, 2).map((st) => (
+        <div key={st.stationId} className="mb-4">
+          <StockStrip stationId={st.stationId} title={`مخزون الوقود — ${st.name}`} />
+        </div>
+      ))}
 
       {links.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
