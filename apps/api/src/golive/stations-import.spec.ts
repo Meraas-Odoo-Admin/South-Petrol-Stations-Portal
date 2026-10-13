@@ -18,7 +18,6 @@ describe('parseStationRows', () => {
       locality: 'حي',
       status: 'SUSPENDED_OWNER',
       statusNote: 'متوقفة',
-      ownershipType: 'PRIVATE',
       supervisorPhone: '0912345678',
       operatorPhone: '0925000000',
       fuel: { PETROL_95: true, DIESEL: false, KEROSENE: false },
@@ -26,11 +25,11 @@ describe('parseStationRows', () => {
     });
   });
 
-  it('leaves «مملوكة» ownership empty and reports it as a client question', () => {
-    const { rows, warnings } = parseStationRows(csv('شركة أ,10,محطة,,سبها,ACTIVE,,مملوكة,,,,,,,,src,'));
-    expect(rows[0]!.ownershipType).toBeNull();
-    expect(rows[0]!.ownershipAsWritten).toBe('مملوكة');
-    expect(warnings.join('\n')).toContain('مملوكة');
+  it('ignores the ownership column: it is not used by the system', () => {
+    const { rows, warnings, errors } = parseStationRows(csv('شركة أ,10,محطة,,سبها,ACTIVE,,مملوكة,,,,,,,,src,'));
+    expect(errors).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(rows[0]).not.toHaveProperty('ownershipType');
   });
 
   it('keeps unknown fuel cells unset instead of guessing', () => {

@@ -60,8 +60,8 @@ export interface IdCheckOptions {
 //  - the owner is 18 or older: birth year <= (current Tripoli year − 18) — a
 //    person born in (current year − 18) is accepted (only the year is known);
 //  - digits 6–11 are the registry sequence — digits only, no further check;
-//  - digit 12 is a check digit whose official formula the civil registry has
-//    not given us: ANY digit is accepted for now (OPEN_ITEMS #59).
+//  - digit 12: ANY digit is accepted. The check digit is not the system's
+//    responsibility (client decision, OPEN_ITEMS #62) - none is validated.
 export function checkNationalId(raw: string, options: IdCheckOptions = {}): FieldCheck {
   const now = options.now ?? new Date();
   const digits = cleanDigits(raw);

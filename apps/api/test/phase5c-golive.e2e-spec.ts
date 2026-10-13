@@ -92,13 +92,13 @@ describe('Phase 5C go-live (e2e)', () => {
       });
       expect(stations).toHaveLength(2);
       for (const s of stations) expect(s.municipality.name).toBe(SABHA);
-      expect(stations[0]).toMatchObject({ locality: 'حي أ', ownershipType: 'PRIVATE', status: 'ACTIVE' });
+      expect(stations[0]).toMatchObject({ locality: 'حي أ', status: 'ACTIVE' });
       expect(stations[0]!.fuelAvailability.map((f) => `${f.fuelType}:${f.isAvailable}`).sort()).toEqual([
         'DIESEL:true',
         'KEROSENE:false',
         'PETROL_95:true',
       ]);
-      // «مملوكة» is left empty, and the suspension note is kept.
+      // The suspension note is kept; the ownership column in the file is ignored.
       expect(stations[1]).toMatchObject({ ownershipType: null, status: 'SUSPENDED_OWNER', statusNote: 'متوقفة' });
     });
 

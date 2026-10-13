@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
-import { StationOwnershipType, StationStatus } from '@prisma/client';
+import { StationStatus } from '@prisma/client';
 
 export const STATION_SORTS = ['code', 'name', 'status', 'company', 'municipality'] as const;
 
@@ -27,12 +27,6 @@ export class ListStationsQueryDto {
   @IsOptional()
   @IsEnum(StationStatus)
   status?: StationStatus;
-
-  // "Type" in the municipality manager's list: government or private.
-  @ApiProperty({ required: false, enum: StationOwnershipType })
-  @IsOptional()
-  @IsEnum(StationOwnershipType)
-  ownershipType?: StationOwnershipType;
 
   @ApiProperty({ required: false })
   @IsOptional()

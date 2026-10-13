@@ -37,7 +37,6 @@ export interface StationRow {
   route: { id: string; name: string } | null;
   status: string;
   statusNote: string | null;
-  ownershipType: 'GOVERNMENT' | 'PRIVATE' | null;
   locality?: string | null;
   supervisorName: string | null;
   supervisorPhone: string | null;
