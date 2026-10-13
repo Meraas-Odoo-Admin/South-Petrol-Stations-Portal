@@ -150,8 +150,8 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
     <div className={overlayClass} data-testid="qr-scan-panel">
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 text-white">
         <div>
-          <p className="text-[14px] font-extrabold">امسح بطاقة المركبة</p>
-          <p className="text-[11px] opacity-70">وجّه رمز البطاقة نحو الكاميرا</p>
+          <p className="text-[16px] lg:text-[14px] font-extrabold">امسح بطاقة المركبة</p>
+          <p className="text-[13px] lg:text-[12px] opacity-70">وجّه رمز البطاقة نحو الكاميرا</p>
         </div>
         <div className="flex items-center gap-2">
           {torchAvailable && stage === 'scanning' && (
@@ -160,7 +160,7 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
               onClick={toggleTorch}
               data-testid="qr-scan-torch"
               aria-pressed={torchOn}
-              className={`rounded-full px-3 py-1.5 text-[11.5px] font-bold ${torchOn ? 'bg-accent text-white' : 'bg-white/10 text-white'}`}
+              className={`rounded-full px-3 py-1.5 text-[13px] lg:text-[12px] font-bold ${torchOn ? 'bg-accent text-ink' : 'bg-white/10 text-white'}`}
             >
               {torchOn ? 'إطفاء الضوء' : 'تشغيل الضوء'}
             </button>
@@ -176,13 +176,13 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
       {stage === 'pre-permission' && (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center text-white">
           <p className="text-[16px] font-extrabold">ستُستخدم الكاميرا لمسح بطاقة المركبة</p>
-          <p className="max-w-sm text-[12.5px] leading-[1.8] opacity-80">
+          <p className="max-w-sm text-[13px] lg:text-[12.5px] leading-[1.8] opacity-80">
             تُقرأ صورة الرمز على الجهاز نفسه ولا تُحفَظ ولا تُرسَل. سيسألك جهازك عن الإذن بعد ضغط الزر.
           </p>
           <PillButton variant="primary" className="w-full max-w-xs justify-center" onClick={openCamera}>
             فتح الكاميرا
           </PillButton>
-          <button type="button" onClick={onCancel} className="text-[12.5px] font-bold text-white/80 underline">
+          <button type="button" onClick={onCancel} className="text-[13px] lg:text-[12.5px] font-bold text-white/80 underline">
             {typePlateLabel}
           </button>
         </div>
@@ -220,12 +220,12 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
                 }`}
                 data-testid={`qr-scan-outcome-${stage}`}
               >
-                <p className={`text-[13px] font-bold ${stage === 'revoked' ? 'text-danger-dark' : 'text-accent-dark'}`}>
+                <p className={`text-[15px] lg:text-[13px] font-bold ${stage === 'revoked' ? 'text-danger-dark' : 'text-accent-ink'}`}>
                   {outcome.title}
                 </p>
-                <p className="mt-1 text-[11.5px] text-ink-soft">{outcome.body}</p>
+                <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">{outcome.body}</p>
                 {decodedCode && (
-                  <p className="mt-1 text-[11px] text-ink-faint">
+                  <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
                     الرمز المقروء: <LtrText>{decodedCode}</LtrText>
                   </p>
                 )}
@@ -247,7 +247,7 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
                 type="button"
                 onClick={abandon}
                 data-testid="fillup-type-plate-instead"
-                className="text-center text-[12px] font-bold text-white/80 underline"
+                className="text-center text-[13px] lg:text-[12px] font-bold text-white/80 underline"
               >
                 البطاقة تالفة أو غير موجودة؟ اكتب رقم اللوحة
               </button>
@@ -256,7 +256,7 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
                 إلغاء
               </PillButton>
             )}
-            <p className="text-center text-[10.5px] text-white/50">لا شيء يُحفظ من الكاميرا</p>
+            <p className="text-center text-[13px] lg:text-[12px] text-white/50">لا شيء يُحفظ من الكاميرا</p>
           </div>
         </div>
       )}
@@ -264,8 +264,8 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
       {stage === 'denied' && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-white">
           <p className="text-[15px] font-extrabold text-danger">لا يمكن فتح الكاميرا على هذا الجهاز</p>
-          <p className="max-w-sm text-[12px] leading-[1.8] opacity-80">
-            إن كنت قد منعت الإذن فيمكنك السماح به من إعدادات الجهاز، وإلى ذلك الحين اكتب رقم اللوحة يدويًا.
+          <p className="max-w-sm text-[13px] lg:text-[12px] leading-[1.8] opacity-80">
+            اسمح بالكاميرا من إعدادات الجهاز، أو اكتب رقم اللوحة.
           </p>
           <PillButton variant="primary" onClick={onCancel} data-testid="fillup-type-plate-instead">
             {typePlateLabel}

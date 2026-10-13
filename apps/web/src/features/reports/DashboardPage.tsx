@@ -57,7 +57,7 @@ export function DashboardPage() {
   });
 
   if (!canView) {
-    return <p className="text-[13px] text-ink-soft">ليس لديك صلاحية عرض هذه اللوحة.</p>;
+    return <p className="text-[15px] lg:text-[13px] text-ink-soft">ليس لديك صلاحية عرض هذه اللوحة.</p>;
   }
 
   const exceptionRate = (s: { totalFillUps: number; exceptionCount: number }) =>
@@ -74,30 +74,30 @@ export function DashboardPage() {
         actions={
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink-soft">
+              <label className="mb-1 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">
                 من
                 <InfoHint text="بداية النطاق الزمني الذي تُحسب عليه كل الأرقام والرسوم في هذه الصفحة." />
               </label>
               <DateField
                 value={fromDate}
                 onChange={setFromDate}
-                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-bold text-ink-soft">إلى</label>
+              <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">إلى</label>
               <DateField
                 value={toDate}
                 onChange={setToDate}
-                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
           </div>
         }
       />
 
-      {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
-      {isError && <p className="text-[13px] text-danger">تعذر تحميل البيانات.</p>}
+      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل البيانات.</p>}
 
       {data && (
         <>
@@ -193,9 +193,9 @@ export function DashboardPage() {
               }
             />
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[12.5px]">
+            <table className="w-full min-w-[640px] text-[13px] lg:text-[12.5px]">
               <thead>
-                <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+                <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                   <th className="px-[18px] py-2.5 text-start">المحطة</th>
                   <th className="px-[18px] py-2.5 text-start">إجمالي التعبئات</th>
                   <th className="px-[18px] py-2.5 text-start">إجمالي اللترات</th>
@@ -222,7 +222,7 @@ export function DashboardPage() {
                 ))}
                 {data.perStation.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="p-4 text-center text-[13px] text-ink-soft">
+                    <td colSpan={4} className="p-4 text-center text-[15px] lg:text-[13px] text-ink-soft">
                       لا توجد بيانات لهذا النطاق الزمني
                     </td>
                   </tr>

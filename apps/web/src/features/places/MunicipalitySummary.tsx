@@ -263,7 +263,7 @@ export function ReadinessPanel({ municipalityId }: { municipalityId?: string }) 
                 حسب المحطة
               </summary>
               <div className="mt-2 overflow-x-auto">
-                <table className="w-full min-w-[420px] text-[14px]">
+                <table className="w-full min-w-[420px] text-[16px] lg:text-[14px]">
                   <caption className="sr-only">التعبئات حسب المحطة بالبطاقة وبدونها</caption>
                   <thead>
                     <tr className="border-b-2 border-line bg-surface-alt/60">

@@ -110,15 +110,15 @@ function LevelCard({
           {level.detail && (
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3">
               <div>
-                <dt className="text-[13px] text-ink-soft">منذ آخر نقطة بداية</dt>
+                <dt className="text-[15px] lg:text-[13px] text-ink-soft">منذ آخر نقطة بداية</dt>
                 <dd className="text-[15px] font-bold text-ink tabular-nums">{litersText(level.detail.delivered)} توريد</dd>
               </div>
               <div>
-                <dt className="text-[13px] text-ink-soft">المصروف بالتعبئات</dt>
+                <dt className="text-[15px] lg:text-[13px] text-ink-soft">المصروف بالتعبئات</dt>
                 <dd className="text-[15px] font-bold text-ink tabular-nums">{litersText(level.detail.dispensed)}</dd>
               </div>
               <div className="col-span-2">
-                <dt className="text-[13px] text-ink-soft">
+                <dt className="text-[15px] lg:text-[13px] text-ink-soft">
                   {level.detail.lastResetAt ? 'آخر تصفير' : 'المستوى الافتتاحي'}
                 </dt>
                 <dd className="text-[15px] font-bold text-ink">

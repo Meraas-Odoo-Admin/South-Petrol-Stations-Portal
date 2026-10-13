@@ -39,7 +39,7 @@ export function VehiclePreviewCard({ vehicleId, idSuffix = '' }: { vehicleId: st
   if (isLoading || !data) return null;
 
   return (
-    <div className="mt-2.5 rounded-sm bg-surface-alt p-3 text-[12px]" data-testid={`vehicle-preview-card${idSuffix}`}>
+    <div className="mt-2.5 rounded-sm bg-surface-alt p-3 text-[13px] lg:text-[12px]" data-testid={`vehicle-preview-card${idSuffix}`}>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         <PreviewField label="المركبة" value={[data.make, data.model].filter(Boolean).join(' ') || '—'} />
         <PreviewField label="نوع الوقود" value={data.fuelType ? VEHICLE_FUEL_TYPE_LABELS_AR[data.fuelType] : '—'} />
@@ -51,7 +51,7 @@ export function VehiclePreviewCard({ vehicleId, idSuffix = '' }: { vehicleId: st
           cell alongside brand/usage type — that packed shape read as a
           rendering mistake, not a deliberate summary. */}
       <div className="mt-3 border-t border-line/60 pt-2.5">
-        <p className="mb-1.5 text-[11px] font-bold text-ink-faint">بيانات المالك</p>
+        <p className="mb-1.5 text-[13px] lg:text-[12px] font-bold text-ink-faint">بيانات المالك</p>
         {data.owner ? (
           <div className="space-y-1">
             <PreviewField label="الاسم" value={data.owner.fullName} />

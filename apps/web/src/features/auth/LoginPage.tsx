@@ -49,29 +49,29 @@ export function LoginPage() {
   }
 
   const inputClass =
-    'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] lg:text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   const form = (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-1 flex-col">
       <h1 className="text-[27px] font-black text-ink lg:text-[27px]">تسجيل الدخول</h1>
-      <p className="mt-2 text-[13px] leading-[1.7] text-ink-soft">
+      <p className="mt-2 text-[15px] lg:text-[13px] leading-[1.7] text-ink-soft">
         أدخل اسم المستخدم الذي سلّمك إياه مشرف محطتك.
       </p>
 
       <div className="mt-7 flex flex-col gap-[18px]">
         <div>
-          <label className="text-[13px] font-bold text-ink">اسم المستخدم</label>
+          <label className="text-[15px] lg:text-[13px] font-bold text-ink">اسم المستخدم</label>
           <input
             {...register('username')}
             autoComplete="username"
             className={`mt-2 ${inputClass}`}
             style={{ height: 52 }}
           />
-          {errors.username && <p className="mt-1 text-[12px] text-danger">{errors.username.message}</p>}
+          {errors.username && <p className="mt-1 text-[13px] lg:text-[12px] text-danger">{errors.username.message}</p>}
         </div>
 
         <div>
-          <label className="text-[13px] font-bold text-ink">كلمة المرور</label>
+          <label className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور</label>
           <div className="mt-2 flex h-[52px] items-center gap-2.5 rounded-sm border border-primary bg-primary-100 px-3.5">
             <input
               type={showPassword ? 'text' : 'password'}
@@ -89,22 +89,22 @@ export function LoginPage() {
               <EyeIcon open={showPassword} />
             </button>
           </div>
-          <p className="mt-1.5 text-[11.5px] text-ink-soft">اضغط العين لعرض ما كتبته والتأكد منه.</p>
-          {errors.password && <p className="mt-1 text-[12px] text-danger">{errors.password.message}</p>}
+          <p className="mt-1.5 text-[13px] lg:text-[12px] text-ink-soft">اضغط العين لعرض ما كتبته والتأكد منه.</p>
+          {errors.password && <p className="mt-1 text-[13px] lg:text-[12px] text-danger">{errors.password.message}</p>}
         </div>
       </div>
 
-      {serverError && <p className="mt-4 text-[13px] text-danger">{serverError}</p>}
+      {serverError && <p className="mt-4 text-[15px] lg:text-[13px] text-danger">{serverError}</p>}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-7 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
+        className="mt-7 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-mid text-[16px] font-extrabold text-ink shadow-glow disabled:opacity-50"
       >
         {isSubmitting ? '...جارٍ الدخول' : 'دخول'}
       </button>
 
-      <p className="mt-6 text-[11.5px] leading-[1.7] text-ink-soft lg:mt-auto lg:pt-6">
+      <p className="mt-6 text-[13px] lg:text-[12px] leading-[1.7] text-ink-soft lg:mt-auto lg:pt-6">
         إن نسيت كلمة المرور، راجع مشرف محطتك — لا يمكن استرجاعها من هذه الشاشة.
       </p>
     </form>
@@ -118,20 +118,20 @@ export function LoginPage() {
           <BrandMark variant="white" size={44} />
           <div className="text-center">
             <p className="text-[21px] font-black">{APP_NAME}</p>
-            <p className="mt-1 text-[12px] font-medium opacity-90">{APP_TAGLINE}</p>
+            <p className="mt-1 text-[13px] lg:text-[12px] font-medium opacity-90">{APP_TAGLINE}</p>
           </div>
         </div>
 
         {/* Desktop: teal marketing panel (order-2 in RTL = visually start side) */}
         <div className="hidden flex-1 flex-col justify-between bg-gradient-to-br from-primary to-primary-dark p-14 text-white lg:order-2 lg:flex">
-          <p className="text-[12px] font-extrabold tracking-[0.14em] opacity-70">مديرية أمن سبها</p>
+          <p className="text-[13px] lg:text-[12px] font-extrabold tracking-[0.14em] opacity-70">مديرية أمن سبها</p>
           <div>
             <p className="text-[34px] font-black leading-[1.45]">كل لتر مُسجَّل باسم مركبة وسائق ووقت.</p>
-            <p className="mt-[18px] text-[14px] leading-[1.9] opacity-90">
+            <p className="mt-[18px] text-[16px] lg:text-[14px] leading-[1.9] opacity-90">
               هذه المنظومة تسجّل ولا تحذف. كل إجراء داخلها موثّق باسم من نفّذه ووقته، بما في ذلك دخولك الآن.
             </p>
           </div>
-          <div className="flex items-center gap-2.5 text-[11.5px] font-medium opacity-75">
+          <div className="flex items-center gap-2.5 text-[13px] lg:text-[12px] font-medium opacity-75">
             <span className="h-2 w-2 rounded-full bg-accent" />
             استخدام هذه المنظومة مقصور على العاملين المخوَّلين.
           </div>
@@ -143,7 +143,7 @@ export function LoginPage() {
             <BrandMark />
             <div>
               <p className="text-[18px] font-black text-ink">{APP_NAME}</p>
-              <p className="text-[11px] font-medium text-ink-soft">{APP_TAGLINE}</p>
+              <p className="text-[13px] lg:text-[12px] font-medium text-ink-soft">{APP_TAGLINE}</p>
             </div>
           </div>
           {form}

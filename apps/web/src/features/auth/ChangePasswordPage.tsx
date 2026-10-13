@@ -39,7 +39,7 @@ function evaluateStrength(password: string): { checks: StrengthCheck[]; score: n
 
 function strengthLabel(score: number): { text: string; tone: string } {
   if (score <= 1) return { text: 'ضعيفة', tone: 'text-danger' };
-  if (score === 2) return { text: 'مقبولة', tone: 'text-accent-dark' };
+  if (score === 2) return { text: 'مقبولة', tone: 'text-accent-ink' };
   return { text: 'قوية — مقبولة', tone: 'text-ok' };
 }
 
@@ -121,7 +121,7 @@ export function ChangePasswordPage() {
           <BrandMark variant="white" size={44} />
           <div className="text-center">
             <p className="text-[18px] font-black">{APP_NAME}</p>
-            <p className="mt-1 text-[11px] font-medium opacity-90">{APP_TAGLINE}</p>
+            <p className="mt-1 text-[13px] lg:text-[12px] font-medium opacity-90">{APP_TAGLINE}</p>
           </div>
         </div>
 
@@ -130,17 +130,17 @@ export function ChangePasswordPage() {
             <BrandMark />
             <div>
               <p className="text-[18px] font-black text-ink">{APP_NAME}</p>
-              <p className="text-[11px] font-medium text-ink-soft">{APP_TAGLINE}</p>
+              <p className="text-[13px] lg:text-[12px] font-medium text-ink-soft">{APP_TAGLINE}</p>
             </div>
           </div>
 
           {user?.mustChangePassword && (
-            <div className="mb-2 inline-block rounded-full bg-primary-100 px-3 py-1.5 text-[11px] font-bold text-primary-dark">
+            <div className="mb-2 inline-block rounded-full bg-primary-100 px-3 py-1.5 text-[13px] lg:text-[12px] font-bold text-primary-dark">
               الخطوة الأولى قبل الاستخدام
             </div>
           )}
           <h1 className="mt-3 text-[22px] font-black text-ink">اختر كلمة مرور جديدة</h1>
-          <p className="mt-2 text-[13px] leading-[1.7] text-ink-soft">
+          <p className="mt-2 text-[15px] lg:text-[13px] leading-[1.7] text-ink-soft">
             {user?.mustChangePassword
               ? 'كلمة المرور المؤقتة التي سلّمك إياها المشرف تُستخدم مرة واحدة فقط.'
               : 'اختر كلمة مرور جديدة لحسابك.'}
@@ -148,7 +148,7 @@ export function ChangePasswordPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
           <div className="rounded-md border border-line p-4">
-            <label className="text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
+            <label className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
             <div className={fieldRowClass}>
               <input
                 type={showCurrent ? 'text' : 'password'}
@@ -167,12 +167,12 @@ export function ChangePasswordPage() {
               </button>
             </div>
             {errors.currentPassword && (
-              <p className="mt-1.5 text-[12px] text-danger">{errors.currentPassword.message}</p>
+              <p className="mt-1.5 text-[13px] lg:text-[12px] text-danger">{errors.currentPassword.message}</p>
             )}
           </div>
 
           <div className="rounded-md border border-line p-4">
-            <label className="text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
+            <label className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
             <div className={fieldRowClass}>
               <input
                 type={showNew ? 'text' : 'password'}
@@ -190,7 +190,7 @@ export function ChangePasswordPage() {
                 <EyeIcon open={showNew} size={17} />
               </button>
             </div>
-            {errors.newPassword && <p className="mt-1.5 text-[12px] text-danger">{errors.newPassword.message}</p>}
+            {errors.newPassword && <p className="mt-1.5 text-[13px] lg:text-[12px] text-danger">{errors.newPassword.message}</p>}
 
             {/* 4 segments per artboard 3c — the 3 checks below can only
                 ever fill 3 of them; the 4th stays empty even at "قوية"
@@ -205,12 +205,12 @@ export function ChangePasswordPage() {
               ))}
             </div>
             {newPassword.length > 0 && (
-              <p className={`mt-2 text-[12.5px] font-extrabold ${strength.tone}`}>{strength.text}</p>
+              <p className={`mt-2 text-[13px] lg:text-[12.5px] font-extrabold ${strength.tone}`}>{strength.text}</p>
             )}
 
             <ul className="mt-3 flex flex-col gap-1.5">
               {checks.map((check) => (
-                <li key={check.label} className="flex items-center gap-2 text-[12px] text-ink-soft">
+                <li key={check.label} className="flex items-center gap-2 text-[13px] lg:text-[12px] text-ink-soft">
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
                       check.met ? 'bg-ok text-white' : 'bg-surface-alt'
@@ -229,7 +229,7 @@ export function ChangePasswordPage() {
           </div>
 
           <div className="rounded-md border border-line p-4">
-            <label className="text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
+            <label className="text-[15px] lg:text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
             <div className={fieldRowClass}>
               <input
                 type={showConfirm ? 'text' : 'password'}
@@ -248,10 +248,10 @@ export function ChangePasswordPage() {
               </button>
             </div>
             {errors.confirmPassword && (
-              <p className="mt-1.5 text-[12px] text-danger">{errors.confirmPassword.message}</p>
+              <p className="mt-1.5 text-[13px] lg:text-[12px] text-danger">{errors.confirmPassword.message}</p>
             )}
             {passwordsMatch && !errors.confirmPassword && (
-              <p className="mt-2 flex items-center gap-1.5 text-[12.5px] font-bold text-ok">
+              <p className="mt-2 flex items-center gap-1.5 text-[13px] lg:text-[12.5px] font-bold text-ok">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
                   <path d="M4 12l6 6L20 6" />
                 </svg>
@@ -260,16 +260,16 @@ export function ChangePasswordPage() {
             )}
           </div>
 
-          <div className="rounded-md bg-accent-100 px-4 py-3 text-[12px] leading-[1.7] text-accent-dark">
+          <div className="rounded-md bg-accent-100 px-4 py-3 text-[13px] lg:text-[12px] leading-[1.7] text-accent-ink">
             بعد الحفظ سيُطلب منك الدخول بكلمة المرور الجديدة في المرة القادمة.
           </div>
 
-          {serverError && <p className="text-[13px] text-danger">{serverError}</p>}
+          {serverError && <p className="text-[15px] lg:text-[13px] text-danger">{serverError}</p>}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="mt-1 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-dark text-[16px] font-extrabold text-white shadow-glow disabled:opacity-50"
+            className="mt-1 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-mid text-[16px] font-extrabold text-ink shadow-glow disabled:opacity-50"
           >
             {isSubmitting ? '...جارٍ الحفظ' : 'حفظ والمتابعة'}
           </button>

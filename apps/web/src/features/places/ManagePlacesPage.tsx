@@ -327,10 +327,10 @@ export function ManagePlacesPage() {
         {rows.length > 0 && (
           <>
             <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full text-[14px]">
+              <table className="w-full text-[16px] lg:text-[14px]">
                 <caption className="sr-only">محطات الوقود ومكاتب التسجيل</caption>
                 <thead>
-                  <tr className="bg-surface-alt text-[12px] font-bold text-ink-soft">
+                  <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                     <th scope="col" className="px-[18px] py-2.5 text-start">الاسم</th>
                     <th scope="col" className="px-[18px] py-2.5 text-start">النوع</th>
                     <th scope="col" className="px-[18px] py-2.5 text-start">الشركة / العنوان</th>
@@ -361,7 +361,7 @@ export function ManagePlacesPage() {
                       <td className="px-[18px] py-3">
                         <Link
                           to={openPath(r)}
-                          className="rounded-full bg-surface-alt px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:text-primary"
+                          className="rounded-full bg-surface-alt px-3 py-1.5 text-[15px] lg:text-[13px] font-bold text-ink-soft hover:text-primary"
                         >
                           {r.archived ? 'فتح واستعادة' : 'فتح وإدارة'}
                         </Link>
@@ -390,7 +390,7 @@ export function ManagePlacesPage() {
                       )}
                     </div>
                     {r.detail && <p className="mt-1 text-[15px] text-ink">{r.detail}</p>}
-                    {r.locality && <p className="text-[14px] text-ink-soft">{r.locality}</p>}
+                    {r.locality && <p className="text-[16px] lg:text-[14px] text-ink-soft">{r.locality}</p>}
                   </Link>
                 </li>
               ))}

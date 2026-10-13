@@ -111,7 +111,7 @@ export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChan
         dir="ltr"
         className="h-12 w-full rounded-sm border border-line bg-surface-alt px-3 text-end font-mono text-[20px] font-extrabold text-primary-dark placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent"
       />
-      <p className="mt-1 text-[11px] text-ink-soft">
+      <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">
         مثال: <LtrText>{LICENSE_PLATE_DISPLAY_EXAMPLE}</LtrText>
       </p>
       <PortalDropdown
@@ -120,11 +120,11 @@ export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChan
         className="max-h-48 overflow-auto rounded-sm border border-line bg-surface shadow-md"
       >
         <ul>
-          {isFetching && <li className="px-3 py-2 text-[12.5px] text-ink-soft">...جارٍ البحث</li>}
+          {isFetching && <li className="px-3 py-2 text-[13px] lg:text-[12.5px] text-ink-soft">...جارٍ البحث</li>}
           {/* Registration pivot, phase 2: no "add new vehicle" here any
               more — petrol stations never register vehicles. */}
           {!isFetching && results?.length === 0 && (
-            <li className="px-3 py-2 text-[12.5px] text-ink-soft" data-testid="vehicle-search-not-registered">
+            <li className="px-3 py-2 text-[13px] lg:text-[12.5px] text-ink-soft" data-testid="vehicle-search-not-registered">
               لا توجد مركبة مسجّلة بهذه البيانات — التسجيل في مكاتب التسجيل فقط
             </li>
           )}
@@ -139,7 +139,7 @@ export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChan
                   setQuery(formatLicensePlate(vehicle.currentPlate));
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-start text-[12.5px] hover:bg-surface-alt"
+                className="flex w-full items-center gap-2 px-3 py-2 text-start text-[13px] lg:text-[12.5px] hover:bg-surface-alt"
               >
                 <VehicleBrandLogo model={vehicle.model} size={24} />
                 <span>

@@ -27,7 +27,7 @@ import { InfoHint } from '../../components/InfoHint';
 const TAKE = 20;
 
 const selectClass =
-  'h-9 rounded-sm bg-surface-alt px-3 text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+  'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
 
 export function ViolationsPage() {
   const { user, hasPermission } = useAuth();
@@ -108,7 +108,7 @@ export function ViolationsPage() {
       <Card className="mb-4 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">المحطة</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المحطة</label>
             {canViewAllStations ? (
               <StationSelect value={stationId} onChange={resetPageAnd(setStationId)} allowAllOption className={`w-52 ${selectClass}`} />
             ) : (
@@ -116,15 +116,15 @@ export function ViolationsPage() {
             )}
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">من تاريخ</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">من تاريخ</label>
             <DateField value={from} onChange={resetPageAnd(setFrom)} inputClassName={`w-44 pe-9 ${selectClass}`} />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-bold text-ink-soft">إلى تاريخ</label>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">إلى تاريخ</label>
             <DateField value={to} onChange={resetPageAnd(setTo)} inputClassName={`w-44 pe-9 ${selectClass}`} />
           </div>
           <div>
-            <label className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-ink-soft">
+            <label className="mb-1 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">
               الحالة
               <InfoHint text="«قيد الانتظار» استثناءات لم يعتمدها مشرف بعد وتحتاج قرارك. «معتمدة» استثناءات تمت الموافقة عليها بالفعل، سواء تلقائيًا عند التسجيل أو يدويًا من مشرف." />
             </label>
@@ -141,9 +141,9 @@ export function ViolationsPage() {
         </div>
       </Card>
 
-      {isLoading && <p className="text-[13px] text-ink-soft">...جارٍ التحميل</p>}
-      {isError && <p className="text-[13px] text-danger">تعذر تحميل المخالفات.</p>}
-      {approveMutation.isError && <p className="mb-2 text-[13px] text-danger">تعذر اعتماد الاستثناء.</p>}
+      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل المخالفات.</p>}
+      {approveMutation.isError && <p className="mb-2 text-[15px] lg:text-[13px] text-danger">تعذر اعتماد الاستثناء.</p>}
 
       {data && (
         <>
@@ -153,10 +153,10 @@ export function ViolationsPage() {
               <Card key={row.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-[13px] font-extrabold text-ink">
+                    <p className="text-[15px] lg:text-[13px] font-extrabold text-ink">
                       {row.fillUpTransaction.vehicle?.owner?.fullName ?? '—'}
                     </p>
-                    <p className="mt-0.5 text-[11.5px] text-ink-soft">
+                    <p className="mt-0.5 text-[13px] lg:text-[12px] text-ink-soft">
                       <FillUpPlate vehicle={row.fillUpTransaction.vehicle} typedPlate={row.fillUpTransaction.typedPlate} />
                       {' — '}
                       {row.fillUpTransaction.station.internalCode}
@@ -167,7 +167,7 @@ export function ViolationsPage() {
                   </StatusPill>
                 </div>
 
-                <p className="mt-2 text-[11px] text-ink-faint">
+                <p className="mt-2 text-[13px] lg:text-[12px] text-ink-faint">
                   <CodeText>{new Date(row.fillUpTransaction.occurredAt).toLocaleString('en-GB')}</CodeText>
                   {' · '}
                   {row.exceptionType.name}
@@ -175,7 +175,7 @@ export function ViolationsPage() {
 
                 {row.triggerReason ? (
                   <div className="mt-2 rounded-sm bg-surface-alt px-3 py-2">
-                    <p className="text-[12px] text-ink">
+                    <p className="text-[13px] lg:text-[12px] text-ink">
                       {RULE_VIOLATION_MESSAGES[row.triggerReason as RuleFailureReason] ?? row.triggerReason}
                     </p>
                     <TriggerDetail trigger={row.triggerDetail} />
@@ -200,7 +200,7 @@ export function ViolationsPage() {
               </Card>
             ))}
             {data.rows.length === 0 && (
-              <Card className="p-6 text-center text-[13px] text-ink-soft">لا توجد مخالفات مطابقة</Card>
+              <Card className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">لا توجد مخالفات مطابقة</Card>
             )}
             <Pagination skip={skip} take={TAKE} total={data.total} onSkipChange={setSkip} />
           </div>
@@ -208,9 +208,9 @@ export function ViolationsPage() {
           {/* Desktop table (8b) */}
           <Card className="hidden sm:block">
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-[12.5px]">
+          <table className="w-full min-w-[960px] text-[13px] lg:text-[12.5px]">
             <thead>
-              <tr className="bg-surface-alt text-[11px] font-bold text-ink-soft">
+              <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                 <th className="px-[18px] py-2.5 text-start">التاريخ</th>
                 <th className="px-[18px] py-2.5 text-start">المحطة</th>
                 <th className="px-[18px] py-2.5 text-start">المركبة</th>
@@ -280,7 +280,7 @@ export function ViolationsPage() {
               ))}
               {data.rows.length === 0 && (
                 <tr>
-                  <td colSpan={canApprove ? 9 : 8} className="p-4 text-center text-[13px] text-ink-soft">
+                  <td colSpan={canApprove ? 9 : 8} className="p-4 text-center text-[15px] lg:text-[13px] text-ink-soft">
                     لا توجد مخالفات مطابقة
                   </td>
                 </tr>

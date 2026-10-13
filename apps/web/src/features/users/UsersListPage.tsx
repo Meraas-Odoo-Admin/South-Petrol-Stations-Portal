@@ -303,10 +303,10 @@ export function UsersListPage({
         <>
           {/* Desktop: a table. */}
           <div className="hidden overflow-x-auto lg:block">
-            <table className="w-full text-[14px]">
+            <table className="w-full text-[16px] lg:text-[14px]">
               <caption className="sr-only">قائمة الحسابات</caption>
               <thead>
-                <tr className="bg-surface-alt text-[12px] font-bold text-ink-soft">
+                <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
                   <th scope="col" aria-sort={filters.sort === 'name' || !filters.sort ? (filters.dir === 'desc' ? 'descending' : 'ascending') : 'none'} className="px-[18px] py-2.5 text-start">
                     <button type="button" onClick={() => sortBy('name')} className="font-bold hover:text-primary">
                       الاسم {(filters.sort === 'name' || !filters.sort) && (filters.dir === 'desc' ? '▼' : '▲')}
@@ -340,7 +340,7 @@ export function UsersListPage({
                     </td>
                     <td className="px-[18px] py-3 text-ink">
                       {u.job ? roleLabel(u.job.name) : <span className="text-ink-soft">بلا وظيفة</span>}
-                      {u.jobCount > 1 && <span className="ms-1 text-[12px] text-ink-soft">(+{u.jobCount - 1} وظائف)</span>}
+                      {u.jobCount > 1 && <span className="ms-1 text-[13px] lg:text-[12px] text-ink-soft">(+{u.jobCount - 1} وظائف)</span>}
                     </td>
                     {/* Inside a place's own page the place is the page: not repeated on every row. */}
                     {!fixedPlaceId && <td className="max-w-[260px] px-[18px] py-3 text-ink">{whereText(u)}</td>}
@@ -352,14 +352,14 @@ export function UsersListPage({
                     </td>
                     <td className="px-[18px] py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-2">
-                        <Link to={personLink(u.id)} className="rounded-full bg-surface-alt px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:text-primary">
+                        <Link to={personLink(u.id)} className="rounded-full bg-surface-alt px-3 py-1.5 text-[15px] lg:text-[13px] font-bold text-ink-soft hover:text-primary">
                           فتح
                         </Link>
                         {u.canManage && (
                           <button
                             type="button"
                             onClick={() => setRowAction({ user: u, kind: u.archivedAt || u.status === 'archived' ? 'restore' : 'archive' })}
-                            className="rounded-full border border-line px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:border-danger hover:text-danger"
+                            className="rounded-full border border-line px-3 py-1.5 text-[15px] lg:text-[13px] font-bold text-ink-soft hover:border-danger hover:text-danger"
                           >
                             {u.archivedAt || u.status === 'archived' ? 'استعادة' : 'أرشفة'}
                           </button>
@@ -387,7 +387,7 @@ export function UsersListPage({
                     <AccountStatusPill status={u.status} />
                   </div>
                   {!fixedPlaceId && <p className="text-[15px] text-ink">{whereText(u)}</p>}
-                  <p className="mt-1 text-[14px] text-ink-soft">
+                  <p className="mt-1 text-[16px] lg:text-[14px] text-ink-soft">
                     آخر دخول: {u.lastLoginAt ? <span dir="ltr">{formatWhen(u.lastLoginAt)}</span> : 'لم يسجّل الدخول بعد'}
                   </p>
                 </Link>

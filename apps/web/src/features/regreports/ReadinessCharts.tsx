@@ -22,7 +22,7 @@ interface TipProps {
 function Tip({ active, label, payload }: TipProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-sm border border-line bg-surface p-3 text-[14px] shadow-md">
+    <div className="rounded-sm border border-line bg-surface p-3 text-[16px] lg:text-[14px] shadow-md">
       <p className="mb-1 font-extrabold text-ink">{label}</p>
       {payload.map((p) => (
         <p key={p.name} className="flex items-center gap-2 text-ink">

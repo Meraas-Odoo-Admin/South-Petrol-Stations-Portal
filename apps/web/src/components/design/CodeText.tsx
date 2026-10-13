@@ -16,7 +16,7 @@ export function CodeText({ children, size = "sm" }: { children: ReactNode; size?
         className={
           size === "md"
             ? "font-mono text-[13px] tracking-wide text-ink-soft lg:text-[12px]"
-            : "font-mono text-[11px] tracking-wide text-ink-faint"
+            : "font-mono text-[13px] lg:text-[12px] tracking-wide text-ink-faint"
         }
       >
         {children}

@@ -451,7 +451,7 @@ export function RegistrationPage() {
             الرقم الداخلي <LtrText>{registered.vehicle.internalCode}</LtrText> — المالك {registered.ownerName}
           </p>
           {!!registered.vehicle.linkedFillUps && registered.vehicle.linkedFillUps > 0 && (
-            <p className="mt-3 rounded-sm bg-accent-100 p-3 text-[15px] font-bold text-accent-dark lg:text-[13px]" data-testid="registration-linked-fillups">
+            <p className="mt-3 rounded-sm bg-accent-100 p-3 text-[15px] font-bold text-accent-ink lg:text-[13px]" data-testid="registration-linked-fillups">
               تم العثور على {registered.vehicle.linkedFillUps} تعبئة سابقة لهذه اللوحة وربطها بالمركبة.
             </p>
           )}

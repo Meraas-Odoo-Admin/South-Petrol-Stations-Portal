@@ -170,7 +170,7 @@ describe('Owners/Vehicles (e2e)', () => {
     // No role at all — zero permissions, used for every 403 case.
     const noPermUser = await createUser(usernameNoPerm);
     noPermUserId = noPermUser.id;
-  }, 30_000);
+  });
 
   afterAll(async () => {
     if (vehicleId) {

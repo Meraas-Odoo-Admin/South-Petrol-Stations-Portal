@@ -99,10 +99,10 @@ export function VehicleCardPanel({
     <Card className={className} style={style} data-testid="vehicle-card-panel">
       <CardHeader title="بطاقة المركبة" />
       <div className="space-y-4 p-4">
-        {cardsQuery.isLoading && <p className="text-[12px] text-ink-soft">...جارٍ التحميل</p>}
+        {cardsQuery.isLoading && <p className="text-[13px] lg:text-[12px] text-ink-soft">...جارٍ التحميل</p>}
 
         {!cardsQuery.isLoading && !active && (
-          <p className="text-[12.5px] text-ink-soft" data-testid="vehicle-card-none">
+          <p className="text-[13px] lg:text-[12.5px] text-ink-soft" data-testid="vehicle-card-none">
             {hasHistory ? 'لا توجد بطاقة سارية لهذه المركبة.' : 'لم تُصدر بطاقة لهذه المركبة بعد.'}
           </p>
         )}
@@ -120,19 +120,19 @@ export function VehicleCardPanel({
                 </span>
               )}
             </div>
-            <p className="mt-1.5 text-[11.5px] text-ink-soft">
+            <p className="mt-1.5 text-[13px] lg:text-[12px] text-ink-soft">
               صدرت <LtrText>{active.printedIssueDate}</LtrText> — {active.registrationStation.name} ({active.desk.name})
             </p>
             {active.needsReissue && (
-              <p className="mt-1.5 text-[11.5px] text-accent-dark">
+              <p className="mt-1.5 text-[13px] lg:text-[12px] text-accent-ink">
                 تغيّرت اللوحة أو الطراز أو اللون منذ طباعة هذه البطاقة. ما زالت سارية، لكن يجب إصدار بطاقة محدَّثة.
               </p>
             )}
           </div>
         )}
 
-        {message && <p className="text-[12px] font-bold text-ok">{message}</p>}
-        {error && <p className="text-[12px] text-danger">{error}</p>}
+        {message && <p className="text-[13px] lg:text-[12px] font-bold text-ok">{message}</p>}
+        {error && <p className="text-[13px] lg:text-[12px] text-danger">{error}</p>}
 
         {/* Desk actions — registration roles only */}
         {canIssue && !issuing && (
@@ -168,12 +168,12 @@ export function VehicleCardPanel({
 
         {cancelling && active && (
           <div className="space-y-2 rounded-sm border border-danger p-3">
-            <p className="text-[12.5px] font-bold text-danger">إلغاء البطاقة دون إصدار بديل</p>
+            <p className="text-[13px] lg:text-[12.5px] font-bold text-danger">إلغاء البطاقة دون إصدار بديل</p>
             <input
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               placeholder="سبب الإلغاء"
-              className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-accent"
+              className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] focus:outline-none focus:ring-2 focus:ring-accent"
               data-testid="vehicle-card-cancel-reason"
             />
             <div className="flex gap-2">
@@ -196,13 +196,13 @@ export function VehicleCardPanel({
         {issuing && (
           <div className="space-y-3 rounded-sm border border-line p-3">
             {openStations.length === 0 ? (
-              <p className="text-[12px] text-danger">لا يوجد مكتب تسجيل مفتوح في نطاق حسابك للإصدار منه.</p>
+              <p className="text-[13px] lg:text-[12px] text-danger">لا يوجد مكتب تسجيل مفتوح في نطاق حسابك للإصدار منه.</p>
             ) : (
               openStations.length > 1 && (
                 <select
                   value={chosenStationId}
                   onChange={(e) => setChosenStationId(e.target.value)}
-                  className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[12.5px] sm:w-80"
+                  className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] sm:w-80"
                 >
                   <option value="">اختر مكتب التسجيل الذي تعمل فيه</option>
                   {openStations.map((s) => (
@@ -215,11 +215,11 @@ export function VehicleCardPanel({
             )}
             {!issuing.started ? (
               <div className="space-y-2">
-                <label className="block text-[11px] font-bold text-ink-soft">سبب إصدار بطاقة جديدة</label>
+                <label className="block text-[13px] lg:text-[12px] font-bold text-ink-soft">سبب إصدار بطاقة جديدة</label>
                 <select
                   value={issuing.reason}
                   onChange={(e) => setIssuing({ ...issuing, reason: e.target.value as IssuableReason })}
-                  className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[12.5px] sm:w-80"
+                  className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] sm:w-80"
                   data-testid="vehicle-card-reason"
                 >
                   {REPLACEMENT_REASONS.map((r) => (
@@ -232,9 +232,9 @@ export function VehicleCardPanel({
                   value={issuing.note}
                   onChange={(e) => setIssuing({ ...issuing, note: e.target.value })}
                   placeholder="تفاصيل (اختياري) — مثل مكان فقدان البطاقة"
-                  className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[12.5px]"
+                  className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px]"
                 />
-                <p className="text-[11px] text-ink-faint">البطاقة الحالية (إن وُجدت) تتوقف عن العمل فور إصدار الجديدة. يُسجَّل الإجراء في سجل التغييرات.</p>
+                <p className="text-[13px] lg:text-[12px] text-ink-faint">البطاقة الحالية (إن وُجدت) تتوقف عن العمل فور إصدار الجديدة. يُسجَّل الإجراء في سجل التغييرات.</p>
                 <div className="flex gap-2">
                   <PillButton size="sm" disabled={!stationId} onClick={() => setIssuing({ ...issuing, started: true })}>
                     متابعة
@@ -262,10 +262,10 @@ export function VehicleCardPanel({
 
         {cards.length > 0 && (
           <div>
-            <p className="mb-1.5 text-[11.5px] font-bold text-ink-soft">سجل البطاقات</p>
+            <p className="mb-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">سجل البطاقات</p>
             <ul className="divide-y divide-line rounded-sm border border-line" data-testid="vehicle-card-history">
               {cards.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11.5px]">
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[13px] lg:text-[12px]">
                   <span className="flex items-center gap-2">
                     <LtrText>
                       <span className="font-bold">{c.cardNumber}</span>

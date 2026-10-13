@@ -135,7 +135,7 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
                   onChange(brand.name);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-start text-[12.5px] text-ink hover:bg-surface-alt"
+                className="flex w-full items-center gap-2 px-3 py-2 text-start text-[13px] lg:text-[12.5px] text-ink hover:bg-surface-alt"
               >
                 <BrandGlyph brand={brand} />
                 {brand.name}
@@ -143,7 +143,7 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
             </li>
           ))}
           {results.length === 0 && (
-            <li className="px-3 py-2 text-[12px] text-ink-soft">لا توجد نتائج مطابقة</li>
+            <li className="px-3 py-2 text-[13px] lg:text-[12px] text-ink-soft">لا توجد نتائج مطابقة</li>
           )}
           {/* Round 18: an explicit, always-visible escape hatch — clears
               the field and keeps the dropdown open for typing, rather than
@@ -158,7 +158,7 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
                 onChange('');
                 inputRef.current?.focus();
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-start text-[12.5px] font-bold text-accent-dark hover:bg-accent-100"
+              className="flex w-full items-center gap-2 px-3 py-2 text-start text-[13px] lg:text-[12.5px] font-bold text-accent-ink hover:bg-accent-100"
             >
               {OTHER_LABEL} — أدخل اسم الماركة يدويًا
             </button>
@@ -166,12 +166,12 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
         </ul>
       </PortalDropdown>
       {matchedBrand ? (
-        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-ink-soft">
+        <p className="mt-1.5 flex items-center gap-1.5 text-[13px] lg:text-[12px] text-ink-soft">
           <BrandGlyph brand={matchedBrand} />
           تم اختيار: {matchedBrand.name}
         </p>
       ) : (
-        <p className="mt-1 text-[10.5px] text-ink-faint">
+        <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
           {VEHICLE_BRAND_CATEGORY_LABELS.car} · {VEHICLE_BRAND_CATEGORY_LABELS.truck} ·{' '}
           {VEHICLE_BRAND_CATEGORY_LABELS.heavy_equipment} · {VEHICLE_BRAND_CATEGORY_LABELS.motorcycle}
         </p>

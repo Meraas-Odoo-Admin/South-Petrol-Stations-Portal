@@ -163,7 +163,7 @@ export class StationsService {
     const archived = mayArchive ? query.archived : undefined;
     const and: Prisma.StationWhereInput[] = [];
     if (scope !== null) and.push({ id: { in: scope } });
-    if (!includePreparing) and.push({ OR: [{ municipalityId: null }, { municipality: { status: 'LIVE' } }] });
+    if (!includePreparing) and.push({ municipality: { status: 'LIVE' } });
     and.push({ archivedAt: archived === 'only' ? { not: null } : archived === 'include' ? undefined : null });
     if (query.municipalityId) and.push({ municipalityId: query.municipalityId });
     if (query.companyId) and.push({ companyId: query.companyId });

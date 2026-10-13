@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // This is the actual mechanism that grants and revokes access — the
 // endpoints under test here decide who gets a role (and therefore
@@ -16,6 +17,8 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 // through the real HTTP endpoints in users.controller.ts, so a bug in
 // the controller's permission wiring or the service's cache-invalidation
 // calls would actually be caught here.
+let umMunicipalityId: string;
+
 describe('User management endpoints (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -77,12 +80,14 @@ describe('User management endpoints (e2e)', () => {
     companyA = await prisma.company.create({ data: { name: `E2E UM Company A ${runId}` } });
     companyB = await prisma.company.create({ data: { name: `E2E UM Company B ${runId}` } });
 
+    umMunicipalityId = (await createMunicipality(prisma, `E2E UM Municipality ${runId}`)).id;
     stationA = await prisma.station.create({
       data: {
         internalCode: `E2E-UM-A-${runId}`,
         stationNumber: '1',
         name: 'E2E UM Station A',
         companyId: companyA.id,
+        municipalityId: umMunicipalityId,
       },
     });
     stationB = await prisma.station.create({
@@ -91,6 +96,7 @@ describe('User management endpoints (e2e)', () => {
         stationNumber: '1',
         name: 'E2E UM Station B',
         companyId: companyB.id,
+        municipalityId: umMunicipalityId,
       },
     });
 
@@ -170,7 +176,7 @@ describe('User management endpoints (e2e)', () => {
     await prisma.userStationScope.create({
       data: { userId: scopeRemoveTarget.id, stationId: stationA.id },
     });
-  }, 30_000);
+  });
 
   afterAll(async () => {
     const allUserIds = [
@@ -193,6 +199,7 @@ describe('User management endpoints (e2e)', () => {
     await prisma.station.delete({ where: { id: stationB.id } });
     await prisma.company.delete({ where: { id: companyA.id } });
     await prisma.company.delete({ where: { id: companyB.id } });
+    await deleteMunicipalities(prisma, [umMunicipalityId]);
     await app.close();
   });
 

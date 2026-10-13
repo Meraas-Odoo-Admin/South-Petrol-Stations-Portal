@@ -108,7 +108,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
         {unread > 0 && (
           <span
             data-testid="notification-count"
-            className="absolute -end-0.5 -top-0.5 flex min-w-[20px] items-center justify-center rounded-full bg-accent-dark px-1 text-[12px] font-extrabold leading-5 text-white"
+            className="absolute -end-0.5 -top-0.5 flex min-w-[20px] items-center justify-center rounded-full bg-accent px-1 text-[13px] lg:text-[12px] font-extrabold leading-5 text-ink"
           >
             {unread > 99 ? '99+' : unread}
           </span>
@@ -160,7 +160,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
                   >
                     <span className="flex items-start gap-2">
                       {!item.readAt && (
-                        <span className="mt-0.5 shrink-0 rounded-full bg-accent-dark px-2 py-0.5 text-[12px] font-extrabold text-white">
+                        <span className="mt-0.5 shrink-0 rounded-full bg-accent px-2 py-0.5 text-[13px] lg:text-[12px] font-extrabold text-ink">
                           جديد
                         </span>
                       )}

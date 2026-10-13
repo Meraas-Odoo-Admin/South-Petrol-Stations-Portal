@@ -77,9 +77,9 @@ export function OwnerSearchSelect({ value, onChange, initialLabel, className, pl
         className="max-h-48 overflow-auto rounded-sm border border-line bg-surface shadow-md"
       >
         <ul>
-          {isFetching && <li className="px-3 py-2 text-[12.5px] text-ink-soft">...جارٍ البحث</li>}
+          {isFetching && <li className="px-3 py-2 text-[13px] lg:text-[12.5px] text-ink-soft">...جارٍ البحث</li>}
           {!isFetching && results?.length === 0 && (
-            <li className="px-3 py-2 text-[12.5px] text-ink-soft">لا توجد نتائج</li>
+            <li className="px-3 py-2 text-[13px] lg:text-[12.5px] text-ink-soft">لا توجد نتائج</li>
           )}
           {results?.map((owner) => (
             <li key={owner.id}>
@@ -92,7 +92,7 @@ export function OwnerSearchSelect({ value, onChange, initialLabel, className, pl
                   setQuery(owner.fullName);
                   setOpen(false);
                 }}
-                className="block w-full px-3 py-2 text-start text-[12.5px] hover:bg-surface-alt"
+                className="block w-full px-3 py-2 text-start text-[13px] lg:text-[12.5px] hover:bg-surface-alt"
               >
                 {owner.fullName} — <LtrText>{owner.identityNumber}</LtrText>
               </button>

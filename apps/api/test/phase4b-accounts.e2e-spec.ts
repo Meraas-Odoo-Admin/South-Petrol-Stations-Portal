@@ -167,7 +167,7 @@ describe('Phase 4b — accounts (e2e)', () => {
     // A legacy account holding two jobs on the same side.
     await makeUser('twoJobs', 'fuelEmployee', { stations: ['A'] });
     await prisma.userRole.create({ data: { userId: user.twoJobs, roleId: role.fuelSupervisor } });
-  }, 60_000);
+  });
 
   afterAll(async () => {
     const allUsers = await prisma.user.findMany({

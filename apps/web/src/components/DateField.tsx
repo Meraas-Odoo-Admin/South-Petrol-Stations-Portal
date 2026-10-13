@@ -74,7 +74,7 @@ const MONTH_NAMES_AR = [
 const WEEKDAY_NAMES_AR = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
 
 const DEFAULT_INPUT_CLASS =
-  'h-11 w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50';
+  'h-11 w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50';
 
 // Round 11 item 3 / round 14 fix, both still relevant to the input's own
 // padding even though the trigger behind it changed — see the file's
@@ -234,7 +234,7 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
                 <path d="M15 6l-6 6 6 6" />
               </svg>
             </button>
-            <p className="text-[13px] font-extrabold text-ink">
+            <p className="text-[15px] lg:text-[13px] font-extrabold text-ink">
               {MONTH_NAMES_AR[viewMonth]} <span dir="ltr">{viewYear}</span>
             </p>
             <button
@@ -251,7 +251,7 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
 
           <div className="mt-2 grid grid-cols-7 gap-1">
             {WEEKDAY_NAMES_AR.map((w) => (
-              <div key={w} className="py-1 text-center text-[10px] font-bold text-ink-faint">
+              <div key={w} className="py-1 text-center text-[13px] lg:text-[12px] font-bold text-ink-faint">
                 {w}
               </div>
             ))}
@@ -263,13 +263,13 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
                   disabled={day === null}
                   onClick={() => day && pickDay(day)}
                   data-testid={day ? 'date-field-day' : undefined}
-                  className={`flex h-8 items-center justify-center rounded-full text-[12px] font-bold transition ${
+                  className={`flex h-8 items-center justify-center rounded-full text-[13px] lg:text-[12px] font-bold transition ${
                     day === null
                       ? 'invisible'
                       : isSelectedCell(day)
                         ? 'bg-primary text-white'
                         : isTodayCell(day)
-                          ? 'bg-accent-100 text-accent-dark'
+                          ? 'bg-accent-100 text-accent-ink'
                           : 'text-ink hover:bg-surface-alt'
                   }`}
                 >
@@ -287,7 +287,7 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
                 onChange(toIso(t.getFullYear(), t.getMonth() + 1, t.getDate()));
                 setOpen(false);
               }}
-              className="text-[11px] font-bold text-primary hover:underline"
+              className="text-[13px] lg:text-[12px] font-bold text-primary hover:underline"
             >
               اليوم
             </button>
@@ -298,7 +298,7 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
                   onChange('');
                   setOpen(false);
                 }}
-                className="text-[11px] font-bold text-ink-soft hover:underline"
+                className="text-[13px] lg:text-[12px] font-bold text-ink-soft hover:underline"
               >
                 مسح
               </button>

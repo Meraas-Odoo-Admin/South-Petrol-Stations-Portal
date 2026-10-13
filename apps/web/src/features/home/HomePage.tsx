@@ -87,15 +87,15 @@ export function HomePage() {
                   <Icon d={ICONS[link.icon]} size={18} />
                 </span>
                 <span className="min-w-0">
-                  <p className="text-[14px] font-extrabold text-ink">{link.label}</p>
-                  <p className="mt-1 text-[12px] text-ink-soft">{link.hint}</p>
+                  <p className="text-[16px] lg:text-[14px] font-extrabold text-ink">{link.label}</p>
+                  <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">{link.hint}</p>
                 </span>
               </Card>
             </Link>
           ))}
         </div>
       ) : (
-        <Card className="p-6 text-[13px] text-ink-soft">لا توجد صلاحيات مرتبطة بحسابك حاليًا.</Card>
+        <Card className="p-6 text-[15px] lg:text-[13px] text-ink-soft">لا توجد صلاحيات مرتبطة بحسابك حاليًا.</Card>
       )}
 
       {/* Round 19: the onboarding tour only ever shows itself once
@@ -105,7 +105,7 @@ export function HomePage() {
         <button
           type="button"
           onClick={() => replayOnboardingTour(user.id)}
-          className="mt-4 flex items-center gap-1.5 text-[12px] font-bold text-ink-soft hover:text-primary"
+          className="mt-4 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft hover:text-primary"
         >
           <Icon d={ICONS.home} size={14} />
           إعادة الجولة التعريفية

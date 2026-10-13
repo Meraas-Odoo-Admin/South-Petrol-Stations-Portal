@@ -7,7 +7,7 @@ import type { RegistrationDeskRow } from '../cards/cardApi';
 import { adminErrorMessage } from './adminErrors';
 
 const inputClass =
-  'h-8 w-full rounded-sm bg-surface-alt px-2.5 text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+  'h-8 w-full rounded-sm bg-surface-alt px-2.5 text-[13px] lg:text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
 // Registration pivot, phase 3: the desks (and their card printers) at one
 // registration station. Staff pick their desk once per device; every card
@@ -66,8 +66,8 @@ export function RegistrationDesksEditor({ registrationStationId }: { registratio
 
   return (
     <div className="mt-3 rounded-sm bg-paper p-3" data-testid="registration-desks-editor">
-      <p className="mb-2 text-[12px] font-bold text-ink">مكاتب الطباعة</p>
-      {desksQuery.data?.length === 0 && <p className="mb-2 text-[11.5px] text-ink-faint">لا توجد مكاتب بعد — أضف مكتبًا لتتمكن من طباعة البطاقات.</p>}
+      <p className="mb-2 text-[13px] lg:text-[12px] font-bold text-ink">مكاتب الطباعة</p>
+      {desksQuery.data?.length === 0 && <p className="mb-2 text-[13px] lg:text-[12px] text-ink-faint">لا توجد مكاتب بعد — أضف مكتبًا لتتمكن من طباعة البطاقات.</p>}
       <div className="space-y-2">
         {desksQuery.data?.map((desk) => (
           <div key={desk.id} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
@@ -119,7 +119,7 @@ export function RegistrationDesksEditor({ registrationStationId }: { registratio
           إضافة مكتب
         </PillButton>
       </div>
-      {error && <p className="mt-2 text-[11.5px] text-danger">{error}</p>}
+      {error && <p className="mt-2 text-[13px] lg:text-[12px] text-danger">{error}</p>}
     </div>
   );
 }

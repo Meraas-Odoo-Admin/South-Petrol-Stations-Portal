@@ -74,18 +74,18 @@ describe('Role separation — petrol station vs registration (e2e)', () => {
     registrationUserId = await createUser(`e2e_sep_registration_user_${runId}`, registrationRoleId);
 
     companyId = (await prisma.company.create({ data: { name: `E2E SEP Company ${runId}` } })).id;
+    municipalityId = (await createMunicipality(prisma, `E2E SEP Municipality ${runId}`)).id;
     stationId = (
       await prisma.station.create({
-        data: { internalCode: `E2E-SEP-${runId}`, stationNumber: '1', name: 'E2E SEP', companyId },
+        data: { internalCode: `E2E-SEP-${runId}`, stationNumber: '1', name: 'E2E SEP', companyId, municipalityId },
       })
     ).id;
-    municipalityId = (await createMunicipality(prisma, `E2E SEP Municipality ${runId}`)).id;
     registrationStationId = (
       await prisma.registrationStation.create({
         data: { internalCode: `E2E-SEP-REG-${runId}`, name: 'E2E SEP REG', municipalityId, address: 'E2E' },
       })
     ).id;
-  }, 30_000);
+  });
 
   afterAll(async () => {
     await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });

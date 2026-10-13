@@ -57,11 +57,11 @@ export function OwnerIdentityChangeRequestForm({
   });
 
   const inputClass =
-    'h-10 w-72 rounded-sm bg-surface-alt px-3 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-10 w-72 rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent';
 
   if (submitted) {
     return (
-      <div className="rounded-sm border-s-4 border-ok bg-ok-100 p-3.5 text-[13px] font-bold text-ok">
+      <div className="rounded-sm border-s-4 border-ok bg-ok-100 p-3.5 text-[15px] lg:text-[13px] font-bold text-ok">
         تم إرسال طلب تصحيح الهوية — بانتظار اعتماد المشرف. الرقم الحالي يبقى ساريًا حتى الاعتماد.
         <button type="button" onClick={onDone} className="ms-3 underline">
           إغلاق
@@ -73,7 +73,7 @@ export function OwnerIdentityChangeRequestForm({
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">نوع الهوية الجديد</label>
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">نوع الهوية الجديد</label>
         <select
           value={identityType}
           onChange={(e) => setIdentityType(e.target.value as IdentityType)}
@@ -84,7 +84,7 @@ export function OwnerIdentityChangeRequestForm({
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">الرقم الجديد</label>
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">الرقم الجديد</label>
         <input
           value={identityNumber}
           onChange={(e) => setIdentityNumber(restrictToIdentityNumber(e.target.value))}
@@ -93,15 +93,15 @@ export function OwnerIdentityChangeRequestForm({
           className={`${inputClass} text-end font-mono`}
         />
         {idLive && !idLive.ok ? (
-          <p role="alert" className="mt-1 text-[12px] font-medium text-danger-dark">{idLive.message}</p>
+          <p role="alert" className="mt-1 text-[13px] lg:text-[12px] font-medium text-danger-dark">{idLive.message}</p>
         ) : (
-          <p className="mt-1 text-[11px] text-ink-faint">
+          <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
             {identityType === 'NATIONAL_ID' ? NATIONAL_ID_HELP : ADMINISTRATIVE_ID_HELP}
           </p>
         )}
       </div>
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">السبب</label>
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">السبب</label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -110,12 +110,12 @@ export function OwnerIdentityChangeRequestForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-[11px] font-bold text-ink-soft">
+        <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">
           رقم/مرجع الإثبات <span className="text-danger">*</span>
         </label>
         <input value={proofReference} onChange={(e) => setProofReference(e.target.value)} className={inputClass} />
       </div>
-      {error && <p className="text-[12px] text-danger">{error}</p>}
+      {error && <p className="text-[13px] lg:text-[12px] text-danger">{error}</p>}
       <div className="flex gap-2 pt-1">
         <PillButton
           onClick={() => {
