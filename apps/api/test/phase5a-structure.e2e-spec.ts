@@ -4,6 +4,7 @@ import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
@@ -355,18 +356,16 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
 
       await get('mm1', `/municipalities/${m2}`).expect(403);
       await get('mm1', `/municipalities/${m2}/overview`).expect(403);
-      await patch('mm1', `/municipalities/${m2}`, { awarenessStartDate: '2031-01-01' }).expect(403);
+      await patch('mm1', `/municipalities/${m2}`, { name: 'not theirs' }).expect(403);
       // They may not rename, switch or archive even their own: that is the super admin's.
       await patch('mm1', `/municipalities/${m1}`, { name: 'renamed' }).expect(403);
       await post('mm1', `/municipalities/${m1}/archive`, { reason: 'not mine to do' }).expect(403);
       await post('mm1', '/municipalities', { name: `P5A nope ${runId}` }).expect(403);
     });
 
-    it('sets the stage dates of their own municipality, and only those', async () => {
-      const res = await patch('mm1', `/municipalities/${m1}`, { awarenessStartDate: '2031-01-01', cardRequiredFromDate: '2031-02-01' });
-      expect(res.status).toBe(200);
-      expect(res.body.awarenessStartDate).toBe('2031-01-01');
-      await patch('mm1', `/municipalities/${m1}`, { awarenessStartDate: null, cardRequiredFromDate: null }).expect(200);
+    it('cannot switch their own municipality on or off: the activation switch belongs to the super admin', async () => {
+      await patch('mm1', `/municipalities/${m1}`, { status: 'LIVE' }).expect(403);
+      await patch('mm1', `/municipalities/${m1}`, { status: 'PREPARING', reason: 'not mine to do' }).expect(403);
     });
 
     it("lists only their municipality's stations and offices, and refuses the rest", async () => {

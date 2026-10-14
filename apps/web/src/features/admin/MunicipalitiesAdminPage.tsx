@@ -9,7 +9,6 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { TextField } from '../../components/design/TextField';
 import { Icon, ICONS } from '../../components/icons';
 import { Notice } from '../users/parts';
-import { STAGE_LABELS } from '../places/StageCard';
 import { useMunicipalityList } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
 
@@ -133,7 +132,7 @@ export function MunicipalitiesAdminPage() {
               <select id="mu-status" value={status} onChange={(e) => setStatus(e.target.value)} className={SELECT_CLASS}>
                 <option value="">كل الحالات</option>
                 <option value="LIVE">مفعّلة</option>
-                <option value="PREPARING">قيد الإعداد</option>
+                <option value="PREPARING">غير مفعّلة</option>
               </select>
             </div>
             <div>
@@ -171,7 +170,6 @@ export function MunicipalitiesAdminPage() {
                     {sortHeader('name', 'البلدية')}
                     <th scope="col" className="px-[18px] py-2.5 text-start">رمز البطاقات</th>
                     {sortHeader('status', 'الحالة')}
-                    <th scope="col" className="px-[18px] py-2.5 text-start">المرحلة</th>
                     {sortHeader('stations', 'المحطات')}
                     {sortHeader('offices', 'مكاتب التسجيل')}
                     <th scope="col" className="px-[18px] py-2.5 text-start">الجهة الأمنية</th>
@@ -192,14 +190,9 @@ export function MunicipalitiesAdminPage() {
                           <StatusPill variant="neutral" size="md">مؤرشفة</StatusPill>
                         ) : (
                           <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'} size="md">
-                            {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}
+                            {m.status === 'LIVE' ? (m.activatedOn ? `مفعّلة منذ ${m.activatedOn}` : 'مفعّلة') : 'غير مفعّلة'}
                           </StatusPill>
                         )}
-                      </td>
-                      <td className="px-[18px] py-3" data-testid={`municipality-stage-${m.id}`}>
-                        <StatusPill variant={m.stage === 'CARD_REQUIRED' ? 'ok' : 'neutral'} size="md">
-                          {STAGE_LABELS[m.stage ?? 'GRACE']}
-                        </StatusPill>
                       </td>
                       <td className="px-[18px] py-3 text-ink">{m.stationCount ?? 0}</td>
                       <td className="px-[18px] py-3 text-ink">{m.officeCount ?? 0}</td>
@@ -224,10 +217,9 @@ export function MunicipalitiesAdminPage() {
                         <StatusPill variant="neutral" size="md">مؤرشفة</StatusPill>
                       ) : (
                         <StatusPill variant={m.status === 'LIVE' ? 'ok' : 'neutral'} size="md">
-                          {m.status === 'LIVE' ? 'مفعّلة' : 'قيد الإعداد'}
+                          {m.status === 'LIVE' ? (m.activatedOn ? `مفعّلة منذ ${m.activatedOn}` : 'مفعّلة') : 'غير مفعّلة'}
                         </StatusPill>
                       )}
-                      <StatusPill variant="neutral" size="md">{STAGE_LABELS[m.stage ?? 'GRACE']}</StatusPill>
                     </div>
                     <p className="mt-1 text-[15px] text-ink-soft">
                       {m.stationCount ?? 0} محطة · {m.officeCount ?? 0} مكتب تسجيل

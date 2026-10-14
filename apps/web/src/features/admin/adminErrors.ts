@@ -13,9 +13,8 @@ const MESSAGES: Record<string, string> = {
   SECURITY_AUTHORITY_NAME_TAKEN: 'توجد جهة أمنية بهذا الاسم مسبقًا.',
   MUNICIPALITY_CODE_TAKEN: 'هذا الرمز مستخدم لبلدية أخرى.',
   INVALID_DATE: 'التاريخ غير صالح.',
-  AWARENESS_NOT_BEFORE_DEADLINE: 'تاريخ بدء التوعية يجب أن يسبق تاريخ اشتراط البطاقة.',
   DESK_NAME_TAKEN: 'يوجد مكتب بهذا الاسم في مكتب التسجيل هذا.',
-  STAGE_DATES_ONLY: 'يمكنك تعديل تاريخي التوعية واشتراط البطاقة فقط.',
+  REASON_REQUIRED: 'اكتب سبب إيقاف التفعيل (ثلاثة أحرف على الأقل).',
   // Phase 4b — accounts.
   USER_OUT_OF_SCOPE: 'هذا الحساب خارج محطاتك أو مكاتبك.',
   SELF_ACTION: 'لا يمكنك تنفيذ هذا الإجراء على حسابك. لتغيير كلمة المرور استخدم صفحة كلمة المرور.',

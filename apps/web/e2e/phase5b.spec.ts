@@ -130,10 +130,10 @@ test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the rese
   await expect(page.getByTestId('fuel-level-DIESEL')).toContainText('1,500');
 
   // Two fill-ups of diesel bring it below 1,000 L: one alert.
-  for (const liters of [300, 300]) {
+  for (const [index, liters] of [300, 300].entries()) {
     await api.post(
       `${API_BASE}/fillups`,
-      { plate: `7-${Math.floor(100000 + Math.random() * 899999)}`, stationId: fixtures.stationId, fuelType: 'DIESEL', quantityLiters: liters },
+      { cardNumber: fixtures.extraCardNumbers[index], stationId: fixtures.stationId, fuelType: 'DIESEL', quantityLiters: liters },
       { headers: { Authorization: `Bearer ${supervisorToken}`, 'Idempotency-Key': randomUUID() } },
     );
   }
@@ -253,7 +253,7 @@ test('supervisor: the bell, the station reports with a CSV export, and the perso
   await context.close();
 });
 
-test('municipality manager: the summary row, the readiness panel, a station and an office, and the reports', async ({ browser }) => {
+test('municipality manager: the summary row, a station and an office, and the reports', async ({ browser }) => {
   test.setTimeout(300_000);
   const { context, page } = await newPage(browser);
   await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
@@ -261,17 +261,9 @@ test('municipality manager: the summary row, the readiness panel, a station and 
   await page.getByRole('link', { name: 'إدارة المحطات' }).first().click();
   await expect(page).toHaveURL('/manage');
   await expect(page.getByTestId('place-summary')).toBeVisible();
-  await expect(page.getByTestId('readiness-panel')).toBeVisible();
+  await expect(page.getByTestId('readiness-panel')).toHaveCount(0); // Phase 6: removed
   await expect(page.getByTestId('summary-low-stock')).toBeVisible();
-  await shots(page, '40-manage-summary-and-readiness');
-
-  // The readiness panel's PDF: the server's Chromium renderer and Cairo font.
-  const [readinessPdf] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByTestId('readiness-panel').getByRole('button', { name: 'تنزيل PDF' }).click(),
-  ]);
-  expect(readinessPdf.suggestedFilename()).toMatch(/\.pdf$/);
-  await readinessPdf.saveAs(path.join(SHOTS, 'readiness-panel.pdf'));
+  await shots(page, '40-manage-summary');
 
   // A station: overview, staff, fuel and stock, reports.
   // The list is paged (25 a page): search for the one wanted.
@@ -310,16 +302,10 @@ test('municipality manager: the summary row, the readiness panel, a station and 
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByTestId('tab-overview')).toBeVisible();
   await shots(page, '44-office-overview');
-  await page.getByTestId('tab-cards').click();
-  await shots(page, '45-office-cards-tab');
+  // Phase 6: no «البطاقات والمخزون» tab on an office any more.
+  await expect(page.getByTestId('tab-cards')).toHaveCount(0);
   await page.getByTestId('tab-desks').click();
   await shots(page, '46-office-desks-tab');
-
-  // The old addresses lead here now.
-  await page.evaluate(
-    `window.history.pushState({}, '', '/reports/readiness'); window.dispatchEvent(new PopStateEvent('popstate'));`,
-  );
-  await expect(page).toHaveURL('/manage');
 
   // The role reports: the municipality's.
   await navigateInApp(page, '/reports?report=municipality');
@@ -350,8 +336,7 @@ test('office manager and registration employee: their office, their day, their b
   await expect(om.page).toHaveURL(/\/my-office/);
   await expect(om.page.getByTestId('tab-overview')).toBeVisible();
   await shots(om.page, '50-my-office-overview');
-  await om.page.getByTestId('tab-cards').click();
-  await shots(om.page, '51-my-office-cards');
+  await expect(om.page.getByTestId('tab-cards')).toHaveCount(0);
   await om.page.getByRole('link', { name: 'التقارير' }).first().click();
   await showTable(om.page, 'employees');
   await shots(om.page, '52-office-reports');
@@ -377,8 +362,8 @@ test('super admin: one municipality with its summary and reports, the comparison
 
   await navigateInApp(page, `/admin/municipalities/${fixtures.municipalityId}`);
   await expect(page.getByTestId('place-summary')).toBeVisible();
-  await expect(page.getByTestId('readiness-sentence')).toBeVisible();
-  await shots(page, '60-municipality-summary-readiness');
+  await expect(page.getByTestId('readiness-sentence')).toHaveCount(0);
+  await shots(page, '60-municipality-summary');
 
   await navigateInApp(page, '/reports?report=summary');
   await showTable(page, 'municipalities');

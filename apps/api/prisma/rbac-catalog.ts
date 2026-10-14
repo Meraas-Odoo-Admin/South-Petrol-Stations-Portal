@@ -14,14 +14,6 @@ export const PERMISSIONS = [
   // Settings-managed lookup lists, same read/manage split as companies:*.
   { key: 'municipalities:read', description: 'View the municipality list' },
   { key: 'municipalities:manage', description: 'Create/update municipalities' },
-  // Registration pivot, phase 4b: the Directorate's day-to-day lever. Sets a
-  // municipality's two stage dates (awareness start, card deadline) and
-  // nothing else — creating a municipality or switching preparing/live stays
-  // municipalities:manage.
-  {
-    key: 'municipalities:set_stage_dates',
-    description: "Set a municipality's awareness-start and card-deadline dates (nothing else about it)",
-  },
   { key: 'routes:read', description: 'View the station route/haulage-line list' },
   { key: 'routes:manage', description: 'Create/update station routes' },
   { key: 'security_authorities:read', description: 'View the security authority list' },
@@ -40,18 +32,6 @@ export const PERMISSIONS = [
   {
     key: 'registration_reports:view',
     description: 'View the registration-office monitoring report: cards, vehicles, people and per-employee activity (subject to registration-station scope)',
-  },
-  {
-    key: 'card_stock:read',
-    description: 'View blank-card stock entries and the stock reconciliation (subject to registration-station scope)',
-  },
-  {
-    key: 'card_stock:record',
-    description: 'Record a delivery of blank cards, a physical count, or a correction (insert-only; subject to registration-station scope)',
-  },
-  {
-    key: 'readiness:view',
-    description: 'View the deadline-readiness report: cards vs no-card fill-ups and card issuance (subject to station / registration-station scope)',
   },
   {
     key: 'fuel_stock:read',
@@ -115,10 +95,6 @@ export const PERMISSIONS = [
   // Registration pivot, phase 1: stations in a PREPARING municipality are
   // visible only on admin screens. Deliberately separate from
   // stations:manage, which station_supervisor also holds.
-  {
-    key: 'stations:view_preparing',
-    description: 'See stations in municipalities that are still being prepared (not live yet)',
-  },
   { key: 'users:manage', description: 'Create/update users and station scope' },
   // Registration pivot, phase 4b: a supervisor's own-staff tool. Never
   // reaches beyond the employees of the supervisor's own stations/offices —
@@ -169,11 +145,7 @@ export const PERMISSIONS = [
   // and admins — never a station employee, never a registration role.
   {
     key: 'fillups:emergency_override',
-    description: 'Authorize a single fill-up without a card after the card deadline (written reason required, audited)',
-  },
-  {
-    key: 'registration_sheet:print',
-    description: "Print the A4 sheet of registration stations posted at the pump",
+    description: 'Authorize a single fill-up without a card (written reason required, audited)',
   },
   {
     key: 'vehicle_types:read',
@@ -267,13 +239,11 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:approve_exception',
     'fillups:record_exception',
     'fillups:emergency_override',
-    'registration_sheet:print',
     'standing_exceptions:manage',
     'owners:read',
     'owners:reveal_identity',
     'reports:view',
     'users:manage_staff',
-    'readiness:view',
     'fuel_stock:read',
     'fuel_stock:manage',
     'notifications:read',
@@ -316,9 +286,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'registration_desks:manage',
     'users:manage_staff',
     'registration_reports:view',
-    'card_stock:read',
-    'card_stock:record',
-    'readiness:view',
     'notifications:read',
     'notifications:office_events',
   ],
@@ -333,14 +300,12 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'companies:read',
     'companies:manage',
     'municipalities:read',
-    'municipalities:set_stage_dates',
     'routes:read',
     'security_authorities:read',
     'vehicle_types:read',
     'stations:read',
     'stations:manage',
     'stations:create',
-    'stations:view_preparing',
     'registration_stations:read',
     'registration_stations:manage',
     'registration_desks:manage',
@@ -363,12 +328,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'fillups:approve_exception',
     'fillups:record_exception',
     'fillups:emergency_override',
-    'registration_sheet:print',
     'standing_exceptions:manage',
     'owners:reveal_identity',
     'registration_reports:view',
-    'card_stock:read',
-    'readiness:view',
     'fuel_stock:read',
     'notifications:read',
     'notifications:municipality_events',
@@ -457,11 +419,6 @@ export const SYSTEM_SETTINGS = [
     key: 'stock.low_threshold_liters',
     value: '1000',
     description: 'Low-stock alert: a fuel type at a station below this many liters notifies the supervisor and the municipality managers',
-  },
-  {
-    key: 'cards.low_blank_threshold',
-    value: '100',
-    description: 'PLACEHOLDER: low blank-card alert: an office below this many blank cards notifies its manager',
   },
   {
     key: 'fillup.week_window_mode',

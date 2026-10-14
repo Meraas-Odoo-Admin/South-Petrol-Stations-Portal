@@ -92,8 +92,8 @@ export function rememberDesk(registrationStationId: string, deskId: string): voi
 }
 
 // Print mode, per DEVICE (a desk's printer is loaded with one kind of stock):
-// 'full' prints colour + black on blank cards; 'black' prints only the
-// per-card black layer, for pre-printed colour stock.
+// 'full' prints colour + black (YMCKO ribbon); 'black' prints the same card
+// in black only, for a monochrome ribbon.
 export function rememberedPrintMode(): 'full' | 'black' {
   try {
     return localStorage.getItem('fuel.cardPrintMode') === 'black' ? 'black' : 'full';
@@ -124,7 +124,14 @@ export function printCardPdf(
   return fetchPdf(() => apiClient.post<Blob>(`/cards/${cardId}/print`, { mode, ...where }, { responseType: 'blob' }));
 }
 
-// A test card uses up a blank, so it is printed (and recorded) at a desk.
+// The printer setup card: one page of lines, a centre cross, a font ladder and
+// QR codes at three sizes, to check the printer's alignment and QR scanning
+// before a batch. Not a card, so nothing is recorded.
+export function printerSetupPdf(): Promise<Blob> {
+  return fetchPdf(() => apiClient.get<Blob>('/cards/printer-setup', { responseType: 'blob' }));
+}
+
+// A test card is for checking the printer; it is not counted anywhere.
 export function testCardPdf(registrationStationId: string, deskId: string): Promise<Blob> {
   return fetchPdf(() =>
     apiClient.get<Blob>('/cards/test-card', { params: { registrationStationId, deskId }, responseType: 'blob' }),

@@ -2,11 +2,9 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
-import { Card } from '../../components/design/Card';
 import { StatusPill } from '../../components/design/StatusPill';
 import { TabPanel, Tabs, useTab, type TabDef } from '../../components/design/Tabs';
 import { RegistrationDesksEditor } from '../admin/RegistrationDesksEditor';
-import { CardStockPanel } from '../regreports/CardStockPage';
 import { tripoliToday, addDays, stamp } from '../regreports/common';
 import { OpsReportPanel } from '../reports/OpsReportPanel';
 import type { OpsReport } from '../reports/OpsReportView';
@@ -152,13 +150,11 @@ export function OfficeWorkspace({
   createParams: Record<string, string>;
 }) {
   const { hasPermission } = useAuth();
-  const canStock = hasPermission('card_stock:read');
   const canDesks = hasPermission('registration_desks:manage');
   const canReports = hasPermission('registration_reports:view');
   const tabs: TabDef[] = [
     { key: 'overview', label: 'نظرة عامة' },
     { key: 'staff', label: 'الموظفون' },
-    ...(canStock ? [{ key: 'cards', label: 'البطاقات والمخزون' }] : []),
     ...(canDesks ? [{ key: 'desks', label: 'المكاتب والطابعات' }] : []),
   ];
   const [tab, setTab] = useTab(tabs);
@@ -166,9 +162,6 @@ export function OfficeWorkspace({
 
   const summary = today.data?.tables.find((t) => t.id === 'office')?.rows[0];
   const employees = today.data?.tables.find((t) => t.id === 'employees')?.rows ?? [];
-  const stock = today.data?.tables.find((t) => t.id === 'card-stock')?.rows ?? [];
-  const unaccounted = stock.reduce((t, r) => t + Number(r.unaccounted ?? 0), 0);
-  const stockWord = unaccounted > 0 ? 'بطاقات غير مبرَّرة' : stock.length === 0 ? 'لم يُسجَّل جرد بعد' : 'مطابق';
 
   return (
     <div>
@@ -177,19 +170,13 @@ export function OfficeWorkspace({
       <TabPanel tab="overview" value={tab}>
         {canReports && (
           <>
-            <section aria-label="اليوم" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <section aria-label="اليوم" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               <Big label="بطاقات صدرت اليوم" value={nf.format(Number(summary?.cards ?? 0))} />
               <Big label="مركبات سُجّلت اليوم" value={nf.format(Number(summary?.vehicles ?? 0))} />
               <Big
                 label="بطاقات تالفة اليوم"
                 value={nf.format(Number(summary?.wasted ?? 0))}
                 note={Number(summary?.wasted ?? 0) > 0 ? <StatusPill variant="warn" size="md">أخطاء طباعة</StatusPill> : undefined}
-              />
-              <Big
-                label="مخزون البطاقات"
-                value={nf.format(unaccounted)}
-                unit="غير مبرَّرة"
-                note={<StatusPill variant={unaccounted > 0 ? 'danger' : stock.length === 0 ? 'neutral' : 'ok'} size="md">{stockWord}</StatusPill>}
               />
             </section>
 
@@ -224,6 +211,7 @@ export function OfficeWorkspace({
                 </ul>
               )}
             </SectionCard>
+            <OpsReportPanel report="office" fixedOfficeId={officeId} />
           </>
         )}
         {overview}
@@ -238,15 +226,6 @@ export function OfficeWorkspace({
           emptyText={staffEmpty}
         />
       </TabPanel>
-
-      {canStock && (
-        <TabPanel tab="cards" value={tab}>
-          <Card className="p-4">
-            <CardStockPanel fixedOfficeId={officeId} />
-          </Card>
-          {canReports && <OpsReportPanel report="office" fixedOfficeId={officeId} />}
-        </TabPanel>
-      )}
 
       {canDesks && (
         <TabPanel tab="desks" value={tab}>

@@ -11,10 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
-import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
 import { FuelStockService } from '../fuel-stock/fuel-stock.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { calendarDayString, computeStage, type MunicipalityStage } from '../common/utils/grace-stage';
 import { normalizeScannedCardNumber } from '../cards/card-number';
 import { FillUpsRepository, StandingExceptionsRepository } from './fillups.repository';
 import { FillUpRuleEngine } from './rule-engine/fill-up-rule-engine';
@@ -40,8 +38,12 @@ const EMERGENCY_EXCEPTION_TYPE = { key: 'emergency', name: 'طوارئ — تج�
 // fill-up. A different vehicleId/etc under the same key is a client bug
 // (key collision or a copy-paste mistake), not a retry — it must never
 // silently resolve to the wrong transaction.
-function payloadMatchesExisting(dto: CreateFillUpDto, existing: ExistingFillUp): boolean {
+function payloadMatchesExisting(dto: CreateFillUpDto, existing: ExistingFillUp, cardVehicleId: string | null): boolean {
   if (dto.vehicleId !== undefined && dto.vehicleId !== existing.vehicleId) return false;
+  // A card names its vehicle: the same key with another vehicle's card is a
+  // different fill-up. (A card that is unknown names no vehicle here; the
+  // normal path reports it.)
+  if (cardVehicleId !== null && cardVehicleId !== existing.vehicleId) return false;
   // A typed plate that named no vehicle must still be the same plate. (A
   // plate typed for a registered vehicle resolves to it, so only an
   // unregistered row is compared here.)
@@ -58,27 +60,21 @@ function payloadMatchesExisting(dto: CreateFillUpDto, existing: ExistingFillUp):
 }
 
 // Who a fill-up is for and how it was identified, decided on the server from
-// whatever the client sent — the client never gets to claim "card scan".
-type ResolvedSubject =
-  | {
-      kind: 'vehicle';
-      vehicle: VehicleWithOwner;
-      identifiedBy: 'CARD_SCAN' | 'TYPED_REGISTERED';
-      typedPlate: string | null;
-      normalizedPlate: string | null;
-    }
-  | { kind: 'plate'; identifiedBy: 'TYPED_UNREGISTERED'; typedPlate: string; normalizedPlate: string };
+// whatever the client sent - the client never gets to claim "card scan". Since
+// Phase 6 a fill-up is recorded from a CARD SCAN. The only other way in is the
+// supervisor's emergency override (a registered vehicle named by id or plate,
+// a written reason, the fillups:emergency_override permission).
+type ResolvedSubject = {
+  kind: 'vehicle';
+  vehicle: VehicleWithOwner;
+  identifiedBy: 'CARD_SCAN' | 'EMERGENCY_OVERRIDE';
+  typedPlate: string | null;
+  normalizedPlate: string | null;
+};
 
 interface RecordingContext {
   municipalityId: string;
   municipalityName: string;
-  stage: MunicipalityStage;
-  cardRequiredFromDate: string | null;
-}
-
-interface Awareness {
-  cardRequiredFromDate: string;
-  registrationStations: { id: string; name: string; address: string; workingHours: string | null }[];
 }
 
 @Injectable()
@@ -92,7 +88,6 @@ export class FillUpsService {
     private readonly settings: SystemSettingsService,
     private readonly repo: FillUpsRepository,
     private readonly standingExceptionsRepo: StandingExceptionsRepository,
-    private readonly registrationStations: RegistrationStationsService,
     private readonly fuelStock: FuelStockService,
     private readonly notifications: NotificationsService,
   ) {
@@ -144,8 +139,8 @@ export class FillUpsService {
   ) {
     await this.assertStationInScope(stationId, actorId);
     const context = await this.resolveRecordingContext(stationId);
-    const subject = await this.resolveSubject(input, context);
-    const identifiedBy = await this.enforceCardRequirement(subject, context, {
+    const subject = await this.resolveSubject(input);
+    const identifiedBy = await this.authorizeIdentification(subject, {
       emergencyOverride: input.emergencyOverride,
       overrideReason: 'preview',
       actorId,
@@ -156,7 +151,7 @@ export class FillUpsService {
       context.municipalityId,
       new Date(),
     );
-    const vehicleFuelType = subject.kind === 'vehicle' ? subject.vehicle.fuelType : null;
+    const vehicleFuelType = subject.vehicle.fuelType;
     return {
       checks,
       // Rules that can't be evaluated for this subject (the three owner-level
@@ -171,24 +166,17 @@ export class FillUpsService {
       vehicleFuelType,
       fuelMismatch: input.fuelType ? fuelTypeMismatch(vehicleFuelType, input.fuelType) : false,
       identifiedBy,
-      registered: subject.kind === 'vehicle',
-      stage: context.stage,
-      cardRequiredFromDate: context.cardRequiredFromDate,
-      vehicleId: subject.kind === 'vehicle' ? subject.vehicle.id : null,
-      plate: subject.kind === 'plate' ? subject.typedPlate : null,
+      registered: true,
+      vehicleId: subject.vehicle.id,
+      plate: null as string | null,
     };
   }
 
   // The municipality a fill-up at this station is recorded in — stamped
   // onto the FillUpTransaction and used to scope every rule-engine count.
   // Refuses (machine-checkable markers, mapped to Arabic by the fill-up
-  // screen — same convention as OWNER_IDENTITY_PROVISIONAL) rather than
-  // ever stamping null:
-  //  - STATION_HAS_NO_MUNICIPALITY: Station.municipalityId is still null.
-  //  - MUNICIPALITY_NOT_LIVE: the municipality is still PREPARING — no
-  //    fill-up can be recorded there until an admin switches it to LIVE.
-  // Phase 4a: also returns the municipality's stage right now, computed
-  // here on the server.
+  // screen) rather than ever stamping null: STATION_ARCHIVED,
+  // MUNICIPALITY_ARCHIVED, STATION_HAS_NO_MUNICIPALITY.
   private async resolveRecordingContext(stationId: string): Promise<RecordingContext> {
     const station = await this.prisma.station.findUnique({
       where: { id: stationId },
@@ -208,14 +196,11 @@ export class FillUpsService {
     if (!station.municipality) {
       throw new ConflictException('STATION_HAS_NO_MUNICIPALITY');
     }
-    if (station.municipality.status !== 'LIVE') {
-      throw new ConflictException('MUNICIPALITY_NOT_LIVE');
-    }
+    // The municipality's activation switch gates nothing (Phase 6): a
+    // fill-up is recorded whether it is on or off.
     return {
       municipalityId: station.municipality.id,
       municipalityName: station.municipality.name,
-      stage: computeStage(new Date(), station.municipality),
-      cardRequiredFromDate: calendarDayString(station.municipality.cardRequiredFromDate),
     };
   }
 
@@ -258,7 +243,7 @@ export class FillUpsService {
           {
             kind: 'EMERGENCY_OVERRIDE',
             title: `تعبئة بتجاوز طارئ في ${where}`,
-            body: 'سُجّلت تعبئة بدون بطاقة بعد الموعد النهائي بإذن المشرف، مع سبب مكتوب.',
+            body: 'سُجّلت تعبئة بدون بطاقة بإذن المشرف، مع سبب مكتوب.',
             link: '/reports',
             entityType: 'Station',
             entityId: input.stationId,
@@ -287,16 +272,18 @@ export class FillUpsService {
   }
 
   // Decides who the fill-up is for, from what the client sent:
-  //  1. a cardNumber must be an ACTIVE card — its vehicle is the vehicle;
-  //  2. else a vehicleId names a registered vehicle (picked from the typed-
-  //     plate search);
-  //  3. else a typed plate: a registered vehicle with that NORMALIZED plate
-  //     is that vehicle (so retyping a registered plate differently can't
-  //     dodge its limits); only a plate matching none is unregistered.
-  private async resolveSubject(
-    input: { vehicleId?: string; cardNumber?: string; plate?: string },
-    _context: RecordingContext,
-  ): Promise<ResolvedSubject> {
+  //  1. a cardNumber must be an ACTIVE card - its vehicle is the vehicle;
+  //  2. without a card, ONLY an emergency override identifies a vehicle: a
+  //     registered vehicle named by id, or by its typed plate. A plate that
+  //     matches no registered vehicle is refused (VEHICLE_NOT_REGISTERED);
+  //  3. anything else is CARD_REQUIRED - the pump never accepts a plate on
+  //     its own.
+  private async resolveSubject(input: {
+    vehicleId?: string;
+    cardNumber?: string;
+    plate?: string;
+    emergencyOverride?: boolean;
+  }): Promise<ResolvedSubject> {
     if (input.cardNumber !== undefined) {
       const cardNumber = normalizeScannedCardNumber(input.cardNumber);
       const card = cardNumber
@@ -317,144 +304,73 @@ export class FillUpsService {
       return { kind: 'vehicle', vehicle: card.vehicle, identifiedBy: 'CARD_SCAN', typedPlate: null, normalizedPlate: null };
     }
 
+    if (!input.emergencyOverride) {
+      throw new ConflictException('CARD_REQUIRED');
+    }
+
     const typed = input.plate?.trim() || null;
-    // A typed plate that can't be split into a city code and a serial number
-    // is refused outright, whatever else identifies the vehicle — the same
-    // rule everywhere a plate is matched (see shared plate.ts).
     if (typed !== null && !normalizePlate(typed)) {
       throw new BadRequestException('PLATE_INVALID');
     }
-
     if (input.vehicleId !== undefined) {
       const vehicle = await this.prisma.vehicle.findUnique({ where: { id: input.vehicleId }, include: { owner: true } });
       if (!vehicle) {
         throw new NotFoundException('Vehicle not found.');
       }
       const typedPlate = typed ?? vehicle.currentPlate;
-      return {
-        kind: 'vehicle',
-        vehicle,
-        identifiedBy: 'TYPED_REGISTERED',
-        typedPlate,
-        normalizedPlate: normalizePlate(typedPlate),
-      };
+      return { kind: 'vehicle', vehicle, identifiedBy: 'EMERGENCY_OVERRIDE', typedPlate, normalizedPlate: normalizePlate(typedPlate) };
     }
-
     if (!typed) {
       throw new BadRequestException('VEHICLE_NOT_IDENTIFIED');
     }
-    const normalizedPlate = normalizePlate(typed);
-    if (!normalizedPlate) {
-      throw new BadRequestException('PLATE_INVALID');
-    }
-    const matches = await this.prisma.vehicle.findMany({
-      where: { normalizedPlate },
-      include: { owner: true },
-      take: 5,
-    });
-    if (matches.length === 1) {
-      return { kind: 'vehicle', vehicle: matches[0]!, identifiedBy: 'TYPED_REGISTERED', typedPlate: typed, normalizedPlate };
+    const normalizedPlate = normalizePlate(typed)!;
+    const matches = await this.prisma.vehicle.findMany({ where: { normalizedPlate }, include: { owner: true }, take: 5 });
+    if (matches.length === 0) {
+      throw new NotFoundException('VEHICLE_NOT_REGISTERED');
     }
     if (matches.length > 1) {
       // Pre-existing data can hold two vehicles that normalize to the same
-      // plate (reported by `plates:report`, never merged automatically). The
-      // exact stored plate settles it; otherwise a person has to look.
+      // plate; the exact stored plate settles it, otherwise a person must look.
       const exact = matches.filter((v) => v.currentPlate === typed);
-      if (exact.length === 1) {
-        return { kind: 'vehicle', vehicle: exact[0]!, identifiedBy: 'TYPED_REGISTERED', typedPlate: typed, normalizedPlate };
+      if (exact.length !== 1) {
+        throw new ConflictException('PLATE_AMBIGUOUS');
       }
-      throw new ConflictException('PLATE_AMBIGUOUS');
+      return { kind: 'vehicle', vehicle: exact[0]!, identifiedBy: 'EMERGENCY_OVERRIDE', typedPlate: typed, normalizedPlate };
     }
-    return { kind: 'plate', identifiedBy: 'TYPED_UNREGISTERED', typedPlate: typed, normalizedPlate };
+    return { kind: 'vehicle', vehicle: matches[0]!, identifiedBy: 'EMERGENCY_OVERRIDE', typedPlate: typed, normalizedPlate };
   }
 
   private toRuleSubject(subject: ResolvedSubject): RuleSubject {
-    return subject.kind === 'vehicle'
-      ? {
-          kind: 'vehicle',
-          vehicleId: subject.vehicle.id,
-          ownerId: subject.vehicle.ownerId,
-          ownerKind: subject.vehicle.owner?.ownerKind,
-        }
-      : { kind: 'plate', normalizedPlate: subject.normalizedPlate };
+    return {
+      kind: 'vehicle',
+      vehicleId: subject.vehicle.id,
+      ownerId: subject.vehicle.ownerId,
+      ownerKind: subject.vehicle.owner?.ownerKind,
+    };
   }
 
-  // From the card deadline on, a vehicle needs an ACTIVE card: a scan proves
-  // one, a typed plate of a registered vehicle is accepted only if that
-  // vehicle has an active card (the damaged-QR case — the plate is printed
-  // on the card), and an unregistered plate never has one. Anything else is
-  // refused (409 CARD_REQUIRED, with the registration stations to go to)
-  // unless a supervisor authorizes an emergency override: that needs the
-  // fillups:emergency_override permission (checked HERE, server-side,
-  // whatever the UI shows) and a written reason, and waives ONLY the card
-  // requirement — the gap and weekly limits are still evaluated.
-  // Returns how the fill-up is identified in the end.
-  private async enforceCardRequirement(
+  // An emergency override needs the fillups:emergency_override permission
+  // (checked HERE, server-side, whatever the UI shows) and a written reason; it
+  // waives ONLY the card requirement - the gap and weekly limits are still
+  // evaluated. Overriding a fill-up that has a card scan is refused.
+  private async authorizeIdentification(
     subject: ResolvedSubject,
-    context: RecordingContext,
     options: { emergencyOverride?: boolean; overrideReason?: string; actorId: string },
   ): Promise<FillUpIdentification> {
-    if (options.emergencyOverride) {
-      const permissions = await this.rbac.getPermissionsForUser(options.actorId);
-      if (!permissions.has('fillups:emergency_override')) {
-        throw new ForbiddenException('You are not authorized to record an emergency override.');
-      }
-      if (!options.overrideReason?.trim()) {
-        throw new BadRequestException('OVERRIDE_REASON_REQUIRED');
-      }
+    if (!options.emergencyOverride) return subject.identifiedBy;
+    if (subject.identifiedBy === 'CARD_SCAN') {
+      // Nothing to waive: don't let "override" be recorded on a fill-up that
+      // had a card (it would fake an emergency in the reports).
+      throw new ConflictException('OVERRIDE_NOT_NEEDED');
     }
-
-    let needsCard = false;
-    if (context.stage === 'CARD_REQUIRED' && subject.identifiedBy !== 'CARD_SCAN') {
-      needsCard =
-        subject.kind === 'plate' ||
-        !(await this.prisma.vehicleCard.findUnique({
-          where: { activeForVehicleId: subject.vehicle.id },
-          select: { id: true },
-        }));
+    const permissions = await this.rbac.getPermissionsForUser(options.actorId);
+    if (!permissions.has('fillups:emergency_override')) {
+      throw new ForbiddenException('You are not authorized to record an emergency override.');
     }
-
-    if (!needsCard) {
-      if (options.emergencyOverride) {
-        // Nothing to waive: don't let "override" be recorded on a fill-up
-        // that didn't need one (it would fake an emergency in the reports).
-        throw new ConflictException('OVERRIDE_NOT_NEEDED');
-      }
-      return subject.identifiedBy;
-    }
-    if (!options.emergencyOverride) {
-      throw new ConflictException({
-        message: 'CARD_REQUIRED',
-        details: {
-          stage: context.stage,
-          cardRequiredFromDate: context.cardRequiredFromDate,
-          registrationStations: await this.registrationStationsFor(context.municipalityId),
-        },
-      });
+    if (!options.overrideReason?.trim()) {
+      throw new BadRequestException('OVERRIDE_REASON_REQUIRED');
     }
     return 'EMERGENCY_OVERRIDE';
-  }
-
-  // Name, address and working hours of the active registration stations in a
-  // municipality, live — phone numbers stay on the printed sheet only.
-  private async registrationStationsFor(municipalityId: string) {
-    const stations = await this.registrationStations.listActiveForMunicipality(municipalityId);
-    return stations.map(({ id, name, address, workingHours }) => ({ id, name, address, workingHours }));
-  }
-
-  // During the awareness stage, every fill-up recorded WITHOUT a card scan
-  // shows the driver the deadline and where to register. Built from live
-  // data on every call.
-  private async awarenessFor(
-    municipalityId: string,
-    identifiedBy: FillUpIdentification,
-  ): Promise<Awareness | null> {
-    if (identifiedBy === 'CARD_SCAN' || identifiedBy === 'EMERGENCY_OVERRIDE') return null;
-    const municipality = await this.prisma.municipality.findUnique({ where: { id: municipalityId } });
-    if (!municipality || computeStage(new Date(), municipality) !== 'AWARENESS') return null;
-    const deadline = calendarDayString(municipality.cardRequiredFromDate);
-    if (!deadline) return null;
-    return { cardRequiredFromDate: deadline, registrationStations: await this.registrationStationsFor(municipalityId) };
   }
 
   // Human-readable snapshot of the specific prior fill-up that triggered a
@@ -510,18 +426,16 @@ export class FillUpsService {
       include: FILL_UP_WITH_EXCEPTION_INCLUDE,
     });
     if (existing) {
-      if (!payloadMatchesExisting(dto, existing)) {
+      const cardNumber = dto.cardNumber !== undefined ? normalizeScannedCardNumber(dto.cardNumber) : null;
+      const cardVehicleId = cardNumber
+        ? ((await this.prisma.vehicleCard.findUnique({ where: { cardNumber }, select: { vehicleId: true } }))?.vehicleId ?? null)
+        : null;
+      if (!payloadMatchesExisting(dto, existing, cardVehicleId)) {
         throw new ConflictException(
           'This Idempotency-Key was already used for a different fill-up (mismatched vehicle, station, fuel type, quantity, or occurredAt). Use a new key for a new submission.',
         );
       }
-      return {
-        status: 'existing' as const,
-        transaction: existing,
-        awareness: existing.municipalityId
-          ? await this.awarenessFor(existing.municipalityId, existing.identifiedBy)
-          : null,
-      };
+      return { status: 'existing' as const, transaction: existing };
     }
 
     // Resolved once here and stamped onto the row below — never looked up
@@ -531,16 +445,16 @@ export class FillUpsService {
     const context = await this.resolveRecordingContext(dto.stationId);
     const municipalityId = context.municipalityId;
     await this.assertFuelTypeSold(dto.stationId, dto.fuelType);
-    const subject = await this.resolveSubject(dto, context);
-    const identifiedBy = await this.enforceCardRequirement(subject, context, {
+    const subject = await this.resolveSubject(dto);
+    const identifiedBy = await this.authorizeIdentification(subject, {
       emergencyOverride: dto.emergencyOverride,
       overrideReason: dto.overrideReason,
       actorId,
     });
     const overrideReason = identifiedBy === 'EMERGENCY_OVERRIDE' ? dto.overrideReason!.trim() : null;
     const ruleSubject = this.toRuleSubject(subject);
-    const vehicle = subject.kind === 'vehicle' ? subject.vehicle : null;
-    const fallbackPlate = subject.kind === 'plate' ? subject.typedPlate : null;
+    const vehicle = subject.vehicle;
+    const fallbackPlate: string | null = null;
 
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
     const exceptionModeFieldsPresent = Boolean(
@@ -551,7 +465,7 @@ export class FillUpsService {
     // kept for every typed identification (and an override) so the plate as
     // entered is never lost; a card scan has neither.
     const baseData = {
-      vehicleId: vehicle?.id ?? null,
+      vehicleId: vehicle.id,
       stationId: dto.stationId,
       municipalityId,
       fuelType: dto.fuelType,
@@ -565,7 +479,7 @@ export class FillUpsService {
       overrideReason,
       // Phase 5A: the fuel poured is not the vehicle's own fuel type - a
       // warning at the pump, recorded here so reports can list mismatches.
-      fuelMismatch: vehicle ? fuelTypeMismatch(vehicle.fuelType, dto.fuelType) : false,
+      fuelMismatch: fuelTypeMismatch(vehicle.fuelType, dto.fuelType),
     };
     const auditBase = {
       vehicleId: baseData.vehicleId,
@@ -580,26 +494,11 @@ export class FillUpsService {
       overrideReason: overrideReason ?? undefined,
     };
 
-    // A plate with no registered vehicle is counted by its own history, so
-    // two simultaneous submissions (or one racing the vehicle's registration)
-    // must be serialized: both take the same per-plate advisory lock — the
-    // registration transaction takes it too — and the allowance is
-    // evaluated inside it.
-    const lockPlate = async (tx: Prisma.TransactionClient) => {
-      if (subject.kind !== 'plate') return;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'plate:' + subject.normalizedPlate}))`;
-      const nowRegistered = await tx.vehicle.count({ where: { normalizedPlate: subject.normalizedPlate } });
-      if (nowRegistered > 0) {
-        throw new ConflictException('PLATE_NOW_REGISTERED');
-      }
-    };
-
     if (!exceptionModeFieldsPresent) {
       type Outcome =
         | { status: 'rejected'; reason: import('./rule-engine/types').RuleFailureReason; trigger: RuleTrigger | undefined }
         | { status: 'created'; id: string };
       const outcome = await this.prisma.$transaction(async (tx): Promise<Outcome> => {
-        await lockPlate(tx);
         const ruleResult = await this.ruleEngine.evaluateSubject(ruleSubject, municipalityId, occurredAt);
         if (!ruleResult.allowed) {
           return { status: 'rejected', reason: ruleResult.reason, trigger: ruleResult.trigger };
@@ -670,7 +569,7 @@ export class FillUpsService {
         actorId,
         normalizedPlate: baseData.normalizedPlate,
       });
-      return { status: 'created' as const, transaction, awareness: await this.awarenessFor(municipalityId, identifiedBy) };
+      return { status: 'created' as const, transaction };
     }
 
     // Exception mode: "no hard block, exception with a mandatory reason"
@@ -724,7 +623,6 @@ export class FillUpsService {
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
-      await lockPlate(tx);
       const row = await tx.fillUpTransaction.create({
         data: { ...baseData, isException: true },
       });
@@ -775,7 +673,7 @@ export class FillUpsService {
       actorId,
       normalizedPlate: baseData.normalizedPlate,
     });
-    return { status: 'created' as const, transaction, awareness: await this.awarenessFor(municipalityId, identifiedBy) };
+    return { status: 'created' as const, transaction };
   }
 
   // Ordinary station scoping (CLAUDE.md rule 3, non-negotiable) IS enforced

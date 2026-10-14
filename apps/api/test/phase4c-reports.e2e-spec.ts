@@ -7,8 +7,6 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
-import { tripoliDay } from '../src/common/utils/grace-stage';
-import { addDays } from '../src/common/utils/tripoli';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 
 // Registration pivot, phase 4c — the monitoring reports, through the real
@@ -322,14 +320,10 @@ describe('Phase 4c — monitoring reports (e2e)', () => {
         `/reports/registration/offices?${RANGE}`,
         `/reports/registration/offices/${r1}/employees?${RANGE}`,
         `/reports/registration/employees/${userIds.regEmp1}/activity?${RANGE}`,
-        `/card-stock/entries?${RANGE}`,
-        `/card-stock/reconciliation?${RANGE}`,
-        `/reports/readiness?${RANGE}`,
         `/reports/registration/offices/export?format=pdf&${RANGE}`,
       ]) {
         await get('regEmp1', path).expect(403);
       }
-      await post('regEmp1', '/card-stock/entries', { registrationStationId: r1, kind: 'COUNT', quantity: 1 }).expect(403);
     });
 
     it('a registration supervisor sees only their own offices', async () => {
@@ -340,40 +334,22 @@ describe('Phase 4c — monitoring reports (e2e)', () => {
 
       await get('regSup2', `/reports/registration/offices/${r1}/employees?${RANGE}`).expect(403);
       await get('regSup2', `/reports/registration/employees/${userIds.regEmp1}/activity?${RANGE}`).expect(403);
-      await get('regSup2', `/card-stock/entries?registrationStationId=${r1}`).expect(403);
-      await get('regSup2', `/card-stock/reconciliation?registrationStationId=${r1}`).expect(403);
-      await post('regSup2', '/card-stock/entries', { registrationStationId: r1, kind: 'COUNT', quantity: 5 }).expect(403);
-
-      const stock = await get('regSup1', `/card-stock/reconciliation?${RANGE}`).expect(200);
-      expect(stock.body.pools.every((p: { registrationStation: { id: string } }) => p.registrationStation.id === r1)).toBe(true);
     });
 
-    it('the admin sees every office and reads stock, but cannot record it', async () => {
+    it('the admin sees every office', async () => {
       const all = await get('admin', `/reports/registration/offices?${RANGE}`).expect(200);
       expect(all.body.offices.map((o: { id: string }) => o.id)).toEqual(expect.arrayContaining([r1, r2]));
-      await get('admin', `/card-stock/reconciliation?${RANGE}`).expect(200);
-      await post('admin', '/card-stock/entries', { registrationStationId: r1, kind: 'COUNT', quantity: 5 }).expect(403);
     });
 
-    it('a station supervisor sees the card figures of their own stations only, and nothing on registration', async () => {
-      const res = await get('stSup', `/reports/readiness?municipalityId=${municipalityId}&${RANGE}`).expect(200);
-      expect(res.body.sees).toEqual({ stations: 'own', offices: 'none', headline: false });
-      expect(res.body.headline).toBeNull();
-      expect(res.body.stations.map((s: { id: string }) => s.id)).toEqual([s1]);
-      expect(res.body.offices).toEqual([]);
-      // S2's fill-up is not in their numbers.
-      const day = res.body.daily.find((d: { day: string }) => d.day === '2026-09-14');
-      expect(day.withoutCard).toBe(4);
+    it('a station supervisor has nothing on registration', async () => {
       await get('stSup', `/reports/registration/offices?${RANGE}`).expect(403);
-      await get('stSup', `/card-stock/reconciliation?${RANGE}`).expect(403);
     });
 
-    it('a registration supervisor sees their own offices issuance only, with no headline', async () => {
-      const res = await get('regSup1', `/reports/readiness?municipalityId=${municipalityId}&${RANGE}`).expect(200);
-      expect(res.body.sees).toEqual({ stations: 'none', offices: 'own', headline: false });
-      expect(res.body.headline).toBeNull();
-      expect(res.body.stations).toEqual([]);
-      expect(res.body.offices.map((o: { id: string }) => o.id)).toEqual([r1]);
+    it('the removed stock and readiness endpoints no longer exist', async () => {
+      for (const path of [`/card-stock/reconciliation?${RANGE}`, `/card-stock/entries?${RANGE}`, `/reports/readiness?${RANGE}`]) {
+        await get('admin', path).expect(404);
+      }
+      await post('regSup1', '/card-stock/entries', { registrationStationId: r1, kind: 'COUNT', quantity: 1 }).expect(404);
     });
   });
 
@@ -449,205 +425,6 @@ describe('Phase 4c — monitoring reports (e2e)', () => {
     });
   });
 
-  // ── 2. card stock ───────────────────────────────────────────────────
-
-  describe('card-stock reconciliation', () => {
-    const entry = (kind: 'RECEIVED' | 'COUNT', quantity: number, occurredAt: string, extra: object = {}) =>
-      post('regSup1', '/card-stock/entries', { registrationStationId: r1, kind, quantity, occurredAt, ...extra });
-    const entries: Record<string, { id: string }> = {};
-    const STOCK_RANGE = 'from=2026-09-01&to=2026-09-09';
-
-    it('records counts, and prints inside each window are counted by the system', async () => {
-      entries.t1 = (await entry('COUNT', 100, '2026-09-01T08:00:00.000Z').expect(201)).body;
-      await prisma.cardPrint.createMany({
-        data: [
-          ...Array.from({ length: 8 }, () => ({ registrationStationId: r1, deskId: d1, kind: 'CARD' as const, printedById: userIds.regEmp1, printedAt: new Date('2026-09-01T12:00:00Z') })),
-          ...Array.from({ length: 2 }, () => ({ registrationStationId: r1, deskId: d1, kind: 'TEST' as const, printedById: userIds.regEmp1, printedAt: new Date('2026-09-01T12:30:00Z') })),
-        ],
-      });
-      entries.t2 = (await entry('COUNT', 90, '2026-09-02T08:00:00.000Z').expect(201)).body;
-      await prisma.cardPrint.createMany({
-        data: Array.from({ length: 15 }, () => ({ registrationStationId: r1, deskId: d1, kind: 'CARD' as const, printedById: userIds.regEmp1, printedAt: new Date('2026-09-02T12:00:00Z') })),
-      });
-      entries.t3 = (await entry('COUNT', 70, '2026-09-03T08:00:00.000Z').expect(201)).body;
-      entries.t4 = (await entry('COUNT', 80, '2026-09-04T08:00:00.000Z').expect(201)).body;
-
-      const res = await get('regSup1', `/card-stock/reconciliation?registrationStationId=${r1}&${STOCK_RANGE}`).expect(200);
-      const pool = res.body.pools.find((p: { desk: unknown }) => p.desk === null);
-      expect(pool.windows.map((w: { used: number; prints: { total: number; test: number }; difference: number; status: string }) => [w.used, w.prints.total, w.prints.test, w.difference, w.status])).toEqual([
-        [10, 10, 2, 0, 'OK'], // 100 → 90: 10 used; 8 card + 2 test prints
-        [20, 15, 0, 5, 'UNACCOUNTED'], // 90 → 70: 20 left the box, 15 recorded: 5 cards unaccounted for
-        [-10, 0, 0, -10, 'NEGATIVE'], // 70 → 80: more blanks than before: a counting error
-      ]);
-      expect(pool.totals).toMatchObject({ unaccountedCards: 5, unaccountedWindows: 1, negativeWindows: 1 });
-    });
-
-    it('a delivery between two counts is part of the arithmetic', async () => {
-      await entry('RECEIVED', 50, '2026-09-05T08:00:00.000Z').expect(201);
-      await entry('COUNT', 125, '2026-09-06T08:00:00.000Z').expect(201); // 80 + 50 − 125 = 5 used, 0 printed
-      const res = await get('regSup1', `/card-stock/reconciliation?registrationStationId=${r1}&${STOCK_RANGE}`).expect(200);
-      const last = res.body.pools.find((p: { desk: unknown }) => p.desk === null).windows.at(-1);
-      expect(last).toMatchObject({ received: 50, used: 5, difference: 5, status: 'UNACCOUNTED' });
-    });
-
-    it('a correction never edits: it is a new linked entry, and it changes the windows around it', async () => {
-      const fix = await post('regSup1', `/card-stock/entries/${entries.t3!.id}/corrections`, { quantity: 75, reason: 'Miscounted a stack' }).expect(201);
-      expect(fix.body).toMatchObject({ kind: 'CORRECTION', correctsEntryId: entries.t3!.id, quantity: 75 });
-
-      const original = await prisma.stockEntry.findUniqueOrThrow({ where: { id: entries.t3!.id } });
-      expect(original.quantity).toBe(70); // the original is untouched
-
-      const res = await get('regSup1', `/card-stock/reconciliation?registrationStationId=${r1}&${STOCK_RANGE}`).expect(200);
-      const windows = res.body.pools.find((p: { desk: unknown }) => p.desk === null).windows;
-      expect(windows[1]).toMatchObject({ used: 15, difference: 0, status: 'OK' }); // 90 → 75: now matches the 15 prints
-      expect(windows[2]).toMatchObject({ used: -5, difference: -5, status: 'NEGATIVE' });
-
-      const list = await get('regSup1', `/card-stock/entries?registrationStationId=${r1}&${STOCK_RANGE}`).expect(200);
-      const shown = list.body.entries.find((e: { id: string }) => e.id === entries.t3!.id);
-      expect(shown).toMatchObject({ originalQuantity: 70, quantity: 75, corrected: true });
-      expect(shown.corrections[0]).toMatchObject({ quantity: 75, reason: 'Miscounted a stack' });
-    });
-
-    it('the latest of several corrections wins; a correction needs a reason; only the original can be corrected', async () => {
-      await post('regSup1', `/card-stock/entries/${entries.t3!.id}/corrections`, { quantity: 72, reason: 'Counted again' }).expect(201);
-      const list = await get('regSup1', `/card-stock/entries?registrationStationId=${r1}&${STOCK_RANGE}`).expect(200);
-      expect(list.body.entries.find((e: { id: string }) => e.id === entries.t3!.id).quantity).toBe(72);
-
-      await post('regSup1', `/card-stock/entries/${entries.t3!.id}/corrections`, { quantity: 70 }).expect(400);
-      await post('regSup1', `/card-stock/entries/${entries.t3!.id}/corrections`, { quantity: 70, reason: 'ab' }).expect(400);
-      const aCorrection = await prisma.stockEntry.findFirstOrThrow({ where: { correctsEntryId: entries.t3!.id } });
-      expect((await post('regSup1', `/card-stock/entries/${aCorrection.id}/corrections`, { quantity: 1, reason: 'Trying a correction of a correction' }).expect(400)).body.message).toBe('CORRECT_THE_ORIGINAL');
-      await post('regSup2', `/card-stock/entries/${entries.t3!.id}/corrections`, { quantity: 1, reason: 'Not my office' }).expect(403);
-    });
-
-    it('entries can never be edited or deleted: no such endpoint, and the database refuses too', async () => {
-      const id = entries.t1!.id;
-      for (const method of ['patch', 'put', 'delete'] as const) {
-        const res = await api()[method](`/api/v1/card-stock/entries/${id}`).set('Authorization', `Bearer ${tokens.regSup1}`).send({ quantity: 1 });
-        expect([404, 405]).toContain(res.status);
-      }
-      await expect(prisma.stockEntry.update({ where: { id }, data: { quantity: 1 } })).rejects.toThrow(/insert-only/);
-      await expect(prisma.stockEntry.delete({ where: { id } })).rejects.toThrow(/insert-only/);
-      expect((await prisma.stockEntry.findUniqueOrThrow({ where: { id } })).quantity).toBe(100);
-    });
-
-    it('refuses a future date, an empty delivery, a negative count and a desk of another office', async () => {
-      const future = new Date(Date.now() + 3 * 86_400_000).toISOString();
-      expect((await entry('COUNT', 5, future).expect(400)).body.message).toBe('DATE_IN_THE_FUTURE');
-      expect((await entry('RECEIVED', 0, '2026-09-07T08:00:00.000Z').expect(400)).body.message).toBe('DELIVERY_NEEDS_A_QUANTITY');
-      await entry('COUNT', -3, '2026-09-07T08:00:00.000Z').expect(400);
-      expect((await entry('COUNT', 5, '2026-09-07T08:00:00.000Z', { deskId: d2 }).expect(400)).body.message).toBe('DESK_NOT_AT_THIS_STATION');
-    });
-
-    it('a count can be kept per desk, reconciled against that desk only', async () => {
-      await entry('COUNT', 50, '2026-09-08T08:00:00.000Z', { deskId: d1 }).expect(201);
-      await prisma.cardPrint.createMany({
-        data: Array.from({ length: 4 }, () => ({ registrationStationId: r1, deskId: d1, kind: 'CARD' as const, printedById: userIds.regEmp1, printedAt: new Date('2026-09-08T12:00:00Z') })),
-      });
-      await entry('COUNT', 46, '2026-09-09T08:00:00.000Z', { deskId: d1 }).expect(201);
-      const res = await get('regSup1', `/card-stock/reconciliation?registrationStationId=${r1}&${STOCK_RANGE}`).expect(200);
-      const deskPool = res.body.pools.find((p: { desk: { id: string } | null }) => p.desk?.id === d1);
-      expect(deskPool.windows).toHaveLength(1);
-      expect(deskPool.windows[0]).toMatchObject({ used: 4, difference: 0, status: 'OK' });
-    });
-
-    it('audits every entry and correction with who made it', async () => {
-      const rows = await prisma.auditLog.findMany({
-        where: { userId: userIds.regSup1, action: { in: ['STOCK_ENTRY', 'STOCK_CORRECTION'] } },
-      });
-      expect(rows.some((r) => r.action === 'STOCK_ENTRY')).toBe(true);
-      expect(rows.some((r) => r.action === 'STOCK_CORRECTION')).toBe(true);
-    });
-  });
-
-  // ── 3. deadline readiness ───────────────────────────────────────────
-
-  describe('deadline readiness', () => {
-    it('shows cards against no cards per station and per day, with typed, unregistered and override apart', async () => {
-      const res = await get('admin', `/reports/readiness?municipalityId=${municipalityId}&${RANGE}`).expect(200);
-      const s1Row = res.body.stations.find((s: { id: string }) => s.id === s1);
-      expect(s1Row).toMatchObject({
-        withCard: 4, // two scans, then the two scans either side of Tripoli midnight
-        typedRegistered: 1,
-        typedUnregistered: 2,
-        emergencyOverride: 1,
-        withoutCard: 4,
-        distinctCardlessPlates: 4,
-      });
-      expect(res.body.stations.find((s: { id: string }) => s.id === s2)).toMatchObject({ withCard: 0, typedUnregistered: 1, distinctCardlessPlates: 1 });
-      const day14 = res.body.daily.find((d: { day: string }) => d.day === '2026-09-14');
-      expect(day14).toMatchObject({ withCard: 3, withoutCard: 5, typedRegistered: 1, typedUnregistered: 3, emergencyOverride: 1, distinctCardlessPlates: 5 });
-    });
-
-    it('splits the daily figures at Tripoli midnight, and cards issued per office per day', async () => {
-      const res = await get('admin', `/reports/readiness?municipalityId=${municipalityId}&from=2026-09-14&to=2026-09-15`).expect(200);
-      const [d14, d15] = res.body.daily;
-      expect(d14).toMatchObject({ day: '2026-09-14', withCard: 3 }); // two at 09:00 and the one at 21:59:59.999Z
-      expect(d15).toMatchObject({ day: '2026-09-15', withCard: 1 }); // the one at 22:00:00Z
-      expect(d14.cardsIssued).toBe(1); // the card at 21:59:59.999Z
-      expect(d15.cardsIssued).toBe(2); // 22:00:00Z and 09:00Z
-      const office = res.body.offices.find((o: { id: string }) => o.id === r1);
-      expect(office.daily.map((x: { day: string; issued: number }) => [x.day, x.issued])).toEqual([['2026-09-14', 1], ['2026-09-15', 2]]);
-    });
-
-    it('says plainly when some identification rows are only approximate (the phase 4a backfill)', async () => {
-      const res = await get('admin', `/reports/readiness?municipalityId=${municipalityId}&${RANGE}`).expect(200);
-      expect(res.body.approximateRows).toBe(1); // the one TYPED_REGISTERED fill-up that predates the field
-      expect(res.body.approximateBefore).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    });
-
-    describe('the headline estimate', () => {
-      const today = tripoliDay(new Date());
-      const recent = (daysAgo: number) => `${addDays(today, -daysAgo)}T12:00:00.000Z`;
-      const setDeadline = (day: string | null) =>
-        prisma.municipality.update({ where: { id: municipalityId }, data: { cardRequiredFromDate: day ? new Date(`${day}T00:00:00.000Z`) : null } });
-      const headline = async () =>
-        (await get('admin', `/reports/readiness?municipalityId=${municipalityId}&days=7`).expect(200)).body.headline;
-
-      beforeAll(async () => {
-        // Six different plates filled up without a card in the last week (one twice), …
-        const cardless = [1, 2, 3, 4, 5, 6].map((n) => `6-${plateBase}${n}`);
-        for (const [i, plate] of cardless.entries()) {
-          await makeFillUp({ station: s1, at: recent(1 + (i % 3)), identifiedBy: 'TYPED_UNREGISTERED', plate });
-        }
-        await makeFillUp({ station: s1, at: recent(1), identifiedBy: 'TYPED_UNREGISTERED', plate: cardless[0]! });
-        // …seven first cards were issued in that week, and one of those vehicles also fills up typed:
-        // it already has an active card, so it is no longer "still without a card".
-        const cardedVehicles = [];
-        for (let i = 0; i < 7; i++) {
-          const vehicle = await makeVehicle({ office: i % 2 === 0 ? r1 : r2, by: 'regEmp1', plate: `5-${plateBase}${i}4` });
-          await makeCard({ vehicleId: vehicle.id, office: i % 2 === 0 ? r1 : r2, desk: i % 2 === 0 ? d1 : d2, by: 'regEmp1', at: recent(2), reason: 'FIRST_ISSUE' });
-          cardedVehicles.push(vehicle);
-        }
-        await makeFillUp({ station: s1, at: recent(1), identifiedBy: 'TYPED_REGISTERED', vehicleId: cardedVehicles[0]!.id });
-      });
-
-      it('without a deadline: the days needed alone, with nothing to compare against', async () => {
-        await setDeadline(null);
-        expect(await headline()).toMatchObject({ cardlessPlates: 6, averagePerDay: 1, daysNeeded: 6, deadline: null, daysLeft: null, verdict: 'NO_DEADLINE' });
-      });
-
-      it('with a deadline far enough away: on track', async () => {
-        await setDeadline(addDays(today, 30));
-        expect(await headline()).toMatchObject({ daysNeeded: 6, daysLeft: 30, verdict: 'ON_TRACK', shortfall: 0 });
-      });
-
-      it('with a deadline too close: at risk, with how many plates the current pace would miss', async () => {
-        await setDeadline(addDays(today, 3));
-        expect(await headline()).toMatchObject({ daysNeeded: 6, daysLeft: 3, verdict: 'AT_RISK', shortfall: 3 });
-      });
-
-      it('with the deadline passed', async () => {
-        await setDeadline(today);
-        expect(await headline()).toMatchObject({ daysLeft: 0, verdict: 'DEADLINE_PASSED', shortfall: 6 });
-      });
-
-      afterAll(async () => {
-        await setDeadline(null);
-      });
-    });
-  });
-
   // ── exports ─────────────────────────────────────────────────────────
 
   describe('PDF exports', () => {
@@ -658,11 +435,9 @@ describe('Phase 4c — monitoring reports (e2e)', () => {
       res.on('end', () => callback(null, Buffer.concat(chunks)));
     };
 
-    it('the three reports and the two older ones export a real PDF through the Chromium renderer', async () => {
+    it('the office report exports a real PDF through the Chromium renderer', async () => {
       for (const [as, path] of [
         ['admin', `/reports/registration/offices/export?format=pdf&${RANGE}`],
-        ['regSup1', `/card-stock/reconciliation/export?format=pdf&from=2026-09-01&to=2026-09-09`],
-        ['admin', `/reports/readiness/export?format=pdf&municipalityId=${municipalityId}&${RANGE}`],
       ] as const) {
         const res = await get(as, path).buffer(true).parse(binary as never).expect(200);
         expect(res.headers['content-type']).toBe('application/pdf');

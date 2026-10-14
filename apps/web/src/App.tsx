@@ -114,8 +114,6 @@ function App() {
               <Route path="/reports/registration" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/offices/:officeId" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/employees/:userId" element={<EmployeeActivityPage />} />
-              <Route path="/reports/card-stock" element={<FoldedReportRedirect tab="cards" />} />
-              <Route path="/reports/readiness" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
               <Route path="/registration" element={<RegistrationPage />} />
               <Route path="/stations" element={<StationsListPage />} />

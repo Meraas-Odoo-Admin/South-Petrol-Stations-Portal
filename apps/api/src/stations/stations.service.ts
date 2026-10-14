@@ -14,14 +14,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 // from UserStationScope before touching the database result.
 // See docs/IMPLEMENTATION_PLAN.md §5 and CLAUDE.md rule 3.
 //
-// Registration pivot, phase 1: on top of scope, a station in a PREPARING
-// municipality is visible only on admin screens — i.e. to holders of
-// stations:view_preparing (a permission check, never a role-name check;
-// not stations:manage, which station supervisors also hold). Everyone else sees only
-// stations whose municipality is LIVE, plus stations with no municipality
-// yet, which stay visible so that recording at one fails with the fill-up
-// screen's clear "no municipality" message instead of the station silently
-// vanishing. Fill-ups at either kind are refused by FillUpsService.
+// A municipality that is switched off no longer hides its stations (Phase 6):
+// the activation switch gates nothing.
 // The fuel types a station sells, in a stable order, for the audit trail.
 function soldFuelTypes(rows: Array<{ fuelType: string; isAvailable: boolean }>): string[] {
   return rows
@@ -156,11 +150,6 @@ export class StationsService {
     fuelAvailability: true,
   } as const;
 
-  private async canSeePreparingStations(userId: string): Promise<boolean> {
-    const permissions = await this.rbac.getPermissionsForUser(userId);
-    return permissions.has('stations:view_preparing');
-  }
-
   // Phase 5A: archived stations are left out of every daily list; a manager
   // reaches them under the "archived" filter (and only a holder of
   // stations:create may ask for it - a supervisor never sees archived ones).
@@ -185,12 +174,10 @@ export class StationsService {
   private async listQuery(userId: string, query: ListStationsQueryDto) {
     const scope = await this.rbac.getStationScope(userId);
     const permissions = await this.rbac.getPermissionsForUser(userId);
-    const includePreparing = permissions.has('stations:view_preparing');
     const mayArchive = permissions.has('stations:create');
     const archived = mayArchive ? query.archived : undefined;
     const and: Prisma.StationWhereInput[] = [];
     if (scope !== null) and.push({ id: { in: scope } });
-    if (!includePreparing) and.push({ municipality: { status: 'LIVE' } });
     and.push({ archivedAt: archived === 'only' ? { not: null } : archived === 'include' ? undefined : null });
     if (query.municipalityId) and.push({ municipalityId: query.municipalityId });
     if (query.companyId) and.push({ companyId: query.companyId });
@@ -225,11 +212,6 @@ export class StationsService {
     if (!station) {
       throw new NotFoundException('Station not found.');
     }
-    if (station.municipality?.status === 'PREPARING' && !(await this.canSeePreparingStations(userId))) {
-      // Not live yet — outside admin screens it doesn't exist.
-      throw new NotFoundException('Station not found.');
-    }
-
     const scope = await this.rbac.getStationScope(userId);
     if (scope !== null && !scope.includes(station.id)) {
       // The station is real, but out of this user's scope. Guessing IDs

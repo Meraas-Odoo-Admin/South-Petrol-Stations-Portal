@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -28,7 +29,6 @@ describe('One notification per person per event (e2e)', () => {
   let municipalityId: string;
   let companyId: string;
   let stationId: string;
-  let plate = 300000;
 
   async function makeUser(key: string, permissions: string[], scope: { station?: boolean; municipality?: boolean }) {
     const role = await prisma.role.create({ data: { name: `e2e_ls_${key}_${runId}`, kind: null } });
@@ -58,7 +58,7 @@ describe('One notification per person per event (e2e)', () => {
       .post('/api/v1/fillups')
       .set('Authorization', `Bearer ${tokens.get(key)}`)
       .set('Idempotency-Key', randomUUID())
-      .send({ plate: `7-${plate++}`, stationId, fuelType: 'DIESEL', quantityLiters: liters });
+      .send({ _freshCard: true, stationId, fuelType: 'DIESEL', quantityLiters: liters });
   const lowStock = async (key: string) => {
     const res = await call('get', key, '/notifications?limit=100').expect(200);
     return res.body.items.filter((n: { kind: string }) => n.kind === 'LOW_STOCK');

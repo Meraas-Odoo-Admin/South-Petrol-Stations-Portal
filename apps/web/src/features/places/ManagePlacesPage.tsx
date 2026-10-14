@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/design/PageHeader';
-import { PlaceSummaryRow, ReadinessPanel } from './MunicipalitySummary';
+import { PlaceSummaryRow } from './MunicipalitySummary';
 import { PillButton } from '../../components/design/PillButton';
 import { Icon, ICONS } from '../../components/icons';
 import { useAuth } from '../auth/AuthProvider';
 import { Notice } from '../users/parts';
 import { PlacesList } from './PlacesList';
 import { useMunicipalityList } from './placesShared';
-import { StageCard } from './StageCard';
 
 const SELECT_CLASS =
   'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px] sm:w-72';
@@ -68,8 +67,6 @@ export function ManagePlacesPage() {
       )}
 
       <PlaceSummaryRow municipalityId={municipality?.id} />
-      <ReadinessPanel municipalityId={municipality?.id} />
-      {municipality && <StageCard municipality={municipality} />}
 
       {municipalities.isError && <Notice kind="error">تعذّر تحميل البلدية. تأكد من الاتصال ثم أعد المحاولة.</Notice>}
       {municipality && (

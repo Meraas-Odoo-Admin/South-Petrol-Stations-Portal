@@ -15,11 +15,10 @@ import { FuelType } from '@prisma/client';
 import { MAX_FILLUP_LITERS } from '@fuel-tracking/shared-types';
 
 export class CreateFillUpDto {
-  // Phase 4a: how the vehicle is identified. At least one of vehicleId,
-  // cardNumber (a scan) or plate (typed) is required. The server decides what
-  // it all means: a cardNumber must be an active card (and its vehicle wins);
-  // a typed plate that matches a registered vehicle IS that vehicle; only a
-  // plate matching none is recorded as an unregistered vehicle.
+  // Phase 6: a fill-up is recorded from a CARD SCAN (cardNumber), which must be
+  // an active card (its vehicle wins). vehicleId and plate are read ONLY with an
+  // emergency override, and must name a REGISTERED vehicle; without a card or an
+  // override the answer is 409 CARD_REQUIRED.
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

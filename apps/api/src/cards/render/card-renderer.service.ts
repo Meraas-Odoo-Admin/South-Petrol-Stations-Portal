@@ -3,15 +3,18 @@ import { chromium, type Browser } from 'playwright-core';
 import QRCode from 'qrcode';
 import {
   buildCardHtml,
+  buildPrinterSetupHtml,
   buildTestCardHtml,
+  QR_BOX_PX,
   type CardFaceData,
+  type CardLayout,
   type CardRenderMode,
 } from './card-html';
 import { loadCardAssets } from './card-assets';
 import { fitPdfToCard } from './pdf-page-size';
 
-// 300 dpi design px → CSS px (96 per inch). 638 × 1011 px at this scale is
-// exactly the ID-1 card, 53.98 × 85.60 mm.
+// 300 dpi design px → CSS px (96 per inch). 1011 × 638 px at this scale is
+// exactly the CR80 card, landscape, 85.60 × 53.98 mm.
 const DESIGN_TO_CSS_SCALE = 96 / 300;
 
 // Why Chromium and not pdfkit (the engine reports already use): a test
@@ -61,17 +64,21 @@ export class CardRendererService implements OnModuleDestroy {
   }
 
   // Error-correction level H: the card still scans with ~30% of the QR
-  // scratched or dirty. The payload is the card number alone.
-  qrSvg(content: string): Promise<string> {
-    return QRCode.toString(content, { type: 'svg', errorCorrectionLevel: 'H', margin: 0, color: { dark: '#000000', light: '#ffffff' } }).then(
-      (svg) => svg.replace('<svg ', '<svg width="354" height="354" shape-rendering="crispEdges" '),
-    );
+  // scratched or dirty. The payload is the card number alone. Pure black on
+  // white, vector, with the 4-module quiet zone inside the drawing (margin 4).
+  qrSvg(content: string, size: number = QR_BOX_PX): Promise<string> {
+    return QRCode.toString(content, {
+      type: 'svg',
+      errorCorrectionLevel: 'H',
+      margin: 4,
+      color: { dark: '#000000', light: '#ffffff' },
+    }).then((svg) => svg.replace('<svg ', `<svg width="${size}" height="${size}" shape-rendering="crispEdges" `));
   }
 
   private async withPage<T>(
     html: string,
     fn: (page: import('playwright-core').Page) => Promise<T>,
-    viewport: { width: number; height: number } = { width: 638, height: 1011 },
+    viewport: { width: number; height: number } = { width: 1012, height: 639 },
   ): Promise<T> {
     const browser = await this.getBrowser();
     const page = await browser.newPage({ viewport });
@@ -91,9 +98,8 @@ export class CardRendererService implements OnModuleDestroy {
   private async pdfFromHtml(html: string): Promise<Buffer> {
     const raw = await this.withPage(html, (page) =>
       page.pdf({
-        // The @page rule in the template sets 53.98 × 85.6 mm; it lands
-        // more precisely than page.pdf's own width/height (which round the
-        // width out to 54.36 mm).
+        // The @page rule in the template sets 85.6 × 53.98 mm; it lands
+        // more precisely than page.pdf's own width/height.
         preferCSSPageSize: true,
         printBackground: true,
         margin: { top: '0', right: '0', bottom: '0', left: '0' },
@@ -103,15 +109,15 @@ export class CardRendererService implements OnModuleDestroy {
     return fitPdfToCard(raw);
   }
 
-  renderCardPdf(data: Omit<CardFaceData, 'qrSvg'>, mode: CardRenderMode): Promise<Buffer> {
+  renderCardPdf(data: Omit<CardFaceData, 'qrSvg'>, mode: CardRenderMode, layout: CardLayout = 'A'): Promise<Buffer> {
     return this.qrSvg(data.cardNumber).then((qrSvg) =>
-      this.pdfFromHtml(buildCardHtml({ ...data, qrSvg }, mode, loadCardAssets())),
+      this.pdfFromHtml(buildCardHtml({ ...data, qrSvg }, mode, loadCardAssets(), layout)),
     );
   }
 
-  // An A4 page rendered from HTML with the same offline Chromium — used by
-  // the posted "registration stations" sheet. The HTML sets its own @page
-  // size and margins, and sets window.__cardReady once its fonts are loaded.
+  // An A4 page rendered from HTML with the same offline Chromium: used by the
+  // report PDFs. The HTML sets its own @page size and margins, and sets
+  // window.__cardReady once its fonts are loaded.
   renderA4Pdf(html: string): Promise<Buffer> {
     return this.withPage(
       html,
@@ -123,11 +129,36 @@ export class CardRendererService implements OnModuleDestroy {
     );
   }
 
-  // On-screen preview of the card front (PNG, at design size).
-  async renderCardPreviewPng(data: Omit<CardFaceData, 'qrSvg'>): Promise<Buffer> {
+  // The card face as a PNG at 300 dpi (1011 × 638 px): the on-screen preview,
+  // and what the layout options are judged on.
+  async renderCardPreviewPng(
+    data: Omit<CardFaceData, 'qrSvg'>,
+    mode: CardRenderMode = 'full',
+    layout: CardLayout = 'A',
+  ): Promise<Buffer> {
     const qrSvg = await this.qrSvg(data.cardNumber);
-    const html = buildCardHtml({ ...data, qrSvg }, 'full', loadCardAssets());
-    return this.withPage(html, (page) => page.locator('.page').first().screenshot({ type: 'png' }));
+    const html = buildCardHtml({ ...data, qrSvg }, mode, loadCardAssets(), layout);
+    return this.withPage(html, (page) => page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 1011, height: 638 } }));
+  }
+
+  // The one-page printer setup card, as a PDF (printed once on the real
+  // printer) and as a PNG at 300 dpi.
+  async renderPrinterSetupPdf(): Promise<Buffer> {
+    return this.pdfFromHtml(buildPrinterSetupHtml(await this.setupQrs(), loadCardAssets()));
+  }
+
+  async renderPrinterSetupPng(): Promise<Buffer> {
+    const html = buildPrinterSetupHtml(await this.setupQrs(), loadCardAssets());
+    return this.withPage(html, (page) => page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 1011, height: 638 } }));
+  }
+
+  private async setupQrs() {
+    const [small, medium, large] = await Promise.all([
+      this.qrSvg('TEST-CARD', 106),
+      this.qrSvg('TEST-CARD', 165),
+      this.qrSvg('TEST-CARD', 260),
+    ]);
+    return { small, medium, large };
   }
 
   // Desk setup / ribbon change: alignment marks + a sample QR that is NOT a

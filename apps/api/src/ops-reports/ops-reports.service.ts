@@ -4,8 +4,6 @@ import type { FuelType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { FuelStockService, FUEL_LABELS_AR } from '../fuel-stock/fuel-stock.service';
-import { CardStockService } from '../card-stock/card-stock.service';
-import { ReadinessService } from '../readiness/readiness.service';
 import { resolveReportRange } from '../common/utils/report-range';
 import { tripoliDay } from '../common/utils/grace-stage';
 import { addDays, eachDay, tripoliMidnight, type TripoliRange } from '../common/utils/tripoli';
@@ -39,14 +37,6 @@ const STOCK_STATUS_AR: Record<string, string> = {
   EMPTY: 'فارغ',
   DATA_WARNING: 'بيانات تحتاج مراجعة',
 };
-const VERDICT_AR: Record<string, string> = {
-  NONE_REMAINING: 'لا أحد بلا بطاقة',
-  NO_ISSUANCE: 'لم تُصدر بطاقات مؤخرًا',
-  NO_DEADLINE: 'لا موعد نهائي',
-  DEADLINE_PASSED: 'فات الموعد',
-  ON_TRACK: 'في المسار',
-  AT_RISK: 'معرّض للتأخر',
-};
 
 const DAY_OF_FILLUP = Prisma.sql`((f."occurredAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Tripoli')::date`;
 const DAY_OF_CARD = Prisma.sql`((c."issuedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Tripoli')::date`;
@@ -69,8 +59,6 @@ export class OpsReportsService {
     private readonly prisma: PrismaService,
     private readonly rbac: RbacService,
     private readonly fuelStock: FuelStockService,
-    private readonly cardStock: CardStockService,
-    private readonly readiness: ReadinessService,
     private readonly settings: SystemSettingsService,
   ) {}
 
@@ -116,7 +104,7 @@ export class OpsReportsService {
     const scope = await this.rbac.getMunicipalityScope(actorId);
     const visible = await this.prisma.municipality.findMany({
       where: { archivedAt: null, ...(scope !== null ? { id: { in: scope } } : {}) },
-      select: { id: true, name: true, status: true, cardRequiredFromDate: true },
+      select: { id: true, name: true, status: true, activatedAt: true },
       orderBy: { name: 'asc' },
     });
     if (visible.length === 0) throw new ForbiddenException('No municipality is available to you.');
@@ -270,9 +258,12 @@ export class OpsReportsService {
   // ── registration office manager ──────────────────────────────────────
 
   async office(query: OpsReportQueryDto, actorId: string): Promise<OpsReport> {
-    const range = resolveReportRange(query, 7);
     const offices = await this.officesInScope(actorId, { officeId: query.officeId });
     const ids = offices.map((o) => o.id);
+    const range = resolveReportRange(
+      await this.startFromActivation(query, [...new Set(offices.map((o) => o.municipalityId))]),
+      7,
+    );
     const empty: OpsReport = {
       report: 'office',
       title: 'تقارير المكتب',
@@ -389,26 +380,6 @@ export class OpsReportsService {
       return row;
     });
 
-    // Card stock and its reconciliation, per office pool.
-    const stockRows: Array<Record<string, Cell>> = [];
-    for (const office of offices) {
-      const result = await this.cardStock.reconciliation(
-        { registrationStationId: office.id, from: query.from, to: query.to },
-        actorId,
-      );
-      for (const pool of result.pools) {
-        stockRows.push({
-          office: pool.registrationStation.name,
-          pool: pool.desk ? `مكتب ${pool.desk.name}` : 'المكتب كله',
-          entries: pool.entryCount,
-          expected: pool.sinceLastCount ? pool.sinceLastCount.expectedRemaining : null,
-          unaccounted: pool.totals.unaccountedCards,
-          status:
-            pool.totals.unaccountedCards > 0 ? 'بطاقات غير مبرَّرة' : pool.totals.negativeWindows > 0 ? 'يحتاج مراجعة' : 'سليم',
-        });
-      }
-    }
-
     return {
       ...empty,
       tables: [
@@ -450,31 +421,39 @@ export class OpsReportsService {
           ],
           rows: dayRows,
         },
-        {
-          id: 'card-stock',
-          title: 'مخزون البطاقات والمطابقة',
-          note: 'المتوقع بعد آخر جرد = آخر جرد + المستلم − المطبوع.',
-          columns: [
-            col('office', 'المكتب'),
-            col('pool', 'الصندوق'),
-            col('entries', 'قيود', 'number'),
-            col('expected', 'المتوقع المتبقي', 'number'),
-            col('unaccounted', 'بطاقات غير مبرَّرة', 'number'),
-            col('status', 'الحالة', 'status'),
-          ],
-          rows: stockRows,
-          flagKey: 'unaccounted',
-        },
       ],
     };
+  }
+
+  // A report with no explicit start begins on the day the municipality was
+  // switched on (the earliest of them for several), never earlier than the
+  // longest range a report allows. An explicit from/to is left alone.
+  private async startFromActivation<T extends { from?: string; to?: string }>(
+    query: T,
+    municipalityIds: string[],
+  ): Promise<T> {
+    if (query.from || municipalityIds.length === 0) return query;
+    const rows = await this.prisma.municipality.findMany({
+      where: { id: { in: municipalityIds }, activatedAt: { not: null } },
+      select: { activatedAt: true },
+    });
+    if (rows.length === 0) return query;
+    const earliest = rows.reduce((min, r) => (r.activatedAt! < min ? r.activatedAt! : min), rows[0]!.activatedAt!);
+    const to = query.to ?? tripoliDay(new Date());
+    let from = tripoliDay(earliest);
+    if (from > to) from = to;
+    return { ...query, from };
   }
 
   // ── station supervisor ───────────────────────────────────────────────
 
   async station(query: OpsReportQueryDto, actorId: string): Promise<OpsReport> {
-    const range = resolveReportRange(query, 7);
     const stations = await this.stationsInScope(actorId, { stationId: query.stationId });
     const stationIds = stations.map((s) => s.id);
+    const range = resolveReportRange(
+      await this.startFromActivation(query, [...new Set(stations.map((s) => s.municipalityId))]),
+      7,
+    );
     const base: OpsReport = {
       report: 'station',
       title: 'تقارير المحطة',
@@ -790,8 +769,8 @@ export class OpsReportsService {
   // ── municipality manager (and the super admin, one municipality at a time)
 
   async municipality(query: OpsReportQueryDto, actorId: string): Promise<OpsReport> {
-    const range = resolveReportRange(query, 7);
     const { chosen, visible } = await this.chooseMunicipality(actorId, query.municipalityId);
+    const range = resolveReportRange(await this.startFromActivation(query, [chosen.id]), 7);
     const stations = await this.stationsInScope(actorId, {
       municipalityId: chosen.id,
       stationId: query.stationId,
@@ -936,27 +915,6 @@ export class OpsReportsService {
       wasted: countFor(officeWasted, (r) => r.registrationStationId === o.id),
     }));
 
-    // Deadline readiness (the estimate the municipality manager reads).
-    let readinessRows: Array<Record<string, Cell>> = [];
-    try {
-      const report = await this.readiness.report({ municipalityId: chosen.id, days: 14 }, actorId);
-      const h = report.headline;
-      if (h) {
-        readinessRows = [
-          {
-            cardless: h.cardlessPlates,
-            perDay: h.averagePerDay,
-            needed: h.daysNeeded,
-            left: h.daysLeft,
-            shortfall: h.shortfall,
-            verdict: VERDICT_AR[h.verdict] ?? h.verdict,
-          },
-        ];
-      }
-    } catch {
-      readinessRows = [];
-    }
-
     const days = eachDay(range.from, range.to);
     const dayRows: Array<Record<string, Cell>> = [];
     for (const day of days) {
@@ -1033,19 +991,6 @@ export class OpsReportsService {
             col('wasted', 'بطاقات تالفة', 'number'),
           ],
           rows: officeRows,
-        },
-        {
-          id: 'readiness',
-          title: 'الجاهزية للموعد النهائي',
-          columns: [
-            col('cardless', 'مركبات بلا بطاقة', 'number'),
-            col('perDay', 'بطاقات أولى في اليوم', 'number'),
-            col('needed', 'أيام يحتاجها التسجيل', 'number'),
-            col('left', 'أيام باقية', 'number'),
-            col('shortfall', 'لن تُغطّى', 'number'),
-            col('verdict', 'التقدير', 'status'),
-          ],
-          rows: readinessRows,
         },
         {
           id: 'flags',
@@ -1129,12 +1074,6 @@ export class OpsReportsService {
         })
       : 0;
 
-    let unaccountedCards = 0;
-    for (const id of officeIds) {
-      const result = await this.cardStock.reconciliation({ registrationStationId: id }, actorId);
-      unaccountedCards += result.pools.reduce((t, p) => t + p.totals.unaccountedCards, 0);
-    }
-
     const threshold = await this.settings.getNumber('stock.low_threshold_liters');
     const storages = stations.length
       ? await this.prisma.stationFuelStorage.findMany({ where: { stationId: { in: stations.map((s) => s.id) } } })
@@ -1156,7 +1095,7 @@ export class OpsReportsService {
     return {
       municipality: { id: chosen.id, name: chosen.name },
       municipalities: visible.map((m) => ({ id: m.id, name: m.name })),
-      registration: { cardsToday, activeOffices, offices: officeIds.length, unaccountedCards },
+      registration: { cardsToday, activeOffices, offices: officeIds.length },
       fuel: {
         stations: activeStations,
         lowStockStations: lowStations.size,
@@ -1169,12 +1108,12 @@ export class OpsReportsService {
   // ── super admin: across municipalities ───────────────────────────────
 
   async summary(query: OpsReportQueryDto): Promise<OpsReport> {
-    const range = resolveReportRange(query, 7);
     const municipalities = await this.prisma.municipality.findMany({
       where: { archivedAt: null },
       select: { id: true, name: true, status: true },
       orderBy: { name: 'asc' },
     });
+    const range = resolveReportRange(await this.startFromActivation(query, municipalities.map((m) => m.id)), 7);
     const inRange = { gte: range.start, lt: range.endExclusive };
     const threshold = await this.settings.getNumber('stock.low_threshold_liters');
     const [fillups, cards, vehicles] = await Promise.all([

@@ -41,9 +41,14 @@ export interface Fixtures {
   cleanVehicleCurrentPlate: string;
   cleanVehicleOwnerFullName: string;
   // Phase 3: a vehicle with an ACTIVE printed card, streamed to the scan
-  // test through a fake camera (FAKE_CAMERA_PATH).
+  // test through a fake camera (FAKE_CAMERA_PATH). The first vehicle
+  // (vehicleCurrentPlate) has a card too, streamed from FAKE_CAMERA_HISTORY_PATH:
+  // it already has a fill-up, so it trips the gap rule.
   scanVehicleCurrentPlate: string;
   scanCardNumber: string;
+  // Two more vehicles with ACTIVE cards, for specs that record fill-ups through
+  // the API (a fill-up needs a card since Phase 6).
+  extraCardNumbers: string[];
   deskName: string;
   supervisorUsername: string;
   supervisorPassword: string;
@@ -91,8 +96,9 @@ async function login(username: string, password: string, attempt = 1): Promise<{
 // Y4M video. Build one from the card's own rendered preview: the part of
 // the card holding the QR and plate, on white, as grey-scale I420 frames.
 export const FAKE_CAMERA_PATH = path.join(__dirname, '.fake-camera.y4m');
+export const FAKE_CAMERA_HISTORY_PATH = path.join(__dirname, '.fake-camera-history.y4m');
 
-async function writeFakeCamera(cardPng: Buffer): Promise<void> {
+async function writeFakeCamera(cardPng: Buffer, outPath: string): Promise<void> {
   const width = 640;
   const height = 480;
   const browser = await chromium.launch();
@@ -106,9 +112,9 @@ async function writeFakeCamera(cardPng: Buffer): Promise<void> {
       c.width = ${width}; c.height = ${height};
       const x = c.getContext('2d');
       x.fillStyle = '#fff'; x.fillRect(0, 0, ${width}, ${height});
-      // Source crop: card y 230..870 (QR + plate), scaled to the frame height.
-      const sy = 230, sh = 640, scale = ${height} / sh, sw = 638;
-      x.drawImage(img, 0, sy, sw, sh, (${width} - sw * scale) / 2, 0, sw * scale, ${height});
+      // The whole landscape card (QR and plate), scaled to the frame width.
+      const scale = ${width} / img.width, sh = img.height * scale;
+      x.drawImage(img, 0, (${height} - sh) / 2, ${width}, sh);
       const d = x.getImageData(0, 0, ${width}, ${height}).data;
       const y = new Array(${width * height});
       for (let i = 0; i < y.length; i++) y[i] = Math.round(0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]);
@@ -120,7 +126,7 @@ async function writeFakeCamera(cardPng: Buffer): Promise<void> {
   const chroma = Buffer.alloc((width / 2) * (height / 2), 128);
   const frame = Buffer.concat([Buffer.from('FRAME\n'), yPlane, chroma, chroma]);
   const header = Buffer.from(`YUV4MPEG2 W${width} H${height} F10:1 Ip A1:1 C420jpeg\n`);
-  writeFileSync(FAKE_CAMERA_PATH, Buffer.concat([header, ...Array(10).fill(frame)]));
+  writeFileSync(outPath, Buffer.concat([header, ...Array(10).fill(frame)]));
 }
 
 async function main() {
@@ -178,15 +184,6 @@ async function main() {
     throw new Error('Expected the seeded LIVE municipality سبها — was prisma db seed run?');
   }
 
-  // Start every run from grace with no dates, whatever an aborted earlier run
-  // (grace.spec changes them) left behind — otherwise a leftover deadline in
-  // the past makes the fixture fill-up below fail with CARD_REQUIRED.
-  await api.patch(
-    `${API_BASE}/municipalities/${sabha.id}`,
-    { awarenessStartDate: null, cardRequiredFromDate: null },
-    { headers },
-  );
-
   const company = await api.post(`${API_BASE}/companies`, { name: `PW Test Co ${runId}` }, { headers });
   const station = await api.post(
     `${API_BASE}/stations`,
@@ -232,7 +229,7 @@ async function main() {
     { headers },
   );
   const cleanOwner = await registerOwner(`مالك نظيف ${arabicTag(6)}`, nationalId());
-  // City code 9 — the fill-up test types this plate into the digit boxes.
+  // City code 9 — the override test types this plate.
   const cleanVehicle = await api.post(
     `${API_BASE}/vehicles`,
     {
@@ -274,13 +271,44 @@ async function main() {
     headers,
     responseType: 'arraybuffer',
   });
-  await writeFakeCamera(Buffer.from(preview.data));
+  await writeFakeCamera(Buffer.from(preview.data), FAKE_CAMERA_PATH);
 
-  // Fill-up history for the first vehicle — trips the gap rule in the
-  // fill-up test and feeds the reports tests.
+  const extraCardNumbers: string[] = [];
+  for (let n = 0; n < 2; n += 1) {
+    const extraOwner = await registerOwner(`مالك إضافي ${arabicTag(6)}`, nationalId());
+    const extraVehicle = await api.post(
+      `${API_BASE}/vehicles`,
+      {
+        registrationStationId: registrationStation.data.id,
+        currentPlate: `4-${randomDigits(7)}`,
+        ownerId: extraOwner.data.id,
+        ...vehicleFields(),
+      },
+      { headers },
+    );
+    const extraCard = await api.post<{ cardNumber: string }>(
+      `${API_BASE}/vehicles/${extraVehicle.data.id}/cards`,
+      { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+      { headers },
+    );
+    extraCardNumbers.push(extraCard.data.cardNumber);
+  }
+
+  // The first vehicle gets a card too, and a fill-up recorded from it: that
+  // history trips the gap rule in the fill-up test and feeds the reports tests.
+  const historyCard = await api.post<{ id: string; cardNumber: string }>(
+    `${API_BASE}/vehicles/${vehicle.data.id}/cards`,
+    { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+    { headers },
+  );
+  const historyPreview = await api.get<ArrayBuffer>(`${API_BASE}/cards/${historyCard.data.id}/preview`, {
+    headers,
+    responseType: 'arraybuffer',
+  });
+  await writeFakeCamera(Buffer.from(historyPreview.data), FAKE_CAMERA_HISTORY_PATH);
   await api.post(
     `${API_BASE}/fillups`,
-    { vehicleId: vehicle.data.id, stationId: station.data.id, fuelType: 'PETROL_95', quantityLiters: 20 },
+    { cardNumber: historyCard.data.cardNumber, stationId: station.data.id, fuelType: 'PETROL_95', quantityLiters: 20 },
     { headers: { ...headers, 'Idempotency-Key': `pw-fixture-${runId}` } },
   );
 
@@ -368,6 +396,7 @@ async function main() {
     cleanVehicleOwnerFullName: cleanOwner.data.fullName,
     scanVehicleCurrentPlate: scanVehicle.data.currentPlate,
     scanCardNumber: scanCard.data.cardNumber,
+    extraCardNumbers,
     deskName,
     supervisorUsername,
     supervisorPassword: RUN_PASSWORD,

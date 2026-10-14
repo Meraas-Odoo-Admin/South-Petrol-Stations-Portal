@@ -27,7 +27,6 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
   'standing_exceptions:manage': { area: 'fillups', label: 'منح استثناء دائم لمركبة أو مالك' },
   'exception_types:manage': { area: 'fillups', label: 'إدارة أنواع الاستثناءات' },
   'cards:scan': { area: 'fillups', label: 'قراءة بطاقة المركبة عند المضخة' },
-  'registration_sheet:print': { area: 'fillups', label: 'طباعة ورقة مكاتب التسجيل' },
 
   'fuel_stock:read': { area: 'stock', label: 'رؤية مخزون الوقود وتفاصيله وسجل التوريد' },
   'fuel_stock:read_visible': { area: 'stock', label: 'رؤية مستوى الوقود في محطته' },
@@ -36,7 +35,6 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
   'stations:read': { area: 'stations', label: 'عرض المحطات' },
   'stations:manage': { area: 'stations', label: 'تعديل المحطة وأنواع الوقود التي تبيعها' },
   'stations:create': { area: 'stations', label: 'إنشاء المحطات وأرشفتها' },
-  'stations:view_preparing': { area: 'stations', label: 'رؤية محطات البلديات قيد الإعداد' },
   'routes:read': { area: 'stations', label: 'عرض خطوط النقل' },
   'routes:manage': { area: 'stations', label: 'إدارة خطوط النقل' },
   'registration_stations:read': { area: 'stations', label: 'عرض مكاتب التسجيل' },
@@ -46,8 +44,6 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
   'cards:read': { area: 'registration', label: 'عرض بطاقات المركبة وتاريخها' },
   'cards:issue': { area: 'registration', label: 'إصدار البطاقات وطباعتها' },
   'cards:cancel': { area: 'registration', label: 'إلغاء بطاقة بدون بدل' },
-  'card_stock:read': { area: 'registration', label: 'عرض مخزون البطاقات الفارغة والمطابقة' },
-  'card_stock:record': { area: 'registration', label: 'تسجيل توريد البطاقات والجرد والتصحيح' },
 
   'vehicles:read': { area: 'vehicles', label: 'البحث في المركبات' },
   'vehicles:manage': { area: 'vehicles', label: 'تسجيل المركبات وتعديلها' },
@@ -68,7 +64,6 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
   'reports:own_shift': { area: 'reports', label: 'تقرير مناوبته' },
   'registration_reports:view': { area: 'reports', label: 'تقارير مكتب التسجيل' },
   'registration_reports:own_day': { area: 'reports', label: 'تقرير يومه في التسجيل' },
-  'readiness:view': { area: 'reports', label: 'الجاهزية للموعد النهائي' },
   'audit:view': { area: 'reports', label: 'سجل المراجعة' },
 
   'users:manage': { area: 'people', label: 'إدارة كل الحسابات' },
@@ -79,7 +74,6 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
 
   'municipalities:read': { area: 'municipalities', label: 'عرض البلديات' },
   'municipalities:manage': { area: 'municipalities', label: 'إنشاء البلديات وتعديلها' },
-  'municipalities:set_stage_dates': { area: 'municipalities', label: 'تحديد تواريخ التوعية والموعد النهائي' },
   'companies:read': { area: 'municipalities', label: 'عرض الشركات' },
   'companies:manage': { area: 'municipalities', label: 'إضافة شركة' },
   'companies:update': { area: 'municipalities', label: 'تعديل الشركات وأرشفتها' },

@@ -56,7 +56,7 @@ const PHONES = [
   { name: 'large phone', width: 430, height: 932 },
 ];
 
-test('scan step: the type-the-plate link stays visible once a tall camera stream is playing, on any phone size', async ({
+test('scan step: the panel stays inside the screen once a tall camera stream is playing, on any phone size, with no type-the-plate link', async ({
   page,
 }) => {
   await stubCamera(page, { width: 720, height: 1280, capabilities: {} });
@@ -65,14 +65,15 @@ test('scan step: the type-the-plate link stays visible once a tall camera stream
 
   for (const phone of PHONES) {
     await page.setViewportSize({ width: phone.width, height: phone.height });
-    const link = page.getByTestId('fillup-type-plate-instead');
+    const override = page.getByTestId('fillup-override-open');
     const video = page.getByTestId('qr-scan-panel').locator('video');
     // The stream is really playing (frames arrived), not just requested.
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth), { message: phone.name })
       .toBeGreaterThan(0);
-    await expect(link, phone.name).toBeVisible();
-    await expect(link, phone.name).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId('fillup-type-plate-instead'), phone.name).toHaveCount(0);
+    // The supervisor's override entry sits under the panel and stays reachable.
+    await expect(override, phone.name).toBeVisible();
     // And the panel itself did not grow past the screen because of the video.
     const panel = await page.getByTestId('qr-scan-panel').boundingBox();
     expect(panel!.height, phone.name).toBeLessThanOrEqual(Math.max(phone.height * 0.62, 360) + 1);

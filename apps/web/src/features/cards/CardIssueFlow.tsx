@@ -7,6 +7,7 @@ import {
   cardErrorMessage,
   printCardPdf,
   printPdfBlob,
+  printerSetupPdf,
   rememberDesk,
   rememberedDeskId,
   rememberPrintMode,
@@ -19,7 +20,7 @@ import {
 
 type Step = 'ready' | 'issued' | 'confirm' | 'done';
 
-// On-screen preview of the card front, rendered by the same template the PDF
+// On-screen preview of the card (one face), rendered by the same template the PDF
 // uses (GET /cards/:id/preview). Viewing isn't printing — not audited.
 function CardPreview({ cardId }: { cardId: string }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -40,7 +41,7 @@ function CardPreview({ cardId }: { cardId: string }) {
     };
   }, [cardId]);
   return (
-    <div className="flex h-[320px] w-[202px] items-center justify-center overflow-hidden rounded-[12px] bg-surface-alt shadow-md">
+    <div className="flex aspect-[85.6/53.98] w-[340px] max-w-full items-center justify-center overflow-hidden rounded-[12px] bg-surface-alt shadow-md">
       {url ? (
         <img src={url} alt="معاينة البطاقة" className="h-full w-full object-contain" data-testid="card-preview-image" />
       ) : (
@@ -131,6 +132,15 @@ export function CardIssueFlow({
     onError: (err) => setError(cardErrorMessage(err)),
   });
 
+  async function printSetupCard() {
+    setError(null);
+    try {
+      setFallbackUrl(printPdfBlob(await printerSetupPdf()));
+    } catch (err) {
+      setError(cardErrorMessage(err, 'تعذّر تجهيز بطاقة إعداد الطابعة.'));
+    }
+  }
+
   async function printTestCard() {
     setError(null);
     // A test card is recorded against the desk it is printed at.
@@ -185,6 +195,9 @@ export function CardIssueFlow({
               <button type="button" className="font-bold text-ink-soft" onClick={printTestCard} data-testid="card-print-test">
                 طباعة بطاقة اختبار
               </button>
+              <button type="button" className="font-bold text-ink-soft" onClick={printSetupCard} data-testid="card-print-setup">
+                بطاقة إعداد الطابعة
+              </button>
             </span>
             <label className="flex w-full items-center gap-1.5 text-[13px] lg:text-[12px] text-ink-soft">
               <input
@@ -197,7 +210,7 @@ export function CardIssueFlow({
                   rememberPrintMode(mode);
                 }}
               />
-              بطاقات مطبوعة مسبقًا بالألوان — اطبع طبقة الأسود فقط (يُحفظ على هذا الجهاز)
+              شريط أحادي اللون — اطبع بالأسود فقط (يُحفظ على هذا الجهاز)
             </label>
           </div>
         )}
@@ -235,9 +248,14 @@ export function CardIssueFlow({
             </div>
 
             {step === 'issued' && (
-              <PillButton data-testid="card-print" onClick={() => print(card)}>
-                طباعة
-              </PillButton>
+              <>
+                <PillButton data-testid="card-print" onClick={() => print(card)}>
+                  طباعة
+                </PillButton>
+                <p className="max-w-md text-[14px] leading-[1.8] text-ink-soft lg:text-[12px]" data-testid="card-print-instructions">
+                  عند ظهور نافذة الطباعة: اختر طابعة البطاقات، والحجم «CR80»، والاتجاه أفقي، والمقياس «100%» (حجم فعلي)، واترك الهوامش «بلا». ضع بطاقة بيضاء واحدة في الطابعة قبل الضغط.
+                </p>
+              </>
             )}
 
             {step === 'confirm' && (

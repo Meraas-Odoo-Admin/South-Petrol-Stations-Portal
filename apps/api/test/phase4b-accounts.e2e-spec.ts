@@ -129,11 +129,11 @@ describe('Phase 4b — accounts (e2e)', () => {
     await makeRole('fuelSupervisor', 'PETROL_STATION', ['stations:read', 'fillups:create', 'users:manage_staff']);
     await makeRole('regEmployee', 'REGISTRATION', ['registration_stations:read', 'cards:issue']);
     await makeRole('regSupervisor', 'REGISTRATION', ['registration_stations:read', 'cards:issue', 'users:manage_staff']);
-    // Directorate-style admin: manages users and roles, sets stage dates, no top-level permission.
+    // Directorate-style admin: manages users and roles, no top-level permission.
     await makeRole(
       'directorate',
       null,
-      ['users:manage', 'roles:manage', 'municipalities:read', 'municipalities:set_stage_dates', 'stations:read'],
+      ['users:manage', 'roles:manage', 'municipalities:read', 'stations:read'],
       true,
     );
     // Top-level admin: also manages municipalities and the top-level accounts.
@@ -146,7 +146,6 @@ describe('Phase 4b — accounts (e2e)', () => {
         'users:manage_system_admins',
         'municipalities:read',
         'municipalities:manage',
-        'municipalities:set_stage_dates',
         'stations:read',
       ],
       true,
@@ -528,44 +527,37 @@ describe('Phase 4b — accounts (e2e)', () => {
     });
   });
 
-  // ── stage dates ─────────────────────────────────────────────────────
+  // ── the activation switch ───────────────────────────────────────────
 
-  describe('stage dates for the directorate admin', () => {
-    it('can set and clear the two dates, and nothing else', async () => {
-      const set = await patch('dir', `/municipalities/${stageMunicipalityId}`, {
-        awarenessStartDate: '2098-12-01',
-        cardRequiredFromDate: '2099-01-01',
-      }).expect(200);
-      expect(set.body.awarenessStartDate).toBeTruthy();
-
-      expect(message(await patch('dir', `/municipalities/${stageMunicipalityId}`, { status: 'LIVE' }).expect(403))).toBe('STAGE_DATES_ONLY');
+  describe('the municipality activation switch', () => {
+    it('is refused for the directorate admin (no municipalities:manage), whatever it is asked to do', async () => {
+      await patch('dir', `/municipalities/${stageMunicipalityId}`, { status: 'LIVE' }).expect(403);
       await patch('dir', `/municipalities/${stageMunicipalityId}`, { name: 'renamed' }).expect(403);
-      await patch('dir', `/municipalities/${stageMunicipalityId}`, { code: 'ZZZ' }).expect(403);
       expect((await prisma.municipality.findUniqueOrThrow({ where: { id: stageMunicipalityId } })).status).toBe('PREPARING');
-
-      await patch('dir', `/municipalities/${stageMunicipalityId}`, { awarenessStartDate: null, cardRequiredFromDate: null }).expect(200);
-      const cleared = await prisma.municipality.findUniqueOrThrow({ where: { id: stageMunicipalityId } });
-      expect(cleared.awarenessStartDate).toBeNull();
-      expect(cleared.cardRequiredFromDate).toBeNull();
-      expect(await prisma.auditLog.count({ where: { entityId: stageMunicipalityId, action: 'UPDATE_STAGE_DATES' } })).toBe(2);
     });
 
-    it('keeps the typed-name confirmation for a deadline that is today or earlier', async () => {
-      const res = await patch('dir', `/municipalities/${stageMunicipalityId}`, { cardRequiredFromDate: '2020-01-01' }).expect(400);
-      expect(message(res)).toBe('CONFIRMATION_NAME_MISMATCH');
+    it('a user with no municipalities permission is refused too', async () => {
+      await patch('supA', `/municipalities/${stageMunicipalityId}`, { status: 'LIVE' }).expect(403);
     });
 
-    it('a user with neither permission is refused, and a supervisor is too', async () => {
-      await patch('supA', `/municipalities/${stageMunicipalityId}`, { awarenessStartDate: '2098-12-01' }).expect(403);
-    });
-
-    it('the manage permission still switches a municipality live or back', async () => {
+    it('the manage permission switches on (date and who recorded, audited) and off (reason required)', async () => {
       await prisma.securityAuthority.create({ data: { name: `P4B authority ${runId}`, municipalityId: stageMunicipalityId } });
-      await patch('top', `/municipalities/${stageMunicipalityId}`, { status: 'LIVE' }).expect(200);
-      await patch('top', `/municipalities/${stageMunicipalityId}`, {
-        status: 'PREPARING',
-        confirmName: `P4B Stage ${runId}`,
-      }).expect(200);
+      const on = await patch('top', `/municipalities/${stageMunicipalityId}`, { status: 'LIVE' }).expect(200);
+      expect(on.body.status).toBe('LIVE');
+      expect(on.body.activatedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const row = await prisma.municipality.findUniqueOrThrow({ where: { id: stageMunicipalityId } });
+      expect(row.activatedAt).not.toBeNull();
+      expect(row.activatedById).toBe(user.top);
+      expect(await prisma.auditLog.count({ where: { entityId: stageMunicipalityId, action: 'ACTIVATE' } })).toBe(1);
+
+      await patch('top', `/municipalities/${stageMunicipalityId}`, { status: 'PREPARING' }).expect(400);
+      await patch('top', `/municipalities/${stageMunicipalityId}`, { status: 'PREPARING', reason: 'P4B: switched off' }).expect(200);
+      expect(await prisma.auditLog.count({ where: { entityId: stageMunicipalityId, action: 'DEACTIVATE' } })).toBe(1);
+    });
+
+    it('the removed stage-date and typed-name fields are refused as unknown', async () => {
+      await patch('top', `/municipalities/${stageMunicipalityId}`, { awarenessStartDate: '2098-12-01' }).expect(400);
+      await patch('top', `/municipalities/${stageMunicipalityId}`, { confirmName: 'x', status: 'LIVE' }).expect(400);
     });
   });
 

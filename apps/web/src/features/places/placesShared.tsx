@@ -16,9 +16,8 @@ export interface MunicipalityLite {
   name: string;
   code: string | null;
   status: 'PREPARING' | 'LIVE';
-  stage?: 'GRACE' | 'AWARENESS' | 'CARD_REQUIRED';
-  awarenessStartDate?: string | null;
-  cardRequiredFromDate?: string | null;
+  // The calendar day (Tripoli) the activation switch was last turned on.
+  activatedOn?: string | null;
   archivedAt?: string | null;
   securityAuthority: { id: string; name: string } | null;
   stationCount?: number;

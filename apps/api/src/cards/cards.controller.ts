@@ -43,6 +43,15 @@ export class CardsController {
     return new StreamableFile(pdf);
   }
 
+  // The one-page setup card for the real printer: printed once, never counted.
+  @RequirePermission('cards:issue')
+  @Get('cards/printer-setup')
+  async printerSetup(@Res({ passthrough: true }) res: Response) {
+    const pdf = await this.cards.printerSetupCard();
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="printer-setup-card.pdf"' });
+    return new StreamableFile(pdf);
+  }
+
   // Not audited — scanning isn't a change.
   @RequirePermission('cards:scan')
   @Get('cards/scan/:cardNumber')

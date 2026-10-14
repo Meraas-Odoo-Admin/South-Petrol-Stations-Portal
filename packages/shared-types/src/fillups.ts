@@ -18,28 +18,14 @@ export type RuleFailureReason =
   | 'OWNER_WEEKLY_CAP_REACHED'
   | 'LITERS_PER_PERSON_CAP_REACHED';
 
-// Phase 4a: how a fill-up identified its vehicle. Set by the server only.
+// How a fill-up identified its vehicle. Set by the server only. Phase 6: new
+// fill-ups are CARD_SCAN or EMERGENCY_OVERRIDE; the typed values stay in the
+// union because older rows carry them.
 export type FillUpIdentification =
   | 'CARD_SCAN'
   | 'TYPED_REGISTERED'
   | 'TYPED_UNREGISTERED'
   | 'EMERGENCY_OVERRIDE';
-
-export type MunicipalityStage = 'GRACE' | 'AWARENESS' | 'CARD_REQUIRED';
-
-export interface RegistrationStationInfo {
-  id: string;
-  name: string;
-  address: string | null;
-  workingHours: string | null;
-  contactPhone: string | null;
-}
-
-// Shown on the success screen after a no-card-scan fill-up in the awareness stage.
-export interface AwarenessNotice {
-  cardRequiredFromDate: string;
-  registrationStations: RegistrationStationInfo[];
-}
 
 export interface CreateFillUpRequest {
   // One of vehicleId / cardNumber / plate identifies the vehicle (the server
@@ -47,7 +33,7 @@ export interface CreateFillUpRequest {
   vehicleId?: string;
   cardNumber?: string;
   plate?: string;
-  // Waives only the card requirement after the deadline. Needs the
+  // Waives only the card requirement. Needs the
   // fillups:emergency_override permission and a written reason.
   emergencyOverride?: boolean;
   overrideReason?: string;
@@ -135,11 +121,9 @@ export interface FillUpTransactionRaw {
   exception: FillUpExceptionRaw | null;
 }
 
-export type FillUpTransactionWithAwareness = FillUpTransactionRaw & { awareness: AwarenessNotice | null };
-
 export type CreateFillUpResult =
   | { allowed: false; reason: RuleFailureReason; trigger: RuleTriggerDetail | null; requiresException: true }
-  | FillUpTransactionWithAwareness;
+  | FillUpTransactionRaw;
 
 // GET /fillups/rule-preview?vehicleId=X&stationId=Y — round 7 item 1's pre-submit
 // rule-review breakdown. `actual: null` means there's no prior history to
@@ -169,8 +153,6 @@ export interface RulePreviewResponse {
   fuelMismatch?: boolean;
   identifiedBy: FillUpIdentification;
   registered: boolean;
-  stage: MunicipalityStage;
-  cardRequiredFromDate: string | null;
   vehicleId: string | null;
   plate: string | null;
 }

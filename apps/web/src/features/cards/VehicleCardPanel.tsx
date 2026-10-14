@@ -171,6 +171,11 @@ export function VehicleCardPanel({
                 إعادة طباعة البطاقة الحالية
               </PillButton>
             )}
+            {active && (
+              <p className="basis-full text-[13px] leading-[1.8] text-ink-soft lg:text-[12px]" data-testid="vehicle-card-print-instructions">
+                عند ظهور نافذة الطباعة: طابعة البطاقات، الحجم CR80، الاتجاه أفقي، المقياس 100%، الهوامش بلا.
+              </p>
+            )}
             {active && canCancel && !cancelling && (
               <PillButton size="sm" variant="danger" onClick={() => setCancelling(true)} data-testid="vehicle-card-cancel">
                 إلغاء البطاقة

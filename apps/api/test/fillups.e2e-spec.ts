@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -688,13 +689,19 @@ describe('Fill-ups (e2e)', () => {
         .expect(400);
     });
 
-    it('404s for a vehicleId that does not exist', async () => {
+    it('404s for a card that does not exist, and refuses a plain vehicleId with no card (CARD_REQUIRED)', async () => {
       const token = await loginAsRecorder();
       await request(app.getHttpServer())
         .get('/api/v1/fillups/rule-preview')
-        .query({ vehicleId: 'does-not-exist', stationId: stationA.id })
+        .query({ cardNumber: 'SBH-ZZZZZZZZ', stationId: stationA.id })
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
+      const bare = await request(app.getHttpServer())
+        .get('/api/v1/fillups/rule-preview')
+        .query({ vehicleId: 'does-not-exist', stationId: stationA.id })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(409);
+      expect(bare.body.message).toBe('CARD_REQUIRED');
     });
 
     it('returns every check with real numbers, matching what an actual submission would decide', async () => {

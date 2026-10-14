@@ -1,16 +1,17 @@
 import { PDFDocument } from 'pdf-lib';
 
-// ID-1 card, 53.98 × 85.60 mm, in PDF points (1 pt = 1/72 in).
-export const CARD_WIDTH_MM = 53.98;
-export const CARD_HEIGHT_MM = 85.6;
+// CR80 card (ISO 7810 ID-1), LANDSCAPE: 85.60 × 53.98 mm, in PDF points
+// (1 pt = 1/72 in).
+export const CARD_WIDTH_MM = 85.6;
+export const CARD_HEIGHT_MM = 53.98;
 const PT_PER_MM = 72 / 25.4;
 export const CARD_WIDTH_PT = CARD_WIDTH_MM * PT_PER_MM;
 export const CARD_HEIGHT_PT = CARD_HEIGHT_MM * PT_PER_MM;
 
 // Chromium quantizes the page it prints to whole device units, so the PDF
-// comes out ~54.02 × 85.68 mm even though the template asks for the exact
-// card size. Card-printer drivers can scale or refuse a page that isn't the
-// card, so every page is cut back to exactly 53.98 × 85.60 mm. Content is
+// comes out a few hundredths of a mm off even though the template asks for the
+// exact card size. Card-printer drivers can scale or refuse a page that isn't
+// the card, so every page is cut back to exactly 85.60 × 53.98 mm. Content is
 // anchored top-left; only the sub-0.1 mm overshoot at the right and bottom
 // edges is removed (the template carries a 1 px bleed there for this).
 export async function fitPdfToCard(pdf: Buffer): Promise<Buffer> {

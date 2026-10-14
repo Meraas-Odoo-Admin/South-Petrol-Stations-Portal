@@ -130,13 +130,15 @@ model Municipality {
   // at them. LIVE: in normal use. New rows start PREPARING; switching to
   // LIVE requires the municipality's security authority to exist first.
   status               MunicipalityStatus      @default(PREPARING)
-  // Registration pivot, phase 4a: the two optional calendar days that move a
-  // LIVE municipality through its stages (go-live itself is `status`). Both
-  // are calendar days in Africa/Tripoli — a stage begins at 00:00 Tripoli
-  // time on its date. No deadline = grace indefinitely. See
-  // common/utils/grace-stage.ts, the only place the stage is computed.
+  // Phase 6: no stages any more. These two were the awareness start and the card
+  // deadline; nothing reads or writes them now (kept: migrations never drop).
   awarenessStartDate   DateTime?               @db.Date
   cardRequiredFromDate DateTime?               @db.Date
+  // Phase 6: the activation switch. `status` says whether it is on; these say
+  // since when and who switched it. It gates nothing - it only marks when the
+  // municipality started working (reports start their range from it).
+  activatedAt          DateTime?
+  activatedById        String?
   // Exactly one per municipality (client-confirmed, OPEN_ITEMS.md #4) —
   // the authority overseeing every petrol station in it. Stations get
   // their authority from here, never picked per station.
@@ -257,6 +259,14 @@ model VehicleCard {
   printedOfficeName     String
   printedIssueDate      String // YYYY-MM-DD, Africa/Tripoli
   printedStationCode    String
+  // Phase 6: the single face also prints these. Null on a card issued before
+  // Phase 6 (the face then reads the vehicle's current values).
+  printedMakeModel      String?
+  printedColor          String?
+  printedYear           String?
+  printedFuel           String?
+  printedChassis        String?
+  printedBooklet        String?
   createdAt             DateTime               @default(now())
 
   @@index([vehicleId, issuedAt])

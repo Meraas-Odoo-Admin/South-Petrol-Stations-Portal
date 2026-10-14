@@ -237,7 +237,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
     expect(res.body.registeredById).toBe(registrarId);
   });
 
-  it('refuses registration out of scope (403), at closed / temporarily closed stations, and in a preparing municipality', async () => {
+  it('refuses registration out of scope (403) and at closed / temporarily closed stations; a not-activated municipality still registers', async () => {
     const vehicleAt = (registrationStationId: string) =>
       asRegistrar('post', '/vehicles', vehicleBody({ registrationStationId, ownerId, currentPlate: `7-${randomDigits(7)}` }));
 
@@ -249,15 +249,15 @@ describe('Registration stations — scoping boundary (e2e)', () => {
       expect(res.body.message).toBe('REGISTRATION_STATION_NOT_ACTIVE');
     }
 
+    // Phase 6: the activation switch gates nothing, registration included.
     const preparing = await vehicleAt(stations.preparing);
-    expect(preparing.status).toBe(409);
-    expect(preparing.body.message).toBe('MUNICIPALITY_NOT_LIVE');
+    expect(preparing.status).toBe(201);
 
     // Owners are refused the same way.
     const ownerAtClosed = await asRegistrar('post', '/owners', ownerBody(stations.closed));
     expect(ownerAtClosed.status).toBe(409);
 
-    expect(await prisma.vehicle.count({ where: { registeredById: registrarId } })).toBe(1);
+    expect(await prisma.vehicle.count({ where: { registeredById: registrarId } })).toBe(2);
   });
 
   it('requires a registration station on every registration', async () => {

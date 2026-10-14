@@ -48,13 +48,10 @@ export class FillUpsController {
       return { allowed: false, reason: result.reason, trigger: result.trigger, requiresException: true };
     }
 
-    // `awareness` is present only in the awareness stage, on a fill-up
-    // recorded without a card scan: the deadline and the registration
-    // stations the success screen shows the driver.
     if (result.status === 'existing') {
       res.status(200);
     }
-    return { ...result.transaction, awareness: result.awareness };
+    return result.transaction;
   }
 
   @RequirePermission('fillups:approve_exception')
