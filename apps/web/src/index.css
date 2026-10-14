@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Phase 6 (B1): every field has a visible edge (3:1 against what is next to it,
+   WCAG 1.4.11); until now most were a pale fill with no border, which vanished on a
+   weak screen. In @layer base so a screen can still set its own border with a
+   utility class. */
+@layer base {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='image']):not([type='hidden']),
+  select,
+  textarea {
+    border-width: 1px;
+    border-style: solid;
+    border-color: #6a7c79;
+  }
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    border-color: #cbd5d2;
+  }
+}
+
 /* iOS Safari zooms the whole page when a focused text field is set under 16px,
    which shifts the layout sideways and pushes the header out of view. On phone
    widths every text field is therefore at least 16px, whatever a screen's own
@@ -21,6 +40,6 @@
 
 body {
   font-family: 'Cairo', sans-serif;
-  background-color: #f7f5ef;
+  background-color: #e4ebe9;
   color: #132524;
 }

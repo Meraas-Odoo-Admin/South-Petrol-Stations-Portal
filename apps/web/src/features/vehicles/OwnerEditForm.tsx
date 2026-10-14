@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { checkArabicPersonName, checkInstitutionName, checkLibyanMobile } from '@fuel-tracking/shared-types';
+import { checkArabicPersonName, checkLibyanMobile } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { TextField } from '../../components/design/TextField';
@@ -10,7 +10,6 @@ interface OwnerEditFormProps {
   ownerId: string;
   fullName: string;
   phone: string | null;
-  isInstitution?: boolean;
   onDone: () => void;
 }
 
@@ -19,9 +18,8 @@ interface OwnerEditFormProps {
 // (identityType/identityNumber are the ones deliberately excluded, see
 // OwnerIdentityChangeRequestForm for the approval-gated side-channel).
 // Phase 5A: the name and the phone follow the same shared rules as at
-// registration - an Arabic person name (or an institution's name) and a
-// Libyan mobile number.
-export function OwnerEditForm({ ownerId, fullName, phone, isInstitution = false, onDone }: OwnerEditFormProps) {
+// registration - an Arabic person name and a Libyan mobile number.
+export function OwnerEditForm({ ownerId, fullName, phone, onDone }: OwnerEditFormProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(fullName);
   const [phoneValue, setPhoneValue] = useState(phone ?? '');
@@ -46,7 +44,7 @@ export function OwnerEditForm({ ownerId, fullName, phone, isInstitution = false,
   function save() {
     setFailed(false);
     const found: { name?: string; phone?: string } = {};
-    const n = isInstitution ? checkInstitutionName(name) : checkArabicPersonName(name, 'اسم المالك');
+    const n = checkArabicPersonName(name, 'اسم المالك');
     if (!n.ok) found.name = n.message;
     const p = checkLibyanMobile(phoneValue);
     if (!p.ok) found.phone = p.message;
@@ -56,7 +54,7 @@ export function OwnerEditForm({ ownerId, fullName, phone, isInstitution = false,
 
   return (
     <div className="space-y-4">
-      <TextField label={isInstitution ? 'اسم الجهة' : 'اسم المالك'} value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
+      <TextField label="اسم المالك" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
       <TextField
         label="رقم الهاتف"
         value={phoneValue}

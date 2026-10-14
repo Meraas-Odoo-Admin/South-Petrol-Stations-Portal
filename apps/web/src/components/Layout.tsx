@@ -7,8 +7,8 @@ import { roleLabel } from '../lib/labels';
 import { APP_NAME } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
-import { OnboardingTour } from './OnboardingTour';
 import { NAV_ACCESS, activeNavPath } from '../lib/navAccess';
+import { NetworkBanner } from './NetworkBanner';
 import { NotificationBell } from './NotificationBell';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
@@ -40,17 +40,6 @@ export function Layout() {
   const stationName = user?.stationScope[0]?.name;
   const roleName = user?.roles[0] ? roleLabel(user.roles[0]) : '';
 
-  const canApprove = hasPermission('fillups:approve_exception') || hasPermission('reports:view');
-  const violationsBadgeQuery = useQuery({
-    queryKey: ['nav', 'violations-pending-count'],
-    // A count limited to what the caller may see, with no station to choose:
-    // the list endpoint demands a station from scoped callers, so asking it
-    // for the badge was a 400 on every page for supervisors.
-    queryFn: async () => (await apiClient.get<{ total: number }>('/reports/violations/pending-count')).data.total,
-    enabled: canApprove,
-    staleTime: 60_000,
-  });
-
   const canSeeChangeRequests = hasPermission('vehicles:approve_change');
   const changeRequestsBadgeQuery = useQuery({
     queryKey: ['nav', 'change-requests-pending-count'],
@@ -71,13 +60,6 @@ export function Layout() {
     // bottom bar). Always shown. Who sees each destination below comes from
     // lib/navAccess.ts, the same list the home screen's cards read.
     { to: '/', label: 'الرئيسية', icon: <Icon d={ICONS.home} />, show: NAV_ACCESS.home() },
-    {
-      to: '/reports/dashboard',
-      label: 'لوحة المتابعة',
-      shortLabel: 'المتابعة',
-      icon: <Icon d={ICONS.dashboard} />,
-      show: NAV_ACCESS.dashboard(hasPermission),
-    },
     {
       to: '/fillups/new',
       label: 'تسجيل تعبئة',
@@ -102,11 +84,10 @@ export function Layout() {
     },
     {
       to: '/reports/violations',
-      label: 'المخالفات والاستثناءات',
-      shortLabel: 'المخالفات',
+      label: 'الاستثناءات',
+      shortLabel: 'الاستثناءات',
       icon: <Icon d={ICONS.violations} />,
       show: NAV_ACCESS.violations(hasPermission),
-      badge: violationsBadgeQuery.data,
     },
     {
       to: '/vehicles/change-requests',
@@ -132,6 +113,7 @@ export function Layout() {
     { to: '/my-station', label: 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
     { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
+    { to: '/lists', label: 'القوائم', icon: <Icon d={ICONS.reports} />, show: NAV_ACCESS.lists(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
   // One current item for the address, the same on the side menu, the phone bar
@@ -147,7 +129,7 @@ export function Layout() {
   // — see 5a), matching the earlier decision that search is not its own
   // destination.
   const mostUsed = navItems.filter((i) =>
-    ['/fillups/new', '/vehicles', '/reports/violations', '/reports/dashboard'].includes(i.to),
+    ['/fillups/new', '/vehicles', '/reports/violations', '/reports/daily'].includes(i.to),
   );
   // A registration employee has none of the fuel destinations, so their own
   // workspace takes a tab instead of leaving the bar with one item.
@@ -163,10 +145,10 @@ export function Layout() {
   // («تسجيل المركبات» was).
   const SHEET_GROUPS: Array<{ title: string; paths: string[] }> = [
     { title: '', paths: ['/'] },
-    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
+    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
     { title: 'محطتي ومكتبي', paths: ['/manage', '/my-station', '/my-office'] },
-    { title: 'الإدارة', paths: ['/admin'] },
+    { title: 'الإدارة', paths: ['/lists', '/admin'] },
   ];
   const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));
   const sheetGroups = [
@@ -189,7 +171,7 @@ export function Layout() {
           to the main-axis end (the physical LEFT) instead — confirmed via
           a Playwright bounding-box measurement in the round-2 verification
           pass, not something a glance at the source would catch. */}
-      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-surface-alt bg-surface lg:flex">
+      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-line-soft bg-surface lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-6">
           <BrandMark size={34} />
           <div>
@@ -223,7 +205,7 @@ export function Layout() {
             name/role) with two proper icon buttons underneath, matching
             the same rounded-full/hover-tint vocabulary the nav items and
             PillButton already use elsewhere, not a new pattern. */}
-        <div className="border-t border-surface-alt p-3">
+        <div className="border-t border-line-soft p-3">
           <div className="flex items-center gap-2.5 rounded-lg bg-surface-alt/70 p-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[13px] lg:text-[12px] font-extrabold text-primary">
               {(user?.fullName ?? '').trim().slice(0, 2)}
@@ -257,7 +239,7 @@ export function Layout() {
       </aside>
 
       {/* Mobile top bar — hidden at lg+ */}
-      <header className="sticky top-0 z-30 flex items-center gap-2.5 border-b border-surface-alt bg-surface px-3.5 py-2.5 shadow-sm lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-2.5 border-b border-line-soft bg-surface px-3.5 py-2.5 shadow-sm lg:hidden">
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
@@ -298,6 +280,7 @@ export function Layout() {
         <div className="mb-4 hidden justify-end lg:flex">
           <NotificationBell align="start" />
         </div>
+        <NetworkBanner />
         <Outlet />
       </main>
 
@@ -306,7 +289,7 @@ export function Layout() {
           (env(safe-area-inset-bottom), which needs viewport-fit=cover). */}
       <nav
         aria-label="التنقل السريع"
-        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-surface-alt bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line-soft bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
         style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {bottomBarItems.map((item) => (
@@ -376,7 +359,7 @@ export function Layout() {
               <NavGroup key={group.title || 'home'} title={group.title} items={group.items} activeTo={activeTo} onNavigate={setSheetOpen} />
             ))}
 
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-surface-alt pt-3">
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line-soft pt-3">
               <NavLink
                 to="/change-password"
                 onClick={() => setSheetOpen(false)}
@@ -398,7 +381,6 @@ export function Layout() {
         </div>
       )}
 
-      <OnboardingTour />
     </div>
   );
 }

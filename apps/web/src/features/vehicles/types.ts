@@ -32,9 +32,6 @@ export interface VehicleBasicInfo {
     id: string;
     fullName: string;
     identityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE' | 'INSTITUTION';
-    ownerKind?: 'INDIVIDUAL' | 'INSTITUTION';
-    responsibleDriverName?: string | null;
-    responsibleDriverPhone?: string | null;
     identityNumber: string;
     // Round 20: required for new owners — still nullable in the type since
     // owners created before that round have none.

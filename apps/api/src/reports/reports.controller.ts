@@ -65,13 +65,6 @@ export class ReportsController {
     return this.reports.getViolations(query, actor.id);
   }
 
-  // Declared before the export route; a fixed path, so it is never read as an id.
-  @RequirePermission('reports:view')
-  @Get('violations/pending-count')
-  countPendingViolations(@CurrentUser() actor: AuthenticatedUser) {
-    return this.reports.countPendingViolations(actor.id);
-  }
-
   @RequirePermission('reports:view')
   @Get('violations/export')
   async exportViolations(

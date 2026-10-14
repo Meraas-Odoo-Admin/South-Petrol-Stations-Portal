@@ -1,21 +1,18 @@
 import type { FillUpHistoryEntry } from '@fuel-tracking/shared-types';
 import { StatusPill } from './design/StatusPill';
 
-// Round 4 feedback (driver/vehicle detail mockups): a fill-up history row
-// needs one of three distinct statuses, not a bare "exception: yes/no" —
-// a standing-exception-covered row reads differently from a one-time
-// submitted exception (approved or still pending), which reads differently
-// again from a fully compliant row.
+// What a recorded fill-up reads as: compliant, an exception (Phase 6: no
+// approval step; older rows that were approved or covered by a standing
+// exception read as exceptions too), and «بدون بطاقة» beside either.
 export function FillUpStatusPill({ row }: { row: FillUpHistoryEntry }) {
-  if (row.standingExceptionId) {
-    return <StatusPill variant="accent">استثناء مستمر</StatusPill>;
-  }
-  if (row.isException) {
-    return row.exception?.approvedById ? (
-      <StatusPill variant="ok">استثناء معتمد</StatusPill>
-    ) : (
-      <StatusPill variant="accent">بانتظار الاعتماد</StatusPill>
-    );
-  }
-  return <StatusPill variant="ok">مطابق للقواعد</StatusPill>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {row.isException ? (
+        <StatusPill variant="accent">استثناء</StatusPill>
+      ) : (
+        <StatusPill variant="ok">مطابق للقواعد</StatusPill>
+      )}
+      {row.identifiedBy === 'NO_CARD' && <StatusPill variant="neutral">بدون بطاقة</StatusPill>}
+    </span>
+  );
 }

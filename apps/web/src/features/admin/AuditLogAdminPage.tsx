@@ -86,7 +86,7 @@ export function AuditLogAdminPage() {
                 ? Object.keys(row.newValue as Record<string, unknown>)
                 : [];
             return (
-              <div key={row.id} className="flex gap-3.5 border-b border-surface-alt px-[18px] py-3 last:border-0">
+              <div key={row.id} className="flex gap-3.5 border-b border-line-soft px-[18px] py-3 last:border-0">
                 <div className="w-24 shrink-0 pt-0.5">
                   <LtrText>
                     <span className="font-mono text-[13px] lg:text-[12px] font-semibold text-ink-faint">

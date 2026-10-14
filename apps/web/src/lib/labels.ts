@@ -35,7 +35,6 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'companies:update': 'تعديل الشركات وأرشفتها',
   'municipalities:read': 'عرض البلديات',
   'municipalities:manage': 'إدارة البلديات',
-  'municipalities:set_stage_dates': 'تحديد تاريخي التوعية واشتراط البطاقة للبلدية',
   'routes:read': 'عرض خطوط السير',
   'routes:manage': 'إدارة خطوط السير',
   'security_authorities:read': 'عرض الجهات الأمنية',
@@ -48,7 +47,6 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'cards:scan': 'مسح بطاقة المركبة عند التعبئة',
   'stations:read': 'عرض المحطات',
   'stations:manage': 'إدارة المحطات',
-  'stations:view_preparing': 'عرض محطات البلديات قيد الإعداد',
   'users:manage': 'إدارة الحسابات',
   'users:manage_staff': 'إدارة حسابات موظفي محطتك أو مكتبك',
   'users:manage_system_admins': 'إدارة حسابات مديري المنظومة',
@@ -69,13 +67,9 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'fillups:create': 'تسجيل تعبئة',
   'fillups:update': 'تعديل تعبئة (غير مفعّلة حاليًا)',
   'fillups:record_exception': 'تسجيل تعبئة كاستثناء دون موافقة',
-  'fillups:emergency_override': 'تفويض طارئ لتعبئة بدون بطاقة',
-  'registration_sheet:print': 'طباعة قائمة مكاتب التسجيل',
-  'fillups:approve_exception': 'اعتماد استثناء تعبئة',
   'settings:manage': 'إدارة إعدادات المنظومة',
   'audit:view': 'عرض سجل التغييرات',
   'exception_types:manage': 'إدارة أنواع الاستثناءات',
-  'standing_exceptions:manage': 'منح/سحب استثناء مستمر',
 };
 
 export function permissionLabel(key: string): string {
@@ -228,10 +222,6 @@ export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description:
     label: 'حدّ تنبيه انخفاض الوقود',
     description:
       'عندما ينزل أي نوع وقود في محطة تحت هذا العدد من اللترات يُنبَّه مشرف المحطة ومدير البلدية، مرة عند الانخفاض ومرة أخرى بعد إعادة التعبئة وانخفاضه من جديد.',
-  },
-  'cards.low_blank_threshold': {
-    label: 'حدّ تنبيه نقص البطاقات الفارغة',
-    description: 'عندما ينزل المتوقع من البطاقات الفارغة في مكتب تحت هذا العدد يُنبَّه مدير المكتب. رقم مؤقت حتى يحدد العميل الرقم.',
   },
   'fillup.max_liters_per_week_per_owner': {
     label: 'الحد الأسبوعي للترات مالك المركبة',

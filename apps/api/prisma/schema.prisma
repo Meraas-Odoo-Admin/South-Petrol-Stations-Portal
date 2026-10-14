@@ -130,13 +130,16 @@ model Municipality {
   // at them. LIVE: in normal use. New rows start PREPARING; switching to
   // LIVE requires the municipality's security authority to exist first.
   status               MunicipalityStatus      @default(PREPARING)
-  // Registration pivot, phase 4a: the two optional calendar days that move a
-  // LIVE municipality through its stages (go-live itself is `status`). Both
-  // are calendar days in Africa/Tripoli — a stage begins at 00:00 Tripoli
-  // time on its date. No deadline = grace indefinitely. See
-  // common/utils/grace-stage.ts, the only place the stage is computed.
+  // Phase 6: no stages any more. These two were the awareness start and the card
+  // deadline; nothing reads or writes them now (kept: migrations never drop).
   awarenessStartDate   DateTime?               @db.Date
   cardRequiredFromDate DateTime?               @db.Date
+  // Phase 6: the activation switch. `status` says whether it is on; these say
+  // since when and who switched it. It gates nothing - it only marks when the
+  // municipality started working (reports start their range from it).
+  activatedAt          DateTime?
+  activatedById        String?
+  settings             MunicipalitySetting[]
   // Exactly one per municipality (client-confirmed, OPEN_ITEMS.md #4) —
   // the authority overseeing every petrol station in it. Stations get
   // their authority from here, never picked per station.
@@ -257,6 +260,14 @@ model VehicleCard {
   printedOfficeName     String
   printedIssueDate      String // YYYY-MM-DD, Africa/Tripoli
   printedStationCode    String
+  // Phase 6: the single face also prints these. Null on a card issued before
+  // Phase 6 (the face then reads the vehicle's current values).
+  printedMakeModel      String?
+  printedColor          String?
+  printedYear           String?
+  printedFuel           String?
+  printedChassis        String?
+  printedBooklet        String?
   createdAt             DateTime               @default(now())
 
   @@index([vehicleId, issuedAt])
@@ -892,6 +903,9 @@ model FillUpTransaction {
   // Written reason of a supervisor's emergency override (the card
   // requirement waived at the deadline). Null otherwise.
   overrideReason      String?
+  // Phase 6: why the card could not be used, set with identifiedBy NO_CARD:
+  // CARD_DAMAGED | CAMERA_NOT_WORKING | CARD_NOT_FOUND.
+  noCardReason        String?
   // Phase 5A: the fuel poured does not match the vehicle's own fuel type. A
   // warning, never a block - recorded so supervisors can see mismatches in
   // reports. false for unregistered plates and vehicles with no fuel type.
@@ -956,7 +970,8 @@ enum FillUpIdentification {
   CARD_SCAN // scanned the vehicle's card
   TYPED_REGISTERED // typed plate of a registered vehicle
   TYPED_UNREGISTERED // typed plate, no registered vehicle (grace / awareness)
-  EMERGENCY_OVERRIDE // supervisor waived the card requirement after the deadline
+  EMERGENCY_OVERRIDE // supervisor waived the card requirement after the deadline (no longer written, Phase 6)
+  NO_CARD // Phase 6: a registered vehicle found by search because its card could not be used; noCardReason says why
 }
 
 // Interim design, NOT from the original client questionnaire — flagged to
@@ -1002,6 +1017,13 @@ model ExceptionType {
   name          String
   requiresProof Boolean     @default(true)
   isActive      Boolean     @default(true)
+  // Phase 6: the rule(s) this type may override (RuleFailureReason values); empty = any rule.
+  overridableRules String[] @default([])
+  // Phase 6: how many times it can be used at ONE station in one Tripoli day. Null = no limit.
+  dailyLimitPerStation Int?
+  // Phase 6: null = offered everywhere (managed by the super admin); set = this
+  // municipality only (managed by its manager).
+  municipalityId String?
   exceptions    Exception[]
 }
 
@@ -1027,6 +1049,35 @@ model Exception {
   // before this field existed.
   triggerReason String? // a RuleFailureReason value, e.g. "DRIVER_GAP_TOO_SHORT"
   triggerDetail Json? // { vehicleInternalCode, vehicleCurrentPlate, occurredAt } of the specific prior fill-up that triggered it
+  // Phase 6: this use went past the type's daily limit at the station (flagged).
+  overLimit Boolean @default(false)
+}
+
+// Phase 6: per-municipality override of an exception setting (the global value
+// lives in SystemSetting). key: exceptions.strict_limit | exceptions.station_daily_threshold.
+model MunicipalitySetting {
+  id             String       @id @default(cuid())
+  municipalityId String
+  municipality   Municipality @relation(fields: [municipalityId], references: [id])
+  key            String
+  value          String
+  updatedById    String?
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([municipalityId, key])
+}
+
+// Phase 6: one row per flag raised for a station in a Tripoli day, so a flag
+// notification goes out once per type per station per day, not once per use.
+model ExceptionFlag {
+  id              String   @id @default(cuid())
+  stationId       String
+  day             DateTime @db.Date
+  kind            String // TYPE_OVER_LIMIT | STATION_THRESHOLD
+  exceptionTypeId String   @default("")
+  createdAt       DateTime @default(now())
+
+  @@unique([stationId, day, kind, exceptionTypeId])
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────

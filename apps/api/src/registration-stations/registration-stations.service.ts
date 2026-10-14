@@ -285,25 +285,13 @@ export class RegistrationStationsService {
     });
   }
 
-  // The registration stations a driver can actually go to right now, in one
-  // municipality: status ACTIVE, in a LIVE municipality. Used by the pump's
-  // refusal and awareness messages and by the posted A4 sheet, always read
-  // live — a station that opens or closes is right on the next call.
-  async listActiveForMunicipality(municipalityId: string) {
-    return this.prisma.registrationStation.findMany({
-      where: { municipalityId, status: 'ACTIVE', archivedAt: null, municipality: { status: 'LIVE', archivedAt: null } },
-      select: { id: true, name: true, address: true, workingHours: true, contactPhone: true },
-      orderBy: { name: 'asc' },
-    });
-  }
-
   // Every registration action (VehiclesService.create, OwnersService.create)
   // runs through this before writing anything. Refusals use machine-
   // checkable markers the registration screen maps to Arabic (same
   // convention as Phase 1's STATION_HAS_NO_MUNICIPALITY/MUNICIPALITY_NOT_LIVE):
   //  - 403: the station is outside the actor's registration-station scope;
-  //  - REGISTRATION_STATION_NOT_ACTIVE: closed or temporarily closed;
-  //  - MUNICIPALITY_NOT_LIVE: its municipality is still PREPARING.
+  //  - REGISTRATION_STATION_NOT_ACTIVE: closed or temporarily closed.
+  // (The municipality's activation switch gates nothing since Phase 6.)
   async assertCanRegisterAt(registrationStationId: string, actorId: string) {
     const scope = await this.rbac.getRegistrationStationScope(actorId);
     if (scope !== null && !scope.includes(registrationStationId)) {
@@ -324,9 +312,6 @@ export class RegistrationStationsService {
     }
     if (station.status !== 'ACTIVE') {
       throw new ConflictException('REGISTRATION_STATION_NOT_ACTIVE');
-    }
-    if (station.municipality.status !== 'LIVE') {
-      throw new ConflictException('MUNICIPALITY_NOT_LIVE');
     }
     return station;
   }

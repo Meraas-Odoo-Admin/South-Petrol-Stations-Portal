@@ -11,22 +11,15 @@ const fixtures = loadFixtures();
 // suite genuinely hit 429s from its own login volume, which manifested as
 // "stuck on /login" failures with no obvious cause from the UI alone).
 
-test('supervisor session: no dashboard link, sees own station daily report (masked owner identity), and can export it', async ({
+test('supervisor session: no directorate section, sees own station day screen (masked owner identity), and can export it', async ({
   page,
 }) => {
   await loginAs(page, fixtures.supervisorUsername, fixtures.supervisorPassword);
 
-  // Nav: station_supervisor holds reports:view but NOT
-  // reports:view_all_stations — dashboard link must not render at all
-  // (hide, don't disable — docs/IMPLEMENTATION_PLAN.md §9).
+  // Nav: the day screen and the exceptions page; the dashboard is gone.
   await expect(page.getByRole('link', { name: 'لوحة المتابعة' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'التقرير اليومي' })).toBeVisible();
-  // Scoped to the sidebar specifically — HomePage's own quick-link card
-  // ("المخالفات الحالات التي تحتاج قرارك") shares the same substring, and
-  // the sidebar's full label ("المخالفات والاستثناءات") isn't an exact
-  // match either, so neither a bare substring nor exact:true disambiguates
-  // on its own here.
-  await expect(page.locator('aside').getByRole('link', { name: 'المخالفات' })).toBeVisible();
+  await expect(page.locator('aside').getByRole('link', { name: 'اليوم' })).toBeVisible();
+  await expect(page.locator('aside').getByRole('link', { name: 'الاستثناءات' })).toBeVisible();
 
   // Masking: §8's rule, operationalized as reports:view_all_stations —
   // supervisor1 lacks it, so only the last 4 digits render. Round 6: the
@@ -57,11 +50,12 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   await expect(stationSelect.locator('option:checked')).toHaveText(
     new RegExp(fixtures.stationInternalCode),
   );
+  // One export pattern: a CSV button (and a PDF one, since a day is worth printing).
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'تصدير Excel' }).click(),
+    page.getByTestId('daily-export-csv').click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
+  expect(download.suggestedFilename()).toMatch(/\.csv$/);
   expect(await download.path()).toBeTruthy();
 
   // Round 7 item 3: owner-search filter — searching by the owner's ID
@@ -72,15 +66,13 @@ test('supervisor session: no dashboard link, sees own station daily report (mask
   await expect(page.locator('tbody tr').first()).toContainText(fixtures.ownerFullName);
 });
 
-test('directorate_admin session: dashboard link visible, and the same owner\'s identityNumber renders unmasked', async ({
+test('directorate_admin session: the directorate section is on the day screen, and the same owner\'s identityNumber renders unmasked', async ({
   page,
 }) => {
   await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
 
-  // exact: true — HomePage's own quick-link card carries the same heading
-  // plus a hint line as its accessible name ("لوحة المتابعة نظرة عامة على
-  // المحطات"), otherwise ambiguous alongside the sidebar's exact-text link.
-  await expect(page.getByRole('link', { name: 'لوحة المتابعة', exact: true })).toBeVisible();
+  await navigateInApp(page, '/reports/daily');
+  await expect(page.getByTestId('directorate-overview')).toBeVisible();
 
   await navigateInApp(page, `/vehicles/${fixtures.vehicleId}`);
   await expect(page.getByTestId('vehicle-owner-identity-number')).toHaveText(fixtures.ownerIdentityNumber);

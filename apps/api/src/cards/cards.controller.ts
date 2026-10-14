@@ -1,11 +1,10 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Res, StreamableFile } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CardsService } from './cards.service';
 import { IssueCardDto } from './dto/issue-card.dto';
 import { PrintCardDto, PrintLocationDto } from './dto/print-card.dto';
 import { CancelCardDto } from './dto/cancel-card.dto';
-import { TestCardQueryDto } from './dto/test-card-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
@@ -31,15 +30,12 @@ export class CardsController {
   }
 
   // Static paths before ':id' ones.
+  // The one-page setup card for the real printer: printed once, never counted.
   @RequirePermission('cards:issue')
-  @Get('cards/test-card')
-  async testCard(
-    @Query() query: TestCardQueryDto,
-    @CurrentUser() actor: AuthenticatedUser,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const pdf = await this.cards.testCard(query.registrationStationId, query.deskId, actor.id);
-    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="test-card.pdf"' });
+  @Get('cards/printer-setup')
+  async printerSetup(@Res({ passthrough: true }) res: Response) {
+    const pdf = await this.cards.printerSetupCard();
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="printer-setup-card.pdf"' });
     return new StreamableFile(pdf);
   }
 

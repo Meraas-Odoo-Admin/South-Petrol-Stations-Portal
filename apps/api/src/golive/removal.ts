@@ -269,6 +269,7 @@ function steps(plan: Plan): Step[] {
     },
     { table: 'StationFuelStorage', where: { OR: [{ stationId: { in: stationIds } }, { createdById: { in: userIds } }] } },
     { table: 'StationFuelAvailability', where: { stationId: { in: stationIds } } },
+    { table: 'ExceptionFlag', where: { stationId: { in: stationIds } } },
     { table: 'UserStationScope', where: { OR: [{ stationId: { in: stationIds } }, { userId: { in: userIds } }] } },
     { table: 'Station', where: { id: { in: stationIds } } },
     {
@@ -278,6 +279,7 @@ function steps(plan: Plan): Step[] {
     { table: 'RegistrationDesk', where: { id: { in: deskIds } } },
     { table: 'RegistrationStation', where: { id: { in: officeIds } } },
     { table: 'UserMunicipalityScope', where: { OR: [{ municipalityId: { in: municipalityIds } }, { userId: { in: userIds } }] } },
+    { table: 'MunicipalitySetting', where: { municipalityId: { in: municipalityIds } } },
     { table: 'SecurityAuthority', where: { municipalityId: { in: municipalityIds } } },
     { table: 'Municipality', where: { id: { in: municipalityIds } } },
     { table: 'Company', where: { id: { in: plan.companyIds } } },

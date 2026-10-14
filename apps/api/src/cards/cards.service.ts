@@ -51,9 +51,30 @@ const CARD_INCLUDE = {
   cancelledBy: { select: { id: true, fullName: true } },
 } as const;
 
-type CardWithVehicle = VehicleCard & {
-  vehicle: { currentPlate: string; make: string | null; model: string | null; color: string | null };
+type CardVehicle = {
+  currentPlate: string;
+  make: string | null;
+  model: string | null;
+  color: string | null;
+  manufactureYear: number | null;
+  fuelType: 'PETROL' | 'DIESEL' | null;
+  chassisNumber: string | null;
+  registrationBooklet: string | null;
 };
+type CardWithVehicle = VehicleCard & { vehicle: CardVehicle };
+
+const CARD_VEHICLE_SELECT = {
+  currentPlate: true,
+  make: true,
+  model: true,
+  color: true,
+  manufactureYear: true,
+  fuelType: true,
+  chassisNumber: true,
+  registrationBooklet: true,
+} as const;
+
+const FUEL_AR: Record<string, string> = { PETROL: 'بنزين', DIESEL: 'ديزل' };
 
 // Registration pivot, phase 3 (plan §6): the printed vehicle card.
 //  - Only registration roles, at a registration station they're scoped to
@@ -77,7 +98,17 @@ export class CardsService {
   ) {}
 
   private needsReissue(card: CardWithVehicle): boolean {
-    return card.printedPlate !== card.vehicle.currentPlate || card.printedVehicleLine !== vehicleLineOf(card.vehicle);
+    const v = card.vehicle;
+    if (card.printedPlate !== v.currentPlate || card.printedVehicleLine !== vehicleLineOf(v)) return true;
+    // Phase 6: the face also prints year, chassis and booklet. A card issued
+    // before that has no snapshot of them and is not flagged for these.
+    const same = (printed: string | null, current: string | null | undefined) =>
+      printed === null || printed === (current ?? '');
+    return !(
+      same(card.printedYear, v.manufactureYear ? String(v.manufactureYear) : '') &&
+      same(card.printedChassis, v.chassisNumber?.trim()) &&
+      same(card.printedBooklet, v.registrationBooklet?.trim())
+    );
   }
 
   private present(card: CardWithVehicle & Record<string, unknown>) {
@@ -92,7 +123,7 @@ export class CardsService {
     }
     const cards = await this.prisma.vehicleCard.findMany({
       where: { vehicleId },
-      include: { ...CARD_INCLUDE, vehicle: { select: { currentPlate: true, make: true, model: true, color: true } } },
+      include: { ...CARD_INCLUDE, vehicle: { select: CARD_VEHICLE_SELECT } },
       orderBy: { issuedAt: 'desc' },
     });
     return cards.map((card) => this.present(card));
@@ -101,7 +132,7 @@ export class CardsService {
   private async findCard(id: string) {
     const card = await this.prisma.vehicleCard.findUnique({
       where: { id },
-      include: { ...CARD_INCLUDE, vehicle: { select: { currentPlate: true, make: true, model: true, color: true } } },
+      include: { ...CARD_INCLUDE, vehicle: { select: CARD_VEHICLE_SELECT } },
     });
     if (!card) {
       throw new NotFoundException('Card not found.');
@@ -190,6 +221,12 @@ export class CardsService {
       printedOfficeName: station.municipality.securityAuthority.name,
       printedIssueDate: libyaDate(issuedAt),
       printedStationCode: station.internalCode,
+      printedMakeModel: [vehicle.make?.trim(), vehicle.model?.trim()].filter(Boolean).join(' ') || null,
+      printedColor: vehicle.color?.trim() || null,
+      printedYear: vehicle.manufactureYear ? String(vehicle.manufactureYear) : null,
+      printedFuel: vehicle.fuelType ? (FUEL_AR[vehicle.fuelType] ?? null) : null,
+      printedChassis: vehicle.chassisNumber?.trim() || null,
+      printedBooklet: vehicle.registrationBooklet?.trim() || null,
     };
 
     // Random card numbers (31^8 ≈ 8.5e11 per municipality): a clash is
@@ -354,11 +391,20 @@ export class CardsService {
     return this.present(await this.findCard(card.id));
   }
 
-  private faceData(card: VehicleCard) {
+  // What the single face prints: the card's own snapshot; a card issued before
+  // Phase 6 has no snapshot of the extra details and reads the vehicle's
+  // current ones.
+  private faceData(card: CardWithVehicle) {
+    const v = card.vehicle;
     return {
       cardNumber: card.cardNumber,
       plate: card.printedPlate,
-      vehicleLine: card.printedVehicleLine,
+      makeModel: card.printedMakeModel ?? ([v.make?.trim(), v.model?.trim()].filter(Boolean).join(' ') || card.printedVehicleLine),
+      color: card.printedColor ?? v.color?.trim() ?? '',
+      year: card.printedYear ?? (v.manufactureYear ? String(v.manufactureYear) : ''),
+      fuel: card.printedFuel ?? (v.fuelType ? (FUEL_AR[v.fuelType] ?? '') : ''),
+      chassis: card.printedChassis ?? v.chassisNumber?.trim() ?? '',
+      booklet: card.printedBooklet ?? v.registrationBooklet?.trim() ?? '',
       officeName: card.printedOfficeName,
       issueDate: card.printedIssueDate,
       stationCode: card.printedStationCode,
@@ -380,7 +426,7 @@ export class CardsService {
     }
     const pdf = await this.renderer.renderCardPdf(this.faceData(card), mode);
     // Every print uses up one blank card, so each is recorded (CardPrint) next
-    // to its audit row: the stock reconciliation counts these.
+    // to its audit row (the per-card print history and the reprint reports).
     await this.prisma.$transaction(async (tx) => {
       await tx.cardPrint.create({
         data: {
@@ -416,43 +462,9 @@ export class CardsService {
     return this.renderer.renderCardPreviewPng(this.faceData(card));
   }
 
-  // A test card (desk set-up, a ribbon change) also uses up a blank, so printing
-  // one is recorded against the desk, like a card print, and counted by the
-  // stock reconciliation. It is recorded when the PDF is produced, the same
-  // moment a card print is: the system cannot see the printer itself.
-  async testCard(registrationStationId: string, deskId: string, actorId: string): Promise<Buffer> {
-    const scope = await this.rbac.getRegistrationStationScope(actorId);
-    if (scope !== null && !scope.includes(registrationStationId)) {
-      throw new ForbiddenException('You do not have access to this registration station.');
-    }
-    const station = await this.prisma.registrationStation.findUnique({
-      where: { id: registrationStationId },
-      include: { municipality: { include: { securityAuthority: true } } },
-    });
-    if (!station) {
-      throw new NotFoundException('Registration station not found.');
-    }
-    const desk = await this.prisma.registrationDesk.findUnique({ where: { id: deskId } });
-    if (!desk || desk.registrationStationId !== registrationStationId) {
-      throw new NotFoundException('DESK_NOT_AT_THIS_STATION');
-    }
-    const pdf = await this.renderer.renderTestCardPdf(station.municipality.securityAuthority?.name ?? station.municipality.name);
-    await this.prisma.$transaction(async (tx) => {
-      const print = await tx.cardPrint.create({
-        data: { registrationStationId, deskId, kind: 'TEST', cardId: null, printedById: actorId },
-      });
-      await this.audit.log(
-        {
-          userId: actorId,
-          action: 'PRINT_TEST_CARD',
-          entityType: 'RegistrationDesk',
-          entityId: deskId,
-          newValue: { registrationStationId, cardPrintId: print.id },
-        },
-        tx,
-      );
-    });
-    return pdf;
+  // The one-page printer setup card: printed once on the real printer.
+  printerSetupCard(): Promise<Buffer> {
+    return this.renderer.renderPrinterSetupPdf();
   }
 
   // The pump-side lookup (cards:scan). Returns codes the fill-up screen
@@ -480,6 +492,9 @@ export class CardsService {
             model: true,
             color: true,
             fuelType: true,
+            manufactureYear: true,
+            chassisNumber: true,
+            registrationBooklet: true,
             vehicleType: { select: { name: true } },
           },
         },

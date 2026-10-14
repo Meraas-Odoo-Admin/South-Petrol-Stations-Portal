@@ -271,7 +271,7 @@ export function PlacesList({ municipalityId, emptyHint }: { municipalityId: stri
                 {rows.map((r) => {
                   const st = placeStatus(r);
                   return (
-                    <tr key={`${r.kind}-${r.id}`} className="border-b border-surface-alt last:border-0 hover:bg-surface-alt/60">
+                    <tr key={`${r.kind}-${r.id}`} className="border-b border-line-soft last:border-0 hover:bg-surface-alt/60">
                       <td className="px-[18px] py-3">
                         <Link
                           to={placeLink(r)}
@@ -298,7 +298,7 @@ export function PlacesList({ municipalityId, emptyHint }: { municipalityId: stri
             </table>
           </div>
 
-          <ul className="divide-y divide-surface-alt lg:hidden">
+          <ul className="divide-y divide-line-soft lg:hidden">
             {rows.map((r) => {
               const st = placeStatus(r);
               return (

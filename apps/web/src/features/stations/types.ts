@@ -23,9 +23,6 @@ export interface MunicipalityRef extends LookupRef {
   securityAuthority: LookupRef | null;
   // Phase 4a: optional Africa/Tripoli calendar days (YYYY-MM-DD) and the
   // stage the server computed from them.
-  awarenessStartDate?: string | null;
-  cardRequiredFromDate?: string | null;
-  stage?: 'GRACE' | 'AWARENESS' | 'CARD_REQUIRED';
 }
 
 export interface StationFuelAvailabilityRow {

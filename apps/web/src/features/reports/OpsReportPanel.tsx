@@ -99,7 +99,8 @@ export function OpsReportPanel({
   const { skip, setSkip } = usePageParam(PAGE);
 
   const params: Record<string, string | undefined> = {
-    ...(HAS_RANGE[report] ? range : {}),
+    // No range in the address yet: the server picks it (from the activation day).
+    ...(HAS_RANGE[report] && searchParams.get('from') ? range : {}),
     municipalityId: fixedMunicipalityId ?? (municipalityId || undefined),
     stationId: fixedStationId ?? (stationId || undefined),
     officeId: fixedOfficeId,
@@ -119,6 +120,7 @@ export function OpsReportPanel({
     refetchOnMount: 'always',
   });
   const data = query.data;
+  const shownRange = searchParams.get('from') ? range : (data?.range ?? range);
 
   // The people the report can be narrowed to: the complete list from the
   // server, so choosing one does not remove the others.
@@ -136,7 +138,7 @@ export function OpsReportPanel({
     <div>
       {HAS_RANGE[report] ? (
         <RangeBar
-          range={range}
+          range={shownRange}
           onChange={setRange}
           extra={
             <>
@@ -208,8 +210,8 @@ export function OpsReportPanel({
               {report === 'office' && (
                 <PdfButton
                   path="/reports/registration/offices/export"
-                  params={{ from: range.from, to: range.to, officeId: fixedOfficeId ?? (params.officeId || undefined) }}
-                  filename={`registration-office_${range.from}_${range.to}.pdf`}
+                  params={{ from: shownRange.from, to: shownRange.to, officeId: fixedOfficeId ?? (params.officeId || undefined) }}
+                  filename={`registration-office_${shownRange.from}_${shownRange.to}.pdf`}
                 />
               )}
             </div>

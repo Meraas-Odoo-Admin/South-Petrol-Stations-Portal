@@ -174,7 +174,7 @@ export function PeopleTab({
               </thead>
               <tbody>
                 {rows.map((p) => (
-                  <tr key={p.id} className="border-b border-surface-alt last:border-0 hover:bg-surface-alt/60">
+                  <tr key={p.id} className="border-b border-line-soft last:border-0 hover:bg-surface-alt/60">
                     <td className="px-[18px] py-3">
                       <Link to={personLink(p.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                         {p.fullName}
@@ -189,7 +189,7 @@ export function PeopleTab({
               </tbody>
             </table>
           </div>
-          <ul className="divide-y divide-surface-alt lg:hidden">
+          <ul className="divide-y divide-line-soft lg:hidden">
             {rows.map((p) => (
               <li key={p.id}>
                 <Link to={personLink(p.id)} className="block min-h-[72px] px-4 py-3.5 hover:bg-surface-alt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
@@ -254,7 +254,7 @@ export function ActivityTab({ municipalityId }: { municipalityId: string }) {
         <p className="px-4 pb-6 text-[15px] text-ink-soft lg:text-[13px]">لا توجد تغييرات مسجّلة بعد.</p>
       )}
       {rows.length > 0 && (
-        <ul className="divide-y divide-surface-alt border-t border-surface-alt">
+        <ul className="divide-y divide-line-soft border-t border-line-soft">
           {rows.map((a) => (
             <li key={a.id} className="px-4 py-3 lg:px-[18px]">
               <p className="text-[16px] font-bold text-ink lg:text-[14px]">

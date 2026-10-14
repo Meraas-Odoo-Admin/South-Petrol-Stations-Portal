@@ -8,7 +8,6 @@ export type HasPermission = (permission: string) => boolean;
 
 export const NAV_ACCESS = {
   home: () => true,
-  dashboard: (has: HasPermission) => has('reports:view_all_stations'),
   fillup: (has: HasPermission) => has('fillups:create'),
   // Registering needs both: vehicles:manage to create, and a registration
   // station to do it at.
@@ -42,6 +41,8 @@ export const NAV_ACCESS = {
   // The plain station list is for people who have no station page of their own.
   stations: (has: HasPermission) =>
     has('stations:read') && !has('stations:create') && !has('users:manage_staff'),
+  // Phase 6: the lookup lists (exception types, vehicle types) in one place.
+  lists: (has: HasPermission) => has('exception_types:manage') || has('vehicle_types:manage'),
   admin: (has: HasPermission) =>
     has('municipalities:manage') || has('settings:manage') || has('audit:view'),
 } as const;
@@ -53,7 +54,6 @@ export type NavKey = keyof typeof NAV_ACCESS;
 // function decide which item is current, and a unit test walk the whole list.
 export const NAV_PATHS = [
   '/',
-  '/reports/dashboard',
   '/fillups/new',
   '/registration',
   '/vehicles',
@@ -65,6 +65,7 @@ export const NAV_PATHS = [
   '/my-station',
   '/my-office',
   '/stations',
+  '/lists',
   '/admin',
 ] as const;
 

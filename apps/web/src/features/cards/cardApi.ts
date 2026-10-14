@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { describeApiError } from '../../lib/apiError';
 import { apiClient } from '../../lib/apiClient';
 
 // Registration pivot, phase 3 — the printed vehicle card.
@@ -65,12 +66,12 @@ const CARD_ERRORS: Record<string, string> = {
   MUNICIPALITY_NOT_LIVE: 'بلدية مكتب التسجيل هذا لم تُفعَّل بعد.',
 };
 
-export function cardErrorMessage(error: unknown, fallback = 'تعذر إتمام العملية. حاول مرة أخرى.'): string {
-  if (!isAxiosError<{ message?: unknown }>(error) || !error.response) return fallback;
+export function cardErrorMessage(error: unknown, fallback = 'تعذر إتمام العملية.'): string {
+  if (!isAxiosError<{ message?: unknown }>(error) || !error.response) return describeApiError(error, fallback).message;
   const code = error.response.data?.message;
   if (typeof code === 'string' && CARD_ERRORS[code]) return CARD_ERRORS[code];
   if (error.response.status === 403) return 'لا تملك صلاحية هذا الإجراء في مكتب التسجيل هذا.';
-  return fallback;
+  return describeApiError(error, fallback).message;
 }
 
 // The desk this DEVICE prints at, per registration station — picked once and
@@ -92,8 +93,8 @@ export function rememberDesk(registrationStationId: string, deskId: string): voi
 }
 
 // Print mode, per DEVICE (a desk's printer is loaded with one kind of stock):
-// 'full' prints colour + black on blank cards; 'black' prints only the
-// per-card black layer, for pre-printed colour stock.
+// 'full' prints colour + black (YMCKO ribbon); 'black' prints the same card
+// in black only, for a monochrome ribbon.
 export function rememberedPrintMode(): 'full' | 'black' {
   try {
     return localStorage.getItem('fuel.cardPrintMode') === 'black' ? 'black' : 'full';
@@ -124,11 +125,11 @@ export function printCardPdf(
   return fetchPdf(() => apiClient.post<Blob>(`/cards/${cardId}/print`, { mode, ...where }, { responseType: 'blob' }));
 }
 
-// A test card uses up a blank, so it is printed (and recorded) at a desk.
-export function testCardPdf(registrationStationId: string, deskId: string): Promise<Blob> {
-  return fetchPdf(() =>
-    apiClient.get<Blob>('/cards/test-card', { params: { registrationStationId, deskId }, responseType: 'blob' }),
-  );
+// The printer setup card: one page of lines, a centre cross, a font ladder and
+// QR codes at three sizes, to check the printer's alignment and QR scanning
+// before a batch. Not a card, so nothing is recorded.
+export function printerSetupPdf(): Promise<Blob> {
+  return fetchPdf(() => apiClient.get<Blob>('/cards/printer-setup', { responseType: 'blob' }));
 }
 
 // Opens the browser's print dialog for a PDF without leaving the page: the

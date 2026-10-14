@@ -162,43 +162,33 @@ describe('FillUpRuleEngine — rule switches', () => {
   });
 });
 
-describe('FillUpRuleEngine — institution owners', () => {
-  const bankOwner = 'bank-1';
-  // Twenty cars of one institution, each filled up yesterday.
-  const bankHistory = () => {
+describe('FillUpRuleEngine — every owner is held to the owner-level rules', () => {
+  const owner = 'owner-1';
+  // Twenty cars of one owner, each filled up yesterday. Phase 6: there is no
+  // institution exemption any more - a registered owner is an individual.
+  const history = () => {
     const byVehicle: Record<string, FillUpHistoryRecord[]> = {};
-    const owner: FillUpHistoryRecord[] = [];
+    const ownerRecords: FillUpHistoryRecord[] = [];
     for (let i = 1; i <= 20; i++) {
-      const r = record(`bank-car-${i}`, daysAgo(1));
-      byVehicle[`bank-car-${i}`] = [r];
-      owner.push(r);
+      const r = record(`car-${i}`, daysAgo(1));
+      byVehicle[`car-${i}`] = [r];
+      ownerRecords.push(r);
     }
-    return new FakeHistory(byVehicle, { [bankOwner]: owner });
+    return new FakeHistory(byVehicle, { [owner]: ownerRecords });
   };
 
-  it('an individual owner with that history is stopped by the owner-level rules', async () => {
-    const result = await engine(ALL_ON, bankHistory()).evaluateSubject(
-      { kind: 'vehicle', vehicleId: 'bank-car-21', ownerId: bankOwner, ownerKind: 'INDIVIDUAL' },
-      municipalityId,
-      now,
-    );
-    expect(result).toMatchObject({ allowed: false, reason: 'OWNER_GAP_TOO_SHORT' });
+  it("a new car of that owner is stopped by the owner-level rules, and nothing is reported as skipped", async () => {
+    const subject = { kind: 'vehicle', vehicleId: 'car-21', ownerId: owner } as const;
+    const e = engine(ALL_ON, history());
+    expect(await e.evaluateSubject(subject, municipalityId, now)).toMatchObject({ allowed: false, reason: 'OWNER_GAP_TOO_SHORT' });
+    const { skipped, skippedBecause } = await e.evaluateSubjectWithChecks(subject, municipalityId, now);
+    expect(skipped).toEqual([]);
+    expect(skippedBecause).toBeNull();
   });
 
-  it("an institution's vehicle is judged by the vehicle-level rules only, and the result says why", async () => {
-    const subject = { kind: 'vehicle', vehicleId: 'bank-car-21', ownerId: bankOwner, ownerKind: 'INSTITUTION' } as const;
-    const e = engine(ALL_ON, bankHistory());
-    expect(await e.evaluateSubject(subject, municipalityId, now)).toEqual({ allowed: true });
-
-    const { checks, skipped, skippedBecause } = await e.evaluateSubjectWithChecks(subject, municipalityId, now);
-    expect(checks.map((c) => c.reason)).toEqual(['VEHICLE_GAP_TOO_SHORT', 'VEHICLE_WEEKLY_CAP_REACHED']);
-    expect(skipped).toEqual(['OWNER_GAP_TOO_SHORT', 'OWNER_WEEKLY_CAP_REACHED', 'LITERS_PER_PERSON_CAP_REACHED']);
-    expect(skippedBecause).toBe('INSTITUTION_OWNER');
-  });
-
-  it('an institution vehicle is still held to the vehicle-level rules', async () => {
-    const result = await engine(ALL_ON, bankHistory()).evaluateSubject(
-      { kind: 'vehicle', vehicleId: 'bank-car-1', ownerId: bankOwner, ownerKind: 'INSTITUTION' },
+  it('a car with its own recent fill-up is still held to the vehicle-level rules', async () => {
+    const result = await engine(ALL_ON, history()).evaluateSubject(
+      { kind: 'vehicle', vehicleId: 'car-1', ownerId: owner },
       municipalityId,
       now,
     );

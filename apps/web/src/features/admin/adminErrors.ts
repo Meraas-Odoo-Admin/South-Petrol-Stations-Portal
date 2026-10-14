@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { describeApiError } from '../../lib/apiError';
 
 // The API's machine-checkable refusal markers for the admin screens
 // (municipalities, security authorities, registration stations, users),
@@ -13,9 +14,8 @@ const MESSAGES: Record<string, string> = {
   SECURITY_AUTHORITY_NAME_TAKEN: 'توجد جهة أمنية بهذا الاسم مسبقًا.',
   MUNICIPALITY_CODE_TAKEN: 'هذا الرمز مستخدم لبلدية أخرى.',
   INVALID_DATE: 'التاريخ غير صالح.',
-  AWARENESS_NOT_BEFORE_DEADLINE: 'تاريخ بدء التوعية يجب أن يسبق تاريخ اشتراط البطاقة.',
   DESK_NAME_TAKEN: 'يوجد مكتب بهذا الاسم في مكتب التسجيل هذا.',
-  STAGE_DATES_ONLY: 'يمكنك تعديل تاريخي التوعية واشتراط البطاقة فقط.',
+  REASON_REQUIRED: 'اكتب سبب إيقاف التفعيل (ثلاثة أحرف على الأقل).',
   // Phase 4b — accounts.
   USER_OUT_OF_SCOPE: 'هذا الحساب خارج محطاتك أو مكاتبك.',
   SELF_ACTION: 'لا يمكنك تنفيذ هذا الإجراء على حسابك. لتغيير كلمة المرور استخدم صفحة كلمة المرور.',
@@ -54,10 +54,10 @@ const SIDE_LABELS = { PETROL_STATION: 'محطات الوقود', REGISTRATION: '
 
 export function adminErrorMessage(error: unknown, fallback: string): string {
   if (!isAxiosError<{ message?: string | string[]; details?: SeparationDetails }>(error) || !error.response) {
-    return fallback;
+    return describeApiError(error, fallback).message;
   }
   const code = error.response.data?.message;
-  if (typeof code !== 'string') return fallback;
+  if (typeof code !== 'string') return describeApiError(error, fallback).message;
   // The API's own duplicate-username refusal is English prose, not a code.
   if (error.response.status === 409 && /username/i.test(code)) return 'اسم المستخدم هذا مستخدم مسبقًا، اختر اسمًا آخر.';
 
@@ -68,5 +68,5 @@ export function adminErrorMessage(error: unknown, fallback: string): string {
     const requested = details.requestedSide ? SIDE_LABELS[details.requestedSide] : 'الجهة المطلوبة';
     return `لا يمكن الجمع بين العمل في ${existing} و${requested} لنفس المستخدم — هذا المستخدم يعمل في ${existing} مسبقًا. أنشئ حسابًا منفصلًا بدلًا من ذلك.`;
   }
-  return MESSAGES[code] ?? fallback;
+  return MESSAGES[code] ?? describeApiError(error, fallback).message;
 }

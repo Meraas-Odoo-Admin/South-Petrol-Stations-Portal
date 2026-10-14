@@ -5,9 +5,8 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './features/auth/LoginPage';
 import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
 import { HomePage } from './features/home/HomePage';
-import { DashboardPage } from './features/reports/DashboardPage';
 import { DailyReportPage } from './features/reports/DailyReportPage';
-import { ViolationsPage } from './features/reports/ViolationsPage';
+import { ExceptionsPage } from './features/reports/ExceptionsPage';
 import { VehicleDetailPage } from './features/vehicles/VehicleDetailPage';
 import { VehiclesListPage } from './features/vehicles/VehiclesListPage';
 import { ChangeRequestsQueuePage } from './features/vehicles/ChangeRequestsQueuePage';
@@ -18,8 +17,7 @@ import { AdminLayout } from './features/admin/AdminLayout';
 import { UserDetailPage } from './features/users/UserDetailPage';
 import { UserCreatePage } from './features/users/UserCreatePage';
 import { SettingsAdminPage } from './features/admin/SettingsAdminPage';
-import { ExceptionTypesAdminPage } from './features/admin/ExceptionTypesAdminPage';
-import { VehicleTypesAdminPage } from './features/admin/VehicleTypesAdminPage';
+import { ListsPage } from './features/lists/ListsPage';
 import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
 import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPage';
 import { MunicipalityDetailPage } from './features/admin/MunicipalityDetailPage';
@@ -107,15 +105,13 @@ function App() {
             <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route element={<Layout />}>
               <Route path="/" element={<HomePage />} />
-              <Route path="/reports/dashboard" element={<DashboardPage />} />
+              <Route path="/reports/dashboard" element={<Navigate to="/reports/daily" replace />} />
               <Route path="/reports/daily" element={<DailyReportPage />} />
-              <Route path="/reports/violations" element={<ViolationsPage />} />
+              <Route path="/reports/violations" element={<ExceptionsPage />} />
               <Route path="/reports" element={<RolesReportsPage />} />
               <Route path="/reports/registration" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/offices/:officeId" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/employees/:userId" element={<EmployeeActivityPage />} />
-              <Route path="/reports/card-stock" element={<FoldedReportRedirect tab="cards" />} />
-              <Route path="/reports/readiness" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
               <Route path="/registration" element={<RegistrationPage />} />
               <Route path="/stations" element={<StationsListPage />} />
@@ -140,14 +136,16 @@ function App() {
               <Route path="/my-station" element={<Gate allow={NAV_ACCESS.myStation}><MyStationPage /></Gate>} />
               <Route path="/my-office" element={<Gate allow={NAV_ACCESS.myOffice}><MyOfficePage /></Gate>} />
 
+              <Route path="/lists" element={<Gate allow={NAV_ACCESS.lists}><ListsPage /></Gate>} />
+
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<PeopleHomeRedirect />} />
                 <Route path="users" element={<PeopleHomeRedirect />} />
                 <Route path="users/new" element={<Navigate to="/people/new" replace />} />
                 <Route path="users/:userId" element={<StaffRedirect />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
-                <Route path="exception-types" element={<ExceptionTypesAdminPage />} />
-                <Route path="vehicle-types" element={<VehicleTypesAdminPage />} />
+                <Route path="exception-types" element={<Navigate to="/lists" replace />} />
+                <Route path="vehicle-types" element={<Navigate to="/lists?tab=vehicles" replace />} />
                 <Route path="municipalities" element={<MunicipalitiesAdminPage />} />
                 <Route path="municipalities/:municipalityId" element={<MunicipalityDetailPage />} />
                 {/* The security-authorities section is gone: each municipality's

@@ -92,3 +92,22 @@ test('pump: after a successful scan the camera is released and later frames cann
   await expect(page.getByTestId('fillup-scan-confirm')).toHaveCount(0);
   expect(await liveTracks(page)).toBe(0);
 });
+
+test('pump: a card the system does not know says «تعذّرت قراءة البطاقة» and offers a retry, with no typed-plate way around it', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/cards/scan/**', (route) =>
+    route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ message: 'CARD_NOT_FOUND' }) }),
+  );
+  await loginAs(page, fixtures.supervisorUsername, fixtures.supervisorPassword);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('link', { name: 'تسجيل تعبئة', exact: true }).first().click();
+
+  const outcome = page.getByTestId('qr-scan-outcome-not-a-card');
+  await expect(outcome).toBeVisible({ timeout: 30_000 });
+  await expect(outcome).toContainText('تعذّرت قراءة البطاقة');
+  await expect(outcome).toContainText('نظّف الكاميرا وأعد المحاولة، أو اطلب من صاحب المركبة مراجعة مكتب التسجيل لإعادة طباعة البطاقة');
+  await expect(page.getByTestId('qr-scan-retry')).toBeVisible();
+  await expect(page.getByTestId('fillup-type-plate-instead')).toHaveCount(0);
+  await page.screenshot({ path: '../../docs/ux-round-screenshots/phase6-ui/unreadable-card-390.png' });
+});

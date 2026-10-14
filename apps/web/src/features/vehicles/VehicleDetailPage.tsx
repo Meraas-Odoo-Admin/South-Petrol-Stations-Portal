@@ -22,7 +22,6 @@ import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
-import { StandingExceptionsSection } from '../standing-exceptions/StandingExceptionsSection';
 import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { ChangeRequestForm } from './ChangeRequestForm';
@@ -133,7 +132,7 @@ export function VehicleDetailPage() {
             action, not its own section) — one fewer nearly-blank card. */}
         <div className={`grid grid-cols-1 gap-4 ${canReadCards ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
           <Card className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}>
-            <div className="flex items-center justify-between gap-3 border-b border-surface-alt p-4">
+            <div className="flex items-center justify-between gap-3 border-b border-line-soft p-4">
               <div className="flex min-w-0 items-center gap-3">
                 {/* Round 14: "the car logo is an indicator of the car... it
                     should appear as the profile photo" — the brand's real logo
@@ -187,21 +186,12 @@ export function VehicleDetailPage() {
                         ownerId={vehicle.owner.id}
                         fullName={vehicle.owner.fullName}
                         phone={vehicle.owner.phone}
-                        isInstitution={vehicle.owner.ownerKind === 'INSTITUTION'}
                         onDone={() => setEditingOwner(false)}
                       />
                     </div>
                   ) : (
                     <>
                       {vehicle.owner?.fullName ?? '—'}
-                      {vehicle.owner?.ownerKind === 'INSTITUTION' && (
-                        <div className="mt-1">
-                          <StatusPill variant="neutral">جهة / مؤسسة</StatusPill>
-                          {vehicle.owner.responsibleDriverName && (
-                            <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">السائق المسؤول: {vehicle.owner.responsibleDriverName}</p>
-                          )}
-                        </div>
-                      )}
                       {vehicle.owner && canEditOwner && (
                         <button
                           type="button"
@@ -364,7 +354,7 @@ export function VehicleDetailPage() {
               </thead>
               <tbody>
                 {vehicle.plateHistory.map((entry) => (
-                  <tr key={entry.id} className="border-b border-surface-alt last:border-0">
+                  <tr key={entry.id} className="border-b border-line-soft last:border-0">
                     <td className="px-[18px] py-3">
                       <LtrText>{formatLicensePlate(entry.plate)}</LtrText>
                     </td>
@@ -385,15 +375,6 @@ export function VehicleDetailPage() {
             </div>
           )}
         </Card>
-
-        <div className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
-          <StandingExceptionsSection
-            vehicleId={vehicle.id}
-            vehicleLabel={formatLicensePlate(vehicle.currentPlate)}
-            contextOwnerId={vehicle.owner?.id}
-            contextOwnerLabel={vehicle.owner?.fullName}
-          />
-        </div>
 
         <Card className={mobileTab === 'history' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل التعبئات" />
@@ -416,7 +397,7 @@ export function VehicleDetailPage() {
                 </thead>
                 <tbody>
                   {historyQuery.data.rows.map((row) => (
-                    <tr key={row.id} className="border-b border-surface-alt last:border-0">
+                    <tr key={row.id} className="border-b border-line-soft last:border-0">
                       <td className="px-[18px] py-3">
                         <CodeText>{formatDateTime(row.occurredAt)}</CodeText>
                       </td>

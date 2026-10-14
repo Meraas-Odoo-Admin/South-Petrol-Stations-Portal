@@ -49,27 +49,9 @@ export async function submitLogin(page: Page, username: string, password: string
   }
 }
 
-// Round 19: OnboardingTour shows itself once per user, tracked in
-// localStorage — which starts empty in every fresh Playwright browser
-// context, so it appears on literally every test run that logs in via
-// loginAs. Left undismissed it sits as a fixed, full-viewport overlay
-// that intercepts every subsequent click, which is exactly what broke
-// fillups.spec.ts/reports.spec.ts the first time this landed (both went
-// straight from login into clicking a nav link/button with no dismiss
-// step in between). Dismissing it here, once, keeps every existing spec
-// working without each one needing its own awareness of the tour.
-async function dismissOnboardingTourIfPresent(page: Page): Promise<void> {
-  const tour = page.getByTestId('onboarding-tour');
-  const appeared = await tour.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
-  if (!appeared) return;
-  await page.getByRole('button', { name: 'تخطّي الجولة' }).click();
-  await expect(tour).not.toBeVisible();
-}
-
 export async function loginAs(page: Page, username: string, password: string): Promise<void> {
   await submitLogin(page, username, password);
   await expect(page).toHaveURL('/');
-  await dismissOnboardingTourIfPresent(page);
 }
 
 // Client-side navigation to a route with no link on the current screen.

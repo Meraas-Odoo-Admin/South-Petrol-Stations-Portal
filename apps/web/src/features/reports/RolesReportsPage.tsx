@@ -35,7 +35,7 @@ export const REPORT_DEFS: ReportDef[] = [
     key: 'office',
     label: 'مكتب التسجيل',
     title: 'تقارير مكتب التسجيل',
-    subtitle: 'التسجيل والبطاقات لكل موظف، والتالف، والتكرارات، والتصحيحات، ومخزون البطاقات',
+    subtitle: 'التسجيل والبطاقات لكل موظف، والتالف، والتكرارات، والتصحيحات',
     allowed: (has) => has('registration_reports:view'),
   },
   {

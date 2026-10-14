@@ -4,6 +4,7 @@ import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
@@ -218,13 +219,12 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     api().patch(`/api/v1${path}`).set('Authorization', as(key)).send(body);
 
   const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-  let plateCounter = 100000;
   const fill = (by: UserKey, stationId: string, liters: number, fuelType = 'PETROL_95') =>
     api()
       .post('/api/v1/fillups')
       .set('Authorization', as(by))
       .set('Idempotency-Key', randomUUID())
-      .send({ plate: `7-${plateCounter++}`, stationId, fuelType, quantityLiters: liters });
+      .send({ _freshCard: true, stationId, fuelType, quantityLiters: liters });
 
   const level = async (by: UserKey, stationId: string, fuelType = 'PETROL_95') => {
     const res = await get(by, `/stations/${stationId}/fuel-stock`).expect(200);

@@ -25,6 +25,9 @@ export interface DailyReportResponse {
   totalLiters: number;
   exceptionsPending: number;
   exceptionsApproved: number;
+  // Phase 6: fill-ups recorded «بدون بطاقة», and the fuel-mismatch warnings.
+  noCardCount?: number;
+  fuelMismatchCount?: number;
   // Round 4 feedback item 9: a live "showing X of Y after filters" line and
   // an actual results table, not KPI tiles alone — totalBeforeFilters is
   // the same station+date scope with owner/fuelType filters NOT applied,
@@ -113,13 +116,14 @@ export interface FillUpHistoryEntry {
   // Null for an unregistered-plate fill-up (Phase 4a); typedPlate then names it.
   vehicleId: string | null;
   typedPlate: string | null;
-  identifiedBy: 'CARD_SCAN' | 'TYPED_REGISTERED' | 'TYPED_UNREGISTERED' | 'EMERGENCY_OVERRIDE';
+  identifiedBy: 'CARD_SCAN' | 'NO_CARD' | 'TYPED_REGISTERED' | 'TYPED_UNREGISTERED' | 'EMERGENCY_OVERRIDE';
   driverId: string | null;
   stationId: string;
   fuelType: FuelType;
   quantityLiters: string;
   occurredAt: string;
   recordedById: string;
+  recordedBy?: { id: string; fullName: string };
   isException: boolean;
   idempotencyKey: string;
   createdAt: string;

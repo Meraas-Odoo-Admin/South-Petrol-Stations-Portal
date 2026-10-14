@@ -461,9 +461,9 @@ function LevelChart({ stationId, fuelType, threshold }: { stationId: string; fue
       <div dir="ltr" role="img" aria-label={`مستوى ${label} اليومي، آخر قيمة ${nf.format(data[data.length - 1]!.level)} لتر`} className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="#E3E7E2" />
-            <XAxis dataKey="label" tick={{ fontSize: 13, fill: '#5B6D6A' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-            <YAxis width={52} tick={{ fontSize: 13, fill: '#5B6D6A' }} tickLine={false} axisLine={false} />
+            <CartesianGrid vertical={false} stroke="#CBD5D2" />
+            <XAxis dataKey="label" tick={{ fontSize: 13, fill: "#475957" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <YAxis width={52} tick={{ fontSize: 13, fill: "#475957" }} tickLine={false} axisLine={false} />
             <Tooltip formatter={(v) => [`${nf.format(Number(v))} لتر`, 'المستوى']} />
             <Bar
               dataKey="level"

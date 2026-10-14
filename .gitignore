@@ -34,7 +34,11 @@ apps/web/e2e/.fake-camera.y4m
 # ongoing value once a round is verified and merged.
 docs/screenshots/verify/
 apps/web/docs/screenshots/
-Claude outputs/
+# Claude outputs/ is tracked (private repo), except spreadsheets: they can hold real
+# people's names and phone numbers (sabha-stations.csv does).
+Claude outputs/*.csv
+Claude outputs/*.xlsx
+Claude outputs/*.xls
 
 # The client design handoff (design/design_handoff_fuel_control_system/) is
 # now tracked: it is the reference archive and holds the vehicle card print
@@ -47,3 +51,4 @@ Claude outputs/
 
 # Phase 5C: real client data (names + phone numbers) — never committed.
 data/private/
+apps/web/e2e/.fake-camera-history.y4m

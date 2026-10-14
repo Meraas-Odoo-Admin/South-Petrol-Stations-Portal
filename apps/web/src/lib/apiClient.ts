@@ -58,9 +58,19 @@ export function silentRefresh(): Promise<string> {
   return coordinator.refresh();
 }
 
+// Transport failures (no response at all) and recoveries are announced so one
+// calm banner can say so, with a retry (components/NetworkBanner.tsx).
+function announceNetwork(down: boolean): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('api:network', { detail: { down } }));
+}
+
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    announceNetwork(false);
+    return response;
+  },
   async (error) => {
+    if (!error.response && error.code !== 'ERR_CANCELED') announceNetwork(true);
     const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {

@@ -16,9 +16,8 @@ export interface MunicipalityLite {
   name: string;
   code: string | null;
   status: 'PREPARING' | 'LIVE';
-  stage?: 'GRACE' | 'AWARENESS' | 'CARD_REQUIRED';
-  awarenessStartDate?: string | null;
-  cardRequiredFromDate?: string | null;
+  // The calendar day (Tripoli) the activation switch was last turned on.
+  activatedOn?: string | null;
   archivedAt?: string | null;
   securityAuthority: { id: string; name: string } | null;
   stationCount?: number;
@@ -304,7 +303,7 @@ export function ActivityCard({
         <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد تغييرات مسجّلة بعد.</p>
       )}
       {activity && activity.items.length > 0 && (
-        <ul className="divide-y divide-surface-alt">
+        <ul className="divide-y divide-line-soft">
           {activity.items.map((item) => (
             <li key={item.id} className="py-3">
               <p className="text-[16px] font-bold text-ink lg:text-[14px]">{placeActionLabel(item.action)}</p>

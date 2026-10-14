@@ -5,6 +5,7 @@ import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { systemSettingLabel, FUEL_TYPE_LABELS, fuelTypeLabel, USAGE_TYPE_LABELS, usageTypeLabel } from '../../lib/labels';
 import { RuleSwitchesCard } from './RuleSwitchesCard';
+import { GlobalExceptionSettingsCard } from './GlobalExceptionSettingsCard';
 import type { SystemSettingRow } from './types';
 
 const WEEK_WINDOW_MODES: { value: string; label: string; hint: string }[] = [
@@ -27,7 +28,6 @@ const STEPPER_KEYS: Record<string, { step: number; decimals: number }> = {
   'fillup.min_gap_days_per_owner': { step: 1, decimals: 0 },
   'fillup.max_liters_per_week_per_owner': { step: 10, decimals: 0 },
   'stock.low_threshold_liters': { step: 100, decimals: 0 },
-  'cards.low_blank_threshold': { step: 10, decimals: 0 },
   'fillup.price_per_liter.PETROL_95': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.DIESEL': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.KEROSENE': { step: 0.01, decimals: 2 },
@@ -98,6 +98,7 @@ export function SettingsAdminPage() {
       {data && (
         <div className="flex flex-col gap-4">
           <RuleSwitchesCard settings={data} />
+          <GlobalExceptionSettingsCard />
           {byKey.get('fillup.week_window_mode') && (
             <Card className="p-4">
               <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">{systemSettingLabel('fillup.week_window_mode').label}</span>

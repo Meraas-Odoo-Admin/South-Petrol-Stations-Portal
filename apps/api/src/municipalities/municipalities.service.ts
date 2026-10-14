@@ -3,13 +3,7 @@ import { Prisma, type Municipality } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
-import {
-  calendarDayString,
-  calendarDayToDate,
-  computeStage,
-  isValidCalendarDay,
-  tripoliDay,
-} from '../common/utils/grace-stage';
+import { tripoliDay } from '../common/utils/grace-stage';
 import { CreateMunicipalityDto } from './dto/create-municipality.dto';
 import { UpdateMunicipalityDto } from './dto/update-municipality.dto';
 import { ListMunicipalitiesQueryDto } from './dto/list-municipalities-query.dto';
@@ -80,11 +74,11 @@ export class MunicipalitiesService {
   // What the API (and so the UI) sees: the two dates as plain YYYY-MM-DD
   // calendar days and the stage computed server-side for right now.
   private present<T extends Municipality>(municipality: T) {
+    const { awarenessStartDate: _a, cardRequiredFromDate: _c, ...rest } = municipality;
     return {
-      ...municipality,
-      awarenessStartDate: calendarDayString(municipality.awarenessStartDate),
-      cardRequiredFromDate: calendarDayString(municipality.cardRequiredFromDate),
-      stage: computeStage(new Date(), municipality),
+      ...rest,
+      // The calendar day (Tripoli) the activation switch was last turned on.
+      activatedOn: municipality.activatedAt ? tripoliDay(municipality.activatedAt) : null,
     };
   }
 
@@ -223,8 +217,11 @@ export class MunicipalitiesService {
     });
     const roleName = new Map(roles.map((r) => [r.id, r.name]));
 
+    const activatedBy = municipality.activatedById
+      ? await this.prisma.user.findUnique({ where: { id: municipality.activatedById }, select: { fullName: true } })
+      : null;
     return {
-      municipality: this.present(municipality),
+      municipality: { ...this.present(municipality), activatedByName: activatedBy?.fullName ?? null },
       counts: { stations: stationCount, offices: officeCount, people: peopleTotal },
       people: {
         total: peopleTotal,
@@ -431,30 +428,18 @@ export class MunicipalitiesService {
 
   // ── update ───────────────────────────────────────────────────────────
 
-  async update(
-    id: string,
-    dto: UpdateMunicipalityDto,
-    actorId: string,
-    options: { stageDatesOnly?: boolean } = {},
-  ) {
-    if (options.stageDatesOnly) {
-      // confirmName only accompanies the deadline's typed-name check.
-      const allowed = new Set(['awarenessStartDate', 'cardRequiredFromDate', 'confirmName']);
-      const extra = Object.keys(dto).filter((key) => (dto as Record<string, unknown>)[key] !== undefined && !allowed.has(key));
-      if (extra.length > 0) {
-        throw new ForbiddenException('STAGE_DATES_ONLY');
-      }
-    }
+  async update(id: string, dto: UpdateMunicipalityDto, actorId: string) {
     // Only inside the caller's own municipality scope.
     await this.assertCanManage(actorId, id);
     const before = await this.findRaw(id);
     if (before.archivedAt) {
       throw new ConflictException('MUNICIPALITY_ARCHIVED');
     }
-    const stageDates = this.resolveStageDates(before, dto);
 
-    if (dto.status === 'PREPARING' && before.status === 'LIVE' && dto.confirmName?.trim() !== before.name) {
-      throw new BadRequestException('CONFIRMATION_NAME_MISMATCH');
+    const switchingOn = dto.status === 'LIVE' && before.status !== 'LIVE';
+    const switchingOff = dto.status === 'PREPARING' && before.status === 'LIVE';
+    if (switchingOff && !dto.reason?.trim()) {
+      throw new BadRequestException('REASON_REQUIRED');
     }
 
     if (dto.name && dto.name !== before.name) {
@@ -478,18 +463,12 @@ export class MunicipalitiesService {
       }
     }
 
-    const {
-      confirmName: _confirmName,
-      awarenessStartDate: _awareness,
-      cardRequiredFromDate: _deadline,
-      securityAuthorityName,
-      ...data
-    } = dto;
+    const { reason, securityAuthorityName, ...data } = dto;
 
     const municipality = await this.prisma.$transaction(async (tx) => {
-      // A municipality can't be live without the one directorate that
+      // A municipality can't be switched on without the one directorate that
       // oversees its stations. New ones get it at creation; one created
-      // before that rule gets it here, at the moment it goes live.
+      // before that rule gets it here, at the moment it is switched on.
       const needsAuthority = !before.securityAuthority && (dto.status === 'LIVE' || securityAuthorityName !== undefined);
       if (needsAuthority) {
         await tx.securityAuthority.create({
@@ -508,30 +487,23 @@ export class MunicipalitiesService {
         where: { id },
         data: {
           ...data,
-          ...(stageDates.changed.awarenessStartDate
-            ? { awarenessStartDate: stageDates.next.awarenessStartDate ? calendarDayToDate(stageDates.next.awarenessStartDate) : null }
-            : {}),
-          ...(stageDates.changed.cardRequiredFromDate
-            ? { cardRequiredFromDate: stageDates.next.cardRequiredFromDate ? calendarDayToDate(stageDates.next.cardRequiredFromDate) : null }
-            : {}),
+          // The date and the person are recorded when the switch is turned on.
+          ...(switchingOn ? { activatedAt: new Date(), activatedById: actorId } : {}),
         },
         include: this.include,
       });
     });
 
-    // Moving a stage date changes what every pump does from that day on, so
-    // it gets its own audit entry with the old and new values.
-    if (stageDates.changed.awarenessStartDate || stageDates.changed.cardRequiredFromDate) {
+    // Turning the switch on or off is its own audit entry (with the reason for
+    // off), besides the general update row.
+    if (switchingOn || switchingOff) {
       await this.audit.log({
         userId: actorId,
-        action: 'UPDATE_STAGE_DATES',
+        action: switchingOn ? 'ACTIVATE' : 'DEACTIVATE',
         entityType: 'Municipality',
         entityId: municipality.id,
-        oldValue: {
-          awarenessStartDate: calendarDayString(before.awarenessStartDate),
-          cardRequiredFromDate: calendarDayString(before.cardRequiredFromDate),
-        },
-        newValue: stageDates.next,
+        oldValue: { status: before.status },
+        newValue: { status: municipality.status, ...(switchingOff ? { reason: reason!.trim() } : {}) },
       });
     }
 
@@ -601,50 +573,5 @@ export class MunicipalitiesService {
       newValue: { name: municipality.name, reason: dto.reason },
     });
     return this.present(municipality);
-  }
-
-  // Validates a change to the two stage dates and returns what changed.
-  //  - each must be a real calendar day;
-  //  - awareness must start before the deadline (checked on the resulting
-  //    pair, so changing one against the stored other is covered);
-  //  - a deadline moved to today (Tripoli) or earlier starts enforcement
-  //    immediately, so - like LIVE -> PREPARING - it needs the municipality's
-  //    name typed as confirmation, on the API as well as in the UI.
-  private resolveStageDates(
-    before: Municipality,
-    dto: UpdateMunicipalityDto,
-  ): {
-    next: { awarenessStartDate: string | null; cardRequiredFromDate: string | null };
-    changed: { awarenessStartDate: boolean; cardRequiredFromDate: boolean };
-  } {
-    const current = {
-      awarenessStartDate: calendarDayString(before.awarenessStartDate),
-      cardRequiredFromDate: calendarDayString(before.cardRequiredFromDate),
-    };
-    const next = { ...current };
-    for (const field of ['awarenessStartDate', 'cardRequiredFromDate'] as const) {
-      if (dto[field] === undefined) continue;
-      const value = dto[field];
-      if (value !== null && !isValidCalendarDay(value)) {
-        throw new BadRequestException('INVALID_DATE');
-      }
-      next[field] = value;
-    }
-    if (next.awarenessStartDate && next.cardRequiredFromDate && next.awarenessStartDate >= next.cardRequiredFromDate) {
-      throw new BadRequestException('AWARENESS_NOT_BEFORE_DEADLINE');
-    }
-    const changed = {
-      awarenessStartDate: next.awarenessStartDate !== current.awarenessStartDate,
-      cardRequiredFromDate: next.cardRequiredFromDate !== current.cardRequiredFromDate,
-    };
-    if (
-      changed.cardRequiredFromDate &&
-      next.cardRequiredFromDate &&
-      next.cardRequiredFromDate <= tripoliDay(new Date()) &&
-      dto.confirmName?.trim() !== before.name
-    ) {
-      throw new BadRequestException('CONFIRMATION_NAME_MISMATCH');
-    }
-    return { next, changed };
   }
 }

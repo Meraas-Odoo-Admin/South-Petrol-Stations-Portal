@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { describeApiError } from '../../lib/apiError';
 
 // Registration pivot, phase 2: the API refuses registration with
 // machine-checkable markers (never English prose in this Arabic UI — same
@@ -6,7 +7,7 @@ import { isAxiosError } from 'axios';
 // them to what the registration employee should read.
 export function registrationErrorMessage(error: unknown): string {
   if (!isAxiosError<{ message?: string | string[] }>(error) || !error.response) {
-    return 'تعذر الاتصال بالخادم. حاول مرة أخرى.';
+    return describeApiError(error).message;
   }
   const { status, data } = error.response;
   // Field-level refusals from the shared rules come back as Arabic sentences
@@ -19,10 +20,6 @@ export function registrationErrorMessage(error: unknown): string {
   switch (code) {
     case 'REGISTRATION_STATION_NOT_ACTIVE':
       return 'مكتب التسجيل هذا مغلق حاليًا، ولا يمكن التسجيل فيه.';
-    case 'MUNICIPALITY_NOT_LIVE':
-      return 'بلدية مكتب التسجيل هذا لم تُفعَّل في المنظومة بعد، ولا يمكن التسجيل فيه.';
-    case 'INSTITUTION_DUPLICATE':
-      return 'هذه الجهة مسجّلة مسبقًا باسم مطابق — اخترها من القائمة بدل إنشائها من جديد.';
     case 'REGISTRATION_STATION_ARCHIVED':
       return 'مكتب التسجيل هذا مؤرشف، ولا يمكن التسجيل فيه.';
     case 'MUNICIPALITY_ARCHIVED':

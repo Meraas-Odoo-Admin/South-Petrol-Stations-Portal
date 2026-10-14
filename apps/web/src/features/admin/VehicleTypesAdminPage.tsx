@@ -97,7 +97,7 @@ export function VehicleTypesAdminPage() {
               </thead>
               <tbody>
                 {data.map((type) => (
-                  <tr key={type.id} className="border-b border-surface-alt last:border-0">
+                  <tr key={type.id} className="border-b border-line-soft last:border-0">
                     <td className="px-[18px] py-3">
                       <input
                         defaultValue={type.name}

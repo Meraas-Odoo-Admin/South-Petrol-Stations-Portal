@@ -2,6 +2,8 @@ import { FillUpPlate } from '../../components/FillUpPlate';
 import { usePageParam } from '../../lib/usePageParam';
 import { Pagination } from '../../components/Pagination';
 import { formatTime } from '../../lib/dateFormat';
+import { downloadCsv } from '../../lib/csv';
+import { DirectorateOverview } from './DashboardPage';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Label, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -52,18 +54,22 @@ export function DailyReportPage() {
   const [fuelType, setFuelType] = useState<FuelType | ''>('');
   const [ownerId, setOwnerId] = useState('');
   const [ownerLabel, setOwnerLabel] = useState('');
-  const [exporting, setExporting] = useState<ReportExportFormat | null>(null);
+  const [employeeId, setEmployeeId] = useState('');
+  const [noCardOnly, setNoCardOnly] = useState(false);
+  const [exporting, setExporting] = useState<ReportExportFormat | 'csv' | null>(null);
 
   const exportParams = {
     stationId: stationId || undefined,
     date,
     fuelType: fuelType || undefined,
     ownerId: ownerId || undefined,
+    employeeId: employeeId || undefined,
+    noCard: noCardOnly || undefined,
   };
   // 25 results a page, the page in the address; changing a filter returns to page 1.
   const { skip, setSkip } = usePageParam(DAILY_PAGE_SIZE);
   // A new filter starts again from page 1 (but a refresh keeps the page).
-  const filterKey = `${stationId}|${date}|${fuelType}|${ownerId}`;
+  const filterKey = `${stationId}|${date}|${fuelType}|${ownerId}|${employeeId}|${noCardOnly}`;
   const lastFilterKey = useRef(filterKey);
   useEffect(() => {
     if (lastFilterKey.current !== filterKey) {
@@ -73,7 +79,7 @@ export function DailyReportPage() {
   });
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['reports', 'daily', stationId, date, fuelType, ownerId, skip],
+    queryKey: ['reports', 'daily', stationId, date, fuelType, ownerId, employeeId, noCardOnly, skip],
     placeholderData: (prev) => prev,
     queryFn: async () =>
       (await apiClient.get<DailyReportResponse>('/reports/daily', { params: { ...exportParams, skip, take: DAILY_PAGE_SIZE } })).data,
@@ -92,14 +98,47 @@ export function DailyReportPage() {
     }
   }
 
+  async function handleExportCsv() {
+    setExporting('csv');
+    try {
+      const res = await apiClient.get<DailyReportResponse>('/reports/daily', { params: { ...exportParams, skip: 0, take: 100 } });
+      downloadCsv(
+        `daily-report-${date}.csv`,
+        ['الوقت', 'المحطة', 'اللوحة', 'المالك', 'الوقود', 'اللترات', 'الحالة', 'بدون بطاقة'],
+        res.data.rows.map((r) => [
+          formatTime(r.occurredAt),
+          r.station.internalCode,
+          r.vehicle?.currentPlate ?? r.typedPlate ?? '',
+          r.vehicle?.owner?.fullName ?? '',
+          fuelTypeLabel(r.fuelType),
+          r.quantityLiters,
+          r.isException ? 'استثناء' : 'مطابق للقواعد',
+          r.identifiedBy === 'NO_CARD' ? 'نعم' : 'لا',
+        ]),
+      );
+    } finally {
+      setExporting(null);
+    }
+  }
+
   function resetFilters() {
     setDate(todayIso());
+    setEmployeeId('');
+    setNoCardOnly(false);
     setFuelType('');
     setOwnerId('');
     setOwnerLabel('');
   }
 
-  const filtersActive = date !== todayIso() || fuelType !== '' || ownerId !== '';
+  const employeeChoices = (() => {
+    const map = new Map<string, string>();
+    for (const r of data?.rows ?? []) {
+      if (r.recordedBy) map.set(r.recordedBy.id, r.recordedBy.fullName);
+    }
+    if (employeeId && !map.has(employeeId)) map.set(employeeId, 'الموظف المختار');
+    return [...map.entries()];
+  })();
+  const filtersActive = date !== todayIso() || fuelType !== '' || ownerId !== '' || employeeId !== '' || noCardOnly;
   const isNarrowed = data ? data.totalFillUps < data.totalBeforeFilters : false;
 
   const fuelBreakdown = data
@@ -113,14 +152,15 @@ export function DailyReportPage() {
   return (
     <div>
       <PageHeader
-        title="التقرير اليومي"
+        title="اليوم"
+        subtitle="تعبئات يوم واحد، وأرقامه، ومن سجّلها."
         actions={
           <>
-            <PillButton variant="secondary" size="sm" onClick={() => handleExport('xlsx')} disabled={exporting !== null}>
-              {exporting === 'xlsx' ? '...' : 'تصدير Excel'}
+            <PillButton variant="secondary" size="sm" onClick={handleExportCsv} disabled={exporting !== null} data-testid="daily-export-csv">
+              {exporting === 'csv' ? '...' : 'تنزيل CSV'}
             </PillButton>
             <PillButton size="sm" onClick={() => handleExport('pdf')} disabled={exporting !== null}>
-              {exporting === 'pdf' ? '...' : 'تصدير PDF'}
+              {exporting === 'pdf' ? '...' : 'تنزيل PDF'}
             </PillButton>
           </>
         }
@@ -167,6 +207,26 @@ export function DailyReportPage() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">الموظف (اختياري)</label>
+            <select
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              className={employeeId ? tintedSelectClass : selectClass}
+              data-testid="daily-filter-employee"
+            >
+              <option value="">الكل</option>
+              {employeeChoices.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="flex min-h-[44px] items-center gap-2 text-[14px] lg:text-[12.5px] font-bold text-ink">
+            <input type="checkbox" checked={noCardOnly} onChange={(e) => setNoCardOnly(e.target.checked)} data-testid="daily-filter-nocard" />
+            بدون بطاقة فقط
+          </label>
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">
               المالك (اختياري)
@@ -219,12 +279,12 @@ export function DailyReportPage() {
             <KpiCard label="إجمالي التعبئات" value={data.totalFillUps} hint="عدد التعبئات المطابقة للمرشحات المحدَّدة أعلاه (المحطة والتاريخ ونوع الوقود والمالك)." />
             <KpiCard label="إجمالي اللترات" value={data.totalLiters} hint="مجموع كمية الوقود باللتر لكل التعبئات المطابقة للمرشحات." />
             <KpiCard
-              label="مخالفات قيد الانتظار"
-              value={data.exceptionsPending}
+              label="استثناءات"
+              value={data.exceptionsPending + data.exceptionsApproved}
               variant="accent"
-              hint="تعبئات سُجِّلت كاستثناء ولم يعتمدها مشرف بعد — لا تُحتسب ضمن التعبئات المعتمدة حتى تتم الموافقة عليها."
+              hint="تعبئات مُنعت بقاعدة وسُجِّلت باستثناء. لا يوجد اعتماد؛ تظهر فورًا في صفحة الاستثناءات."
             />
-            <KpiCard label="مخالفات معتمدة" value={data.exceptionsApproved} hint="استثناءات تمت الموافقة عليها بالفعل (سواء عند التسجيل مباشرة أو لاحقًا من مشرف)." />
+            <KpiCard label="بدون بطاقة" value={data.noCardCount ?? 0} hint="تعبئات لمركبات مسجّلة وُجدت بالبحث لأن بطاقتها لا تُستخدم، مع سبب مسجّل." />
           </div>
 
           {data.rows.length > 0 && (
@@ -265,7 +325,7 @@ export function DailyReportPage() {
                 </thead>
                 <tbody>
                   {data.rows.map((row) => (
-                    <tr key={row.id} className="border-b border-surface-alt last:border-0">
+                    <tr key={row.id} className="border-b border-line-soft last:border-0">
                       <td className="px-[18px] py-3">
                         <CodeText>{formatTime(row.occurredAt)}</CodeText>
                       </td>
@@ -315,6 +375,8 @@ export function DailyReportPage() {
           </Card>
         </>
       )}
+
+      {canViewAllStations && <DirectorateOverview />}
     </div>
   );
 }

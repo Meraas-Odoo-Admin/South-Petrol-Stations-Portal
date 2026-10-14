@@ -149,7 +149,7 @@ export function VehicleBrandPicker({ value, onChange, className = '' }: VehicleB
               the field and keeps the dropdown open for typing, rather than
               only working if the user already knew free text was quietly
               accepted. */}
-          <li className="border-t border-surface-alt">
+          <li className="border-t border-line-soft">
             <button
               type="button"
               data-testid="vehicle-brand-option-other"

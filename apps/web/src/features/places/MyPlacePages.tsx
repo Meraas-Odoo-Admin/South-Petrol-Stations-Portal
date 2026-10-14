@@ -200,7 +200,7 @@ export function MyOfficePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title="مكتبي" subtitle="موظفو المكتب والبطاقات والمخزون والطابعات" />
+      <PageHeader title="مكتبي" subtitle="موظفو المكتب وأجهزة الطباعة" />
       {list.length > 1 && (
         <div>
           <label htmlFor="my-office" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">المكتب</label>

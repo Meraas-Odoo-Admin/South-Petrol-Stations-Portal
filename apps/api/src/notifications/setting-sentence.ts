@@ -20,7 +20,6 @@ const SETTINGS: Record<string, SettingKind> = {
   'fillup.week_window_mode': { label: 'طريقة حساب الأسبوع', unit: 'week_mode' },
   'fillup.week_start_day': { label: 'يوم بداية الأسبوع', unit: 'weekday' },
   'stock.low_threshold_liters': { label: 'حدّ تنبيه انخفاض الوقود', unit: 'liter' },
-  'cards.low_blank_threshold': { label: 'حدّ تنبيه نقص البطاقات الفارغة', unit: 'card' },
   'fillup.price_per_liter.PETROL_95': { label: 'سعر لتر بنزين 95', unit: 'dinar_per_liter' },
   'fillup.price_per_liter.DIESEL': { label: 'سعر لتر الديزل', unit: 'dinar_per_liter' },
   'fillup.price_per_liter.KEROSENE': { label: 'سعر لتر الكاز', unit: 'dinar_per_liter' },

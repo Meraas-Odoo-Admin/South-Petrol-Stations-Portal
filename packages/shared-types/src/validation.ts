@@ -168,31 +168,6 @@ export function checkArabicPersonName(raw: string, label = 'الاسم'): FieldC
   return ok(value);
 }
 
-// An institution's name (bank, hospital, company): free text, but it must be a
-// real name — not just digits or symbols.
-export function checkInstitutionName(raw: string): FieldCheck {
-  const value = raw.trim().replace(/\s+/g, ' ');
-  if (value === '') return fail('REQUIRED', 'اسم الجهة مطلوب.');
-  if (value.length < 3) return fail('TOO_SHORT', 'اسم الجهة قصير جدًا.');
-  if (value.length > 150) return fail('TOO_LONG', 'اسم الجهة طويل جدًا (الحد الأقصى 150 حرفًا).');
-  if (!/\p{L}/u.test(value)) return fail('NO_LETTERS', 'اسم الجهة يجب أن يحتوي على أحرف.');
-  return ok(value);
-}
-
-// The key two institution names are compared by: Arabic letter variants
-// folded, diacritics and punctuation dropped, spacing collapsed.
-export function institutionNameKey(raw: string): string {
-  return raw
-    .normalize('NFKC')
-    .replace(/[ً-ٰٟـ]/g, '') // tashkeel + tatweel
-    .replace(/[إأآٱ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
-
 // ── vehicle document fields ──────────────────────────────────────────
 
 export const CHASSIS_STANDARD_LENGTH = 17;

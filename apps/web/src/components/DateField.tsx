@@ -279,7 +279,7 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
             )}
           </div>
 
-          <div className="mt-2 flex items-center justify-between border-t border-surface-alt pt-2">
+          <div className="mt-2 flex items-center justify-between border-t border-line-soft pt-2">
             <button
               type="button"
               onClick={() => {

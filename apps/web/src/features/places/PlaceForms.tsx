@@ -277,7 +277,7 @@ export function StationForm({
             <option value="">اختر البلدية</option>
             {municipalityOptions.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.status === 'PREPARING' ? `${m.name} (قيد الإعداد)` : m.name}
+                {m.name}
               </option>
             ))}
           </SelectField>
@@ -491,7 +491,7 @@ export function OfficeForm({
             <option value="">اختر البلدية</option>
             {options.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.status === 'PREPARING' ? `${m.name} (قيد الإعداد)` : m.name}
+                {m.name}
               </option>
             ))}
           </SelectField>

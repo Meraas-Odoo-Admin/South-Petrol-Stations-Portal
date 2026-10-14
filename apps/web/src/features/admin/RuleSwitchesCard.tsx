@@ -25,7 +25,7 @@ const RULES: Array<{ key: string; title: string; text: string; defaultOn: boolea
   {
     key: 'fillup.rule.owner_gap.enabled',
     title: 'الفاصل الأدنى بين تعبئتين للمالك',
-    text: 'يُحسب على كل مركبات المالك الفرد معًا. لا يُطبَّق على مركبات الجهات والمؤسسات.',
+    text: 'يُحسب على كل مركبات المالك معًا.',
     defaultOn: true,
   },
   {
@@ -70,7 +70,7 @@ export function RuleSwitchesCard({ settings }: { settings: SystemSettingRow[] })
           {error}
         </p>
       )}
-      <ul className="mt-3 divide-y divide-surface-alt">
+      <ul className="mt-3 divide-y divide-line-soft">
         {RULES.map((rule) => {
           const raw = byKey.get(rule.key);
           const on = raw === undefined ? rule.defaultOn : raw === 'true';

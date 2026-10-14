@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -34,14 +35,13 @@ describe('Admin panel RBAC (e2e)', () => {
   // read-write are covered by other e2e specs already).
   const ROLE_PERMISSIONS: Record<RoleKey, string[]> = {
     employee: ['fillups:create'],
-    supervisor: ['standing_exceptions:manage', 'stations:manage', 'vehicles:read'],
+    supervisor: ['stations:manage', 'vehicles:read'],
     admin: [
       'users:manage',
       'roles:manage',
       'settings:manage',
       'audit:view',
       'exception_types:manage',
-      'standing_exceptions:manage',
       'stations:manage',
       'stations:create',
       'vehicles:read',
@@ -52,7 +52,6 @@ describe('Admin panel RBAC (e2e)', () => {
       'settings:manage',
       'audit:view',
       'exception_types:manage',
-      'standing_exceptions:manage',
       'stations:manage',
       'stations:create',
       'vehicles:read',
@@ -217,27 +216,14 @@ describe('Admin panel RBAC (e2e)', () => {
       .expect(expected);
   });
 
-  // ── POST /standing-exceptions — standing_exceptions:manage only ─────
-  // (supervisor + admin + sysadmin per ROLE_PERMISSIONS above; employee
-  // blocked). Uses a valid body so the allowed roles get a genuine 201,
-  // not just "not 403".
-  it.each(ALL_ROLES)('POST /standing-exceptions — role=%s gets exactly the status its grant implies', async (role) => {
-    const token = await loginAs(role);
-    const hasPermission = ROLE_PERMISSIONS[role].includes('standing_exceptions:manage');
-    const res = await request(app.getHttpServer())
+  // Phase 6: standing exceptions were removed with the old approval flow.
+  it('POST /standing-exceptions no longer exists', async () => {
+    const token = await loginAs('admin');
+    await request(app.getHttpServer())
       .post('/api/v1/standing-exceptions')
       .set('Authorization', `Bearer ${token}`)
-      .send({ vehicleId: 'does-not-exist', rules: ['VEHICLE_GAP_TOO_SHORT'], reason: `E2E RBAC test as ${role}` });
-    if (hasPermission) {
-      // Permission granted — passes the guard, then 404s on the
-      // nonexistent vehicleId. The guard/permission layer is what this
-      // test verifies; the vehicle-existence check is StandingExceptionsService's
-      // own concern, already implicitly covered by standing-exceptions.e2e-spec.ts's
-      // real grant using a real vehicle.
-      expect(res.status).toBe(404);
-    } else {
-      expect(res.status).toBe(403);
-    }
+      .send({ vehicleId: 'x', rules: ['VEHICLE_GAP_TOO_SHORT'], reason: 'removed' })
+      .expect(404);
   });
 
   // ── POST /stations needs stations:create; PATCH /stations/:id needs stations:manage,

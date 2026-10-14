@@ -4,6 +4,7 @@ import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
@@ -355,18 +356,16 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
 
       await get('mm1', `/municipalities/${m2}`).expect(403);
       await get('mm1', `/municipalities/${m2}/overview`).expect(403);
-      await patch('mm1', `/municipalities/${m2}`, { awarenessStartDate: '2031-01-01' }).expect(403);
+      await patch('mm1', `/municipalities/${m2}`, { name: 'not theirs' }).expect(403);
       // They may not rename, switch or archive even their own: that is the super admin's.
       await patch('mm1', `/municipalities/${m1}`, { name: 'renamed' }).expect(403);
       await post('mm1', `/municipalities/${m1}/archive`, { reason: 'not mine to do' }).expect(403);
       await post('mm1', '/municipalities', { name: `P5A nope ${runId}` }).expect(403);
     });
 
-    it('sets the stage dates of their own municipality, and only those', async () => {
-      const res = await patch('mm1', `/municipalities/${m1}`, { awarenessStartDate: '2031-01-01', cardRequiredFromDate: '2031-02-01' });
-      expect(res.status).toBe(200);
-      expect(res.body.awarenessStartDate).toBe('2031-01-01');
-      await patch('mm1', `/municipalities/${m1}`, { awarenessStartDate: null, cardRequiredFromDate: null }).expect(200);
+    it('cannot switch their own municipality on or off: the activation switch belongs to the super admin', async () => {
+      await patch('mm1', `/municipalities/${m1}`, { status: 'LIVE' }).expect(403);
+      await patch('mm1', `/municipalities/${m1}`, { status: 'PREPARING', reason: 'not mine to do' }).expect(403);
     });
 
     it("lists only their municipality's stations and offices, and refuses the rest", async () => {
@@ -434,7 +433,7 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
       const perStation = dashboard.body.perStation.map((s: { stationId: string }) => s.stationId);
       expect(perStation).not.toContain(station.s2);
       await get('mm1', `/reports/daily?stationId=${station.s2}`).expect(403);
-      await post('emp', '/fillups', { plate: '1-1', stationId: station.s2, fuelType: 'PETROL_95', quantityLiters: 10 })
+      await post('emp', '/fillups', { vehicleId: vehicleIds[0] ?? 'x', stationId: station.s2, fuelType: 'PETROL_95', quantityLiters: 10 })
         .set('Idempotency-Key', randomUUID())
         .expect(403);
     });
@@ -749,7 +748,7 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
     });
   });
 
-  // ── owners: national ID rules, administrative IDs, institutions ───────────
+  // ── owners: national ID rules, administrative IDs ────────────────────────
 
   describe('owners', () => {
     const ownerBody = (over: Record<string, unknown> = {}) => ({
@@ -797,47 +796,20 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
       expect((await post('regEmp', '/owners', ownerBody({ fullName: 'Mohamed Ali' }))).status).toBe(400);
     });
 
-    it('creates an institution with its responsible driver, and refuses the same institution twice', async () => {
-      const body = {
+    // Phase 6: only individuals are registered. The institution fields are
+    // refused as unknown, and every owner is held to the owner-level rules.
+    it('no longer registers an institution: ownerKind and the responsible driver are refused', async () => {
+      const res = await post('regEmp', '/owners', {
         registrationStationId: office.r1a,
         ownerKind: 'INSTITUTION',
-        fullName: `مصرف الاختبار ${runId.replace(/\d/g, '')}`,
+        fullName: 'مصرف الاختبار',
         responsibleDriverNationalId: nationalId('1'),
-        responsibleDriverName: 'سائق مسؤول',
-      };
-      const res = await post('regEmp', '/owners', body);
-      expect(res.status).toBe(201);
-      ownerIds.push(res.body.id);
-      expect(res.body.ownerKind).toBe('INSTITUTION');
-      expect(res.body.identityType).toBe('INSTITUTION');
-      expect(res.body.identityNumber).toMatch(/^INS-/);
-
-      const again = await post('regEmp', '/owners', { ...body, fullName: `  ${body.fullName}  ` });
-      expect(again.status).toBe(409);
-      expect(again.body.message).toBe('INSTITUTION_DUPLICATE');
-      expect(again.body.details.ownerId).toBe(res.body.id);
-
-      const found = await get('regEmp', `/owners?ownerKind=INSTITUTION&search=${encodeURIComponent('مصرف الاختبار')}`).expect(200);
-      expect(found.body.map((o: { id: string }) => o.id)).toContain(res.body.id);
+      });
+      expect(res.status).toBe(400);
+      expect((await post('regEmp', '/owners', { ...ownerBody(), responsibleDriverName: 'سائق' })).status).toBe(400);
     });
 
-    it("an institution's responsible driver is checked with every national-ID rule, 18+ included", async () => {
-      const base = { registrationStationId: office.r1a, ownerKind: 'INSTITUTION', fullName: 'مستشفى اختبار الرفض' };
-      for (const bad of ['319900123456', '118990123456', `1${new Date().getUTCFullYear() - 10}0123456`, '1199']) {
-        const res = await post('regEmp', '/owners', { ...base, responsibleDriverNationalId: bad });
-        expect({ bad, status: res.status }).toEqual({ bad, status: 400 });
-      }
-      expect((await post('regEmp', '/owners', base)).status).toBe(400);
-    });
-
-    it("an institution's vehicles are not lumped together by the owner-level rules; an individual's are", async () => {
-      const institution = await post('regEmp', '/owners', {
-        registrationStationId: office.r1a,
-        ownerKind: 'INSTITUTION',
-        fullName: `شركة الاختبار ${runId.replace(/\d/g, '')}`,
-        responsibleDriverNationalId: nationalId('1'),
-      }).expect(201);
-      ownerIds.push(institution.body.id);
+    it("an owner's second vehicle is held to the owner-level rules, with nothing skipped", async () => {
       const individual = await post('regEmp', '/owners', ownerBody()).expect(201);
       ownerIds.push(individual.body.id);
 
@@ -857,18 +829,10 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
           .set('Idempotency-Key', randomUUID())
           .send({ vehicleId, stationId: station.s1b, fuelType: 'PETROL_95', quantityLiters: 20 });
 
-      const [bankA, bankB] = [await makeVehicle(institution.body.id), await makeVehicle(institution.body.id)];
-      await fill(bankA).expect(201);
-      await fill(bankB).expect(201); // same day, same owner: only the vehicle-level rules apply
-
-      const preview = await get('empS1b', `/fillups/rule-preview?stationId=${station.s1b}&vehicleId=${bankB}`).expect(200);
-      expect(preview.body.skippedReason).toBe('INSTITUTION_OWNER');
-      expect(preview.body.skippedRules).toEqual(
-        expect.arrayContaining(['OWNER_GAP_TOO_SHORT', 'OWNER_WEEKLY_CAP_REACHED', 'LITERS_PER_PERSON_CAP_REACHED']),
-      );
-
       const [personA, personB] = [await makeVehicle(individual.body.id), await makeVehicle(individual.body.id)];
       await fill(personA).expect(201);
+      const preview = await get('empS1b', `/fillups/rule-preview?stationId=${station.s1b}&vehicleId=${personB}`).expect(200);
+      expect(preview.body.skippedRules).toEqual([]);
       const blocked = await fill(personB);
       expect(blocked.status).toBe(422);
       expect(blocked.body.reason).toBe('OWNER_GAP_TOO_SHORT');

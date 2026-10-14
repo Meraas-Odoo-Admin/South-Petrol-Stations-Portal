@@ -41,12 +41,12 @@ type Stage = 'pre-permission' | 'scanning' | 'denied' | 'not-a-card' | 'revoked'
 
 const OUTCOME_MESSAGES: Record<'not-a-card' | 'revoked' | 'error', { title: string; body: string }> = {
   'not-a-card': {
-    title: 'هذا الرمز ليس بطاقة من هذه المنظومة',
-    body: 'تأكّد أن البطاقة صادرة من أحد مكاتب التسجيل، أو اكتب رقم اللوحة يدويًا.',
+    title: 'تعذّرت قراءة البطاقة',
+    body: 'نظّف الكاميرا وأعد المحاولة، أو اطلب من صاحب المركبة مراجعة مكتب التسجيل لإعادة طباعة البطاقة.',
   },
   revoked: {
-    title: 'هذه البطاقة ملغاة — راجع مكتب التسجيل لاستلام بطاقة جديدة',
-    body: 'لا يمكن التعبئة بهذه البطاقة.',
+    title: 'هذه البطاقة ملغاة',
+    body: 'لا يمكن التعبئة بهذه البطاقة. اطلب من صاحب المركبة مراجعة مكتب التسجيل لاستلام بطاقة جديدة.',
   },
   error: {
     title: 'تعذر التحقق من البطاقة',
@@ -137,7 +137,6 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
     onCancel();
   }
 
-  const typePlateLabel = 'اكتب رقم اللوحة بدلاً من ذلك';
   const overlayClass =
     variant === 'phone'
       ? 'fixed inset-0 z-50 flex flex-col bg-[#0F1E1C]'
@@ -182,17 +181,14 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
           <PillButton variant="primary" className="w-full max-w-xs justify-center" onClick={openCamera}>
             فتح الكاميرا
           </PillButton>
-          <button type="button" onClick={onCancel} className="text-[13px] lg:text-[12.5px] font-bold text-white/80 underline">
-            {typePlateLabel}
-          </button>
         </div>
       )}
 
       {(stage === 'scanning' || outcome) && (
         // min-h-0 down the chain: a flex item won't shrink below its content
         // by default, and the camera stream's own size (a tall portrait one
-        // on a phone) would push the bottom bar, and the "type the plate"
-        // link in it, out of the panel.
+        // on a phone) would push the bottom bar, and the
+        // buttons in it, out of the panel.
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {/* Absolutely positioned: the video fills the area and never
@@ -235,23 +231,11 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
           <div className="flex shrink-0 flex-col gap-2 border-t border-white/10 bg-[#0F1E1C] p-4">
             {outcome ? (
               <div className="flex flex-wrap gap-2">
-                <PillButton variant="secondary" onClick={rescan}>
-                  مسح آخر
-                </PillButton>
-                <PillButton variant="primary" onClick={abandon}>
-                  {typePlateLabel}
+                <PillButton variant="primary" onClick={rescan} data-testid="qr-scan-retry">
+                  إعادة المحاولة
                 </PillButton>
               </div>
-            ) : variant === 'inline' ? (
-              <button
-                type="button"
-                onClick={abandon}
-                data-testid="fillup-type-plate-instead"
-                className="text-center text-[13px] lg:text-[12px] font-bold text-white/80 underline"
-              >
-                البطاقة تالفة أو غير موجودة؟ اكتب رقم اللوحة
-              </button>
-            ) : (
+            ) : variant === 'inline' ? null : (
               <PillButton variant={variant === 'phone' ? 'secondary' : 'primary'} className="w-full justify-center" onClick={abandon}>
                 إلغاء
               </PillButton>
@@ -265,10 +249,10 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-white">
           <p className="text-[15px] font-extrabold text-danger">لا يمكن فتح الكاميرا على هذا الجهاز</p>
           <p className="max-w-sm text-[13px] lg:text-[12px] leading-[1.8] opacity-80">
-            اسمح بالكاميرا من إعدادات الجهاز، أو اكتب رقم اللوحة.
+            اسمح بالكاميرا من إعدادات الجهاز ثم أعد المحاولة، أو اطلب من المشرف.
           </p>
-          <PillButton variant="primary" onClick={onCancel} data-testid="fillup-type-plate-instead">
-            {typePlateLabel}
+          <PillButton variant="primary" onClick={() => void openCamera()} data-testid="qr-scan-retry-camera">
+            إعادة المحاولة
           </PillButton>
         </div>
       )}

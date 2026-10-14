@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, Matches } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, Matches } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { FuelType } from '@prisma/client';
 import { PageQueryDto } from '../../common/dto/page-query.dto';
 
@@ -35,4 +36,16 @@ export class DailyReportQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(FuelType)
   fuelType?: FuelType;
+
+  // Phase 6: narrow to one employee, or to the fill-ups recorded «بدون بطاقة».
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  noCard?: boolean;
 }

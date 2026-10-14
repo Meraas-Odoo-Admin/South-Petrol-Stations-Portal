@@ -5,7 +5,6 @@ import {
   checkBooklet,
   checkChassis,
   checkColor,
-  checkInstitutionName,
   checkLibyanMobile,
   checkLiters,
   checkManufactureYear,
@@ -53,9 +52,6 @@ export const IsLibyanMobileNumber = (options?: ValidationOptions) =>
 
 export const IsArabicPersonName = (label: string, options?: ValidationOptions) =>
   fieldDecorator('isArabicPersonName', (v) => checkArabicPersonName(v, label), options);
-
-export const IsInstitutionName = (options?: ValidationOptions) =>
-  fieldDecorator('isInstitutionName', (v) => checkInstitutionName(v), options);
 
 export const IsBookletNumber = (options?: ValidationOptions) =>
   fieldDecorator('isBookletNumber', (v) => checkBooklet(v), options);
@@ -117,14 +113,6 @@ export function IsLitersValue(options?: ValidationOptions) {
 export const IsOptionalLibyanMobile = (options?: ValidationOptions) =>
   fieldDecorator('isOptionalLibyanMobile', (v) => checkLibyanMobile(v), options);
 
-// An owner's name: an Arabic person name for an individual, a free institution
-// name for an institution - decided by the sibling ownerKind.
+// An owner's name: an Arabic person name.
 export const IsOwnerName = (options?: ValidationOptions) =>
-  fieldDecorator(
-    'isOwnerName',
-    (v, args) =>
-      (args.object as { ownerKind?: string }).ownerKind === 'INSTITUTION'
-        ? checkInstitutionName(v)
-        : checkArabicPersonName(v, 'اسم المالك'),
-    options,
-  );
+  fieldDecorator('isOwnerName', (v) => checkArabicPersonName(v, 'اسم المالك'), options);

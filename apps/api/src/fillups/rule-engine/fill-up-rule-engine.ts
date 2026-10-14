@@ -103,12 +103,8 @@ export class FillUpRuleEngine {
     // Phase 4a: for a plate with no registered vehicle the "vehicle-level"
     // rules count that plate's own history (same settings, same checks, same
     // reasons); there's no owner, so the owner-level rules are left out.
-    // Phase 5A: the same goes for an INSTITUTION owner - only the vehicle-
-    // level rules apply to an institution's vehicles.
-    const institution = subject.kind === 'vehicle' && subject.ownerKind === 'INSTITUTION';
-    const ownerId = subject.kind === 'vehicle' && !institution ? subject.ownerId : null;
-    const skippedBecause: SkippedBecause | null =
-      subject.kind === 'plate' ? 'UNREGISTERED_PLATE' : institution ? 'INSTITUTION_OWNER' : null;
+    const ownerId = subject.kind === 'vehicle' ? subject.ownerId : null;
+    const skippedBecause: SkippedBecause | null = subject.kind === 'plate' ? 'UNREGISTERED_PLATE' : null;
     const maxPerWeekVehicle = await this.settings.getNumber('fillup.max_per_week');
     const minGapDaysVehicle = await this.settings.getNumber('fillup.min_gap_days');
     const maxPerWeekOwner = await this.settings.getNumber('fillup.max_per_week_per_owner');

@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -269,16 +270,12 @@ describe('Municipality foundation (e2e)', () => {
   // ── Refusals ──────────────────────────────────────────────────────────
 
   describe('stations that cannot take fill-ups', () => {
-    it('refuses a fill-up in a PREPARING municipality — exception mode included', async () => {
-      const res = await submit(vehicle(2), stationPreparing.id, 409);
-      expect(res.body.message).toBe('MUNICIPALITY_NOT_LIVE');
-      const asException = await submit(vehicle(2), stationPreparing.id, 409, {
-        exceptionTypeId,
-        reason: 'E2E: must still be refused',
-      });
-      expect(asException.body.message).toBe('MUNICIPALITY_NOT_LIVE');
-      await preview(vehicle(2), stationPreparing.id, 409);
-      expect(await prisma.fillUpTransaction.count({ where: { vehicleId: vehicle(2) } })).toBe(0);
+    // Phase 6: the municipality's activation switch gates nothing. A station
+    // in a municipality that is switched off records fill-ups like any other.
+    it('still records a fill-up in a municipality that is not activated', async () => {
+      await preview(vehicle(2), stationPreparing.id, 200);
+      const res = await submit(vehicle(2), stationPreparing.id, 201);
+      expect(res.body.municipalityId).toBe(muniPreparing.id);
     });
   });
 
@@ -302,7 +299,9 @@ describe('Municipality foundation (e2e)', () => {
   // ── Visibility of PREPARING municipalities' stations ─────────────────
 
   describe('station visibility', () => {
-    it('hides a PREPARING municipality\'s stations from non-admins, even in scope', async () => {
+    // Phase 6: nothing is hidden by the activation switch; a user sees the
+    // stations of their scope whether or not the municipality is activated.
+    it('shows a not-activated municipality station to a user in scope', async () => {
       const token = await login(usernameRecorder);
       const list = await request(app.getHttpServer())
         .get('/api/v1/stations')
@@ -310,15 +309,9 @@ describe('Municipality foundation (e2e)', () => {
         .expect(200);
       const ids = list.body.map((s: { id: string }) => s.id);
       expect(ids).toEqual(expect.arrayContaining([stationA.id, stationB.id]));
-      expect(ids).not.toContain(stationPreparing.id);
-
-      await request(app.getHttpServer())
-        .get(`/api/v1/stations/${stationPreparing.id}`)
-        .set('Authorization', `Bearer ${token}`)
-        .expect(404);
     });
 
-    it('shows them on admin screens (stations:view_preparing)', async () => {
+    it('shows them on admin screens', async () => {
       const token = await login(usernameAdmin);
       const list = await request(app.getHttpServer())
         .get('/api/v1/stations')
@@ -414,7 +407,7 @@ describe('Municipality foundation (e2e)', () => {
       expect(res.body.municipalityId).toBe(muniPreparing.id);
     });
 
-    it('switching LIVE back to PREPARING requires typing the municipality\'s exact name', async () => {
+    it('switching LIVE back to PREPARING needs a reason, and the switch-on recorded the date and who', async () => {
       const token = await login(usernameAdmin);
       const patch = (body: object) =>
         request(app.getHttpServer())
@@ -423,12 +416,19 @@ describe('Municipality foundation (e2e)', () => {
           .send(body);
 
       const missing = await patch({ status: 'PREPARING' }).expect(400);
-      expect(missing.body.message).toBe('CONFIRMATION_NAME_MISMATCH');
-      await patch({ status: 'PREPARING', confirmName: 'wrong name' }).expect(400);
-      expect((await prisma.municipality.findUniqueOrThrow({ where: { id: muniPreparing.id } })).status).toBe('LIVE');
+      expect(missing.body.message).toBe('REASON_REQUIRED');
+      await patch({ status: 'PREPARING', reason: ' ' }).expect(400);
+      const live = await prisma.municipality.findUniqueOrThrow({ where: { id: muniPreparing.id } });
+      expect(live.status).toBe('LIVE');
+      expect(live.activatedAt).not.toBeNull();
+      expect(live.activatedById).toBe(adminUserId);
 
-      const ok = await patch({ status: 'PREPARING', confirmName: `E2E MF Preparing ${runId}` }).expect(200);
+      const ok = await patch({ status: 'PREPARING', reason: 'E2E: switched off again' }).expect(200);
       expect(ok.body.status).toBe('PREPARING');
+      const audit = await prisma.auditLog.findFirst({
+        where: { entityType: 'Municipality', entityId: muniPreparing.id, action: 'DEACTIVATE' },
+      });
+      expect(audit).not.toBeNull();
     });
   });
 });

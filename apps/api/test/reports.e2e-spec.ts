@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import './support/card-scan-shim';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
@@ -505,33 +506,13 @@ describe('Reports (e2e)', () => {
       .expect(403);
   });
 
-  // The navigation badge: a station supervisor has no station to choose, and the
-  // list endpoint above demands one, so the badge used to get a 400 on every
-  // page. This count needs no station and only ever covers what the caller may see.
-  it('counts pending violations for the badge without a station: scoped callers see only their own', async () => {
-    const server = app.getHttpServer();
+  // Phase 6: there is no pending state, so there is no navigation badge count.
+  it('has no pending-violations count any more', async () => {
     const scopedToken = await loginAsScoped();
-    const allStationsToken = await loginAsAllStations();
-    const noPermToken = await loginAsNoPerm();
-
-    const scoped = await request(server)
+    await request(app.getHttpServer())
       .get('/api/v1/reports/violations/pending-count')
       .set('Authorization', `Bearer ${scopedToken}`)
-      .expect(200);
-    // Station A has one pending entry; station B's pending entry is not theirs to see.
-    expect(scoped.body).toEqual({ total: 1 });
-
-    const all = await request(server)
-      .get('/api/v1/reports/violations/pending-count')
-      .set('Authorization', `Bearer ${allStationsToken}`)
-      .expect(200);
-    expect(all.body.total).toBeGreaterThanOrEqual(2);
-
-    await request(server).get('/api/v1/reports/violations/pending-count').expect(401);
-    await request(server)
-      .get('/api/v1/reports/violations/pending-count')
-      .set('Authorization', `Bearer ${noPermToken}`)
-      .expect(403);
+      .expect(404);
   });
 
   // ── GET /reports/vehicles/:id/history ────────────────────────────────

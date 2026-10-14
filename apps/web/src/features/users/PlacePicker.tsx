@@ -148,7 +148,7 @@ export function PlacePicker({
                 {shown.map((o) => {
                   const on = selected.includes(o.id);
                   return (
-                    <li key={o.id} className="border-b border-surface-alt last:border-0">
+                    <li key={o.id} className="border-b border-line-soft last:border-0">
                       <button
                         type="button"
                         aria-pressed={on}

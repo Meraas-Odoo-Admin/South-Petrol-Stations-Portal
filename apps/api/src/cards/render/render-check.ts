@@ -13,21 +13,26 @@ async function main(): Promise<void> {
   const renderer = new CardRendererService();
   try {
     const checks: Array<[string, Buffer, number]> = [
-      ['test card', await renderer.renderTestCardPdf('مديرية أمن سبها'), 2],
+      ['printer setup card', await renderer.renderPrinterSetupPdf(), 1],
       [
         'sample card',
         await renderer.renderCardPdf(
           {
             cardNumber: 'SBH-7K2M9Q4X',
             plate: '8-1234567',
-            vehicleLine: 'تويوتا هايلكس — أبيض',
+            makeModel: 'تويوتا هايلكس',
+            color: 'أبيض',
+            year: '2018',
+            fuel: 'بنزين',
+            chassis: 'JTFDE626400123456',
+            booklet: '1234567',
             officeName: 'مديرية أمن سبها',
             issueDate: '2026-09-27',
             stationCode: 'REG-000001',
           },
           'full',
         ),
-        2,
+        1,
       ],
     ];
     for (const [name, pdf, expectedPages] of checks) {
@@ -37,7 +42,7 @@ async function main(): Promise<void> {
       }
       const sizes = await pdfPageSizesMm(pdf);
       if (!sizes.every((size) => isExactCardSize(size))) {
-        throw new Error(`${name}: page size is not 53.98 x 85.60 mm: ${JSON.stringify(sizes)}`);
+        throw new Error(`${name}: page size is not 85.60 x 53.98 mm (landscape): ${JSON.stringify(sizes)}`);
       }
       console.log(`card render check: ${name} OK (${pdf.length} bytes, ${pages} pages)`);
     }

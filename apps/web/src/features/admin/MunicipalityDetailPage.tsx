@@ -7,19 +7,20 @@ import { roleLabel } from '../../lib/labels';
 import { Dialog } from '../../components/design/Dialog';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
-import { TextField } from '../../components/design/TextField';
+import { TextAreaField, TextField } from '../../components/design/TextField';
 import { TabPanel, Tabs, useTab, type TabDef } from '../../components/design/Tabs';
 import { Icon, ICONS } from '../../components/icons';
 import { Notice, SectionCard } from '../users/parts';
-import { PlaceSummaryRow, ReadinessPanel } from '../places/MunicipalitySummary';
+import { PlaceSummaryRow } from '../places/MunicipalitySummary';
 import { PlacesList } from '../places/PlacesList';
-import { StageCard } from '../places/StageCard';
+import { MunicipalitySettingsCard } from '../reports/ExceptionsPage';
 import { ArchiveRestoreButton, ArchivedBanner, type MunicipalityLite } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
 import { ActivityTab, PeopleTab, ReportsTab } from './MunicipalityTabs';
 
 interface Overview {
-  municipality: MunicipalityLite;
+  // activatedByName: who switched the municipality on (the date is municipality.activatedOn).
+  municipality: MunicipalityLite & { activatedByName?: string | null };
   counts: { stations: number; offices: number; people: number };
   people: { total: number; byJob: { roleId: string; name: string; count: number }[] };
 }
@@ -34,12 +35,12 @@ const TABS: TabDef[] = [
 ];
 
 // One municipality, split into tabs so no tab is a wall of rows (UX round):
-//   نظرة عامة            the summary figures and the readiness panel
+//   نظرة عامة            the summary figures
 //   المحطات والمكاتب      one paged list with search, filters and sort
 //   الأشخاص              paged, by job, with search and status
 //   التقارير              one report at a time
 //   سجل النشاط            the activity log, paged
-//   الإعدادات             name, directorate, status, stage dates, archive
+//   الإعدادات             name, directorate, activation switch, archive
 // The tab and the page are in the address; a tab's data is asked for only
 // when the tab is opened.
 export function MunicipalityDetailPage() {
@@ -91,11 +92,11 @@ export function MunicipalityDetailPage() {
           {archived ? (
             <StatusPill variant="neutral" size="md">مؤرشفة</StatusPill>
           ) : (
-            <StatusPill variant={live ? 'ok' : 'neutral'} size="md">{live ? 'مفعّلة' : 'قيد الإعداد'}</StatusPill>
+            <StatusPill variant={live ? 'ok' : 'neutral'} size="md">{live ? 'مفعّلة' : 'غير مفعّلة'}</StatusPill>
           )}
         </div>
         {/* The headline numbers stay in view on every tab. */}
-        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-surface-alt pt-4" data-testid="municipality-counts">
+        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-line-soft pt-4" data-testid="municipality-counts">
           {[
             ['المحطات', counts.stations, 'station'],
             ['المكاتب', counts.offices, 'office'],
@@ -123,12 +124,9 @@ export function MunicipalityDetailPage() {
 
       <TabPanel tab="overview" value={tab}>
         {archived ? (
-          <Notice kind="info">هذه البلدية مؤرشفة؛ لا تظهر لها أرقام ولا استعداد. يمكن استعادتها من «الإعدادات».</Notice>
+          <Notice kind="info">هذه البلدية مؤرشفة؛ لا تظهر لها أرقام. يمكن استعادتها من «الإعدادات».</Notice>
         ) : (
-          <>
-            <PlaceSummaryRow municipalityId={m.id} />
-            <ReadinessPanel municipalityId={m.id} />
-          </>
+          <PlaceSummaryRow municipalityId={m.id} />
         )}
       </TabPanel>
 
@@ -155,7 +153,7 @@ export function MunicipalityDetailPage() {
   );
 }
 
-// «الإعدادات»: name, directorate name and the card code, status, stage dates,
+// «الإعدادات»: name, directorate name and the card code, the activation switch,
 // and the archive - the one destructive action - set apart at the bottom.
 function SettingsTab({
   municipality: m,
@@ -163,7 +161,7 @@ function SettingsTab({
   archived,
   peopleByJob,
 }: {
-  municipality: MunicipalityLite;
+  municipality: MunicipalityLite & { activatedByName?: string | null };
   live: boolean;
   archived: boolean;
   peopleByJob: Array<{ roleId: string; name: string; count: number }>;
@@ -174,7 +172,8 @@ function SettingsTab({
   const [authorityName, setAuthorityName] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
-  const [typed, setTyped] = useState('');
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -252,28 +251,41 @@ function SettingsTab({
         </div>
       </SectionCard>
 
-      <StageCard municipality={m} />
-
       {!archived && (
         <SectionCard
           title="تفعيل البلدية"
-          description={live ? 'البلدية مفعّلة وتقبل التعبئات.' : 'البلدية قيد الإعداد: لا تقبل تعبئات وتظهر محطاتها للإدارة فقط.'}
+          description="مفتاح تفعيل للتتبّع والتقارير فقط؛ لا يمنع تسجيل أي تعبئة ولا يخفي أي محطة."
         >
-          {live ? (
-            <PillButton size="field" variant="danger" onClick={() => { setTyped(''); setSwitchOpen(true); }}>
-              إعادة إلى قيد الإعداد
-            </PillButton>
-          ) : (
-            <PillButton
-              size="field"
-              disabled={patch.isPending}
-              onClick={() => patch.mutate({ status: 'LIVE' }, { onSuccess: () => setSaved('فُعّلت البلدية.') })}
-            >
-              تفعيل البلدية
-            </PillButton>
-          )}
+          <div className="space-y-4" data-testid="municipality-activation">
+            <p className="text-[18px] font-extrabold text-ink lg:text-[16px]" data-testid="municipality-activation-state">
+              {live
+                ? `مفعّلة منذ ${m.activatedOn ?? '—'}${m.activatedByName ? ` · بواسطة ${m.activatedByName}` : ''}`
+                : 'غير مفعّلة'}
+            </p>
+            {live ? (
+              <PillButton
+                size="field"
+                variant="danger"
+                data-testid="municipality-deactivate-open"
+                onClick={() => { setReason(''); setProblem(null); setSwitchOpen(true); }}
+              >
+                إيقاف التفعيل
+              </PillButton>
+            ) : (
+              <PillButton
+                size="field"
+                data-testid="municipality-activate-open"
+                disabled={patch.isPending}
+                onClick={() => { setProblem(null); setActivateOpen(true); }}
+              >
+                تفعيل البلدية
+              </PillButton>
+            )}
+          </div>
         </SectionCard>
       )}
+
+      {!archived && <MunicipalitySettingsCard municipalityId={m.id} />}
 
       {/* The danger zone: the only destructive action, set apart. */}
       <section
@@ -297,8 +309,39 @@ function SettingsTab({
       </section>
 
       <Dialog
+        open={activateOpen}
+        title={`تفعيل «${m.name}»`}
+        busy={patch.isPending}
+        onClose={() => !patch.isPending && setActivateOpen(false)}
+        footer={
+          <>
+            <PillButton size="field" variant="secondary" disabled={patch.isPending} onClick={() => setActivateOpen(false)}>
+              رجوع
+            </PillButton>
+            <PillButton
+              size="field"
+              data-testid="municipality-activate-confirm-button"
+              disabled={patch.isPending}
+              onClick={() =>
+                patch.mutate(
+                  { status: 'LIVE' },
+                  { onSuccess: () => { setActivateOpen(false); setSaved('فُعّلت البلدية.'); } },
+                )
+              }
+            >
+              {patch.isPending ? 'جارٍ التفعيل…' : 'نعم، فعّل البلدية'}
+            </PillButton>
+          </>
+        }
+      >
+        <p className="leading-[1.8]" data-testid="municipality-activate-confirm">
+          سيُسجَّل تاريخ التفعيل واسمك، وتبدأ تقارير هذه البلدية من هذا اليوم. التفعيل لا يمنع أي تعبئة ولا يغيّر ما يراه المستخدمون.
+        </p>
+      </Dialog>
+
+      <Dialog
         open={switchOpen}
-        title={`إعادة «${m.name}» إلى قيد الإعداد`}
+        title={`إيقاف تفعيل «${m.name}»`}
         busy={patch.isPending}
         onClose={() => !patch.isPending && setSwitchOpen(false)}
         footer={
@@ -310,24 +353,22 @@ function SettingsTab({
               size="field"
               variant="danger"
               data-testid="municipality-deactivate-confirm-button"
-              disabled={patch.isPending || typed.trim() !== m.name}
+              disabled={patch.isPending || reason.trim().length < 3}
               onClick={() =>
                 patch.mutate(
-                  { status: 'PREPARING', confirmName: typed.trim() },
-                  { onSuccess: () => { setSwitchOpen(false); setSaved('أُعيدت البلدية إلى قيد الإعداد.'); } },
+                  { status: 'PREPARING', reason: reason.trim() },
+                  { onSuccess: () => { setSwitchOpen(false); setSaved('أُوقف تفعيل البلدية.'); } },
                 )
               }
             >
-              إعادة إلى قيد الإعداد
+              إيقاف التفعيل
             </PillButton>
           </>
         }
       >
         <div data-testid="municipality-deactivate-confirm" className="space-y-3">
-          <p className="leading-[1.8]">
-            سيتوقف تسجيل أي تعبئة في كل محطات هذه البلدية فورًا، وتختفي محطاتها عن غير الإدارة. للتأكيد اكتب اسم البلدية كما هو.
-          </p>
-          <TextField label={`اكتب: ${m.name}`} value={typed} onChange={(e) => setTyped(e.target.value)} data-testid="municipality-confirm-name" />
+          <p className="leading-[1.8]">لا يتوقف أي تسجيل للتعبئات بإيقاف التفعيل. اكتب سبب الإيقاف ليُسجَّل.</p>
+          <TextAreaField label="السبب" value={reason} onChange={(e) => setReason(e.target.value)} data-testid="municipality-deactivate-reason" />
         </div>
       </Dialog>
     </div>

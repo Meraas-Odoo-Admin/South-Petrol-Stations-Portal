@@ -15,11 +15,9 @@ import {
   checkBooklet,
   checkChassis,
   checkColor,
-  checkInstitutionName,
   checkLibyanMobile,
   checkMakeOrModel,
   checkManufactureYear,
-  checkNationalId,
   checkOwnerIdentity,
   normalizeChassis,
   normalizePlate,
@@ -47,7 +45,6 @@ import { registrationErrorMessage } from './registrationErrors';
 import { CardIssueFlow } from '../cards/CardIssueFlow';
 
 type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
-type OwnerKind = 'INDIVIDUAL' | 'INSTITUTION';
 type DuplicateField = 'currentPlate' | 'chassisNumber' | 'registrationBooklet';
 
 interface RegistrationStationRow {
@@ -62,10 +59,9 @@ interface RegistrationStationRow {
 interface OwnerRow {
   id: string;
   fullName: string;
-  identityType: IdentityType | 'INSTITUTION' | 'DRIVERS_LICENSE';
+  identityType: IdentityType | 'INSTITUTION' | 'DRIVERS_LICENSE'; // older rows can carry these
   identityNumber: string;
   phone: string | null;
-  ownerKind?: OwnerKind;
 }
 
 interface VehicleDuplicate {
@@ -95,7 +91,8 @@ const DUPLICATE_FIELD_LABELS: Record<DuplicateField, string> = {
 };
 
 function canRegisterAt(station: RegistrationStationRow | undefined): boolean {
-  return !!station && station.status === 'ACTIVE' && station.municipality.status === 'LIVE';
+  // Phase 6: the municipality's activation switch gates nothing.
+  return !!station && station.status === 'ACTIVE';
 }
 
 const SELECT_CLASS =
@@ -146,8 +143,7 @@ function DuplicateWarning({ conflict }: { conflict: VehicleDuplicate | undefined
 // created (petrol stations never do):
 //   1. which registration office they are working at;
 //   2. the owner FIRST - an individual (national / administrative number,
-//      checked with the shared rules, live) or an institution with its
-//      responsible driver;
+//      checked with the shared rules, live);
 //   3. the vehicle: its identity (plate, chassis, booklet) before its
 //      details (make, model, colour, year, fuel), duplicates named while
 //      typing.
@@ -167,7 +163,6 @@ export function RegistrationPage() {
   const stationReady = canRegisterAt(station);
 
   // ── 2. Owner ────────────────────────────────────────────────────────
-  const [ownerKind, setOwnerKind] = useState<OwnerKind>('INDIVIDUAL');
   const [identityType, setIdentityType] = useState<IdentityType>('NATIONAL_ID');
   const [identityNumber, setIdentityNumber] = useState('');
   const [searchedIdentity, setSearchedIdentity] = useState<{ type: IdentityType; number: string } | null>(null);
@@ -177,12 +172,6 @@ export function RegistrationPage() {
   const [newOwnerAddress, setNewOwnerAddress] = useState('');
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [ownerTouched, setOwnerTouched] = useState(false);
-
-  // Institution fields.
-  const [institutionName, setInstitutionName] = useState('');
-  const [driverNationalId, setDriverNationalId] = useState('');
-  const [driverName, setDriverName] = useState('');
-  const [driverPhone, setDriverPhone] = useState('');
 
   const identityLive = identityNumber
     ? checkOwnerIdentity(identityType, identityNumber, { partial: true })
@@ -201,51 +190,16 @@ export function RegistrationPage() {
   });
   const foundOwner = ownerLookup.data?.[0];
 
-  // Existing institutions with a similar name, offered while typing so the
-  // same institution is not created twice.
-  const [institutionQuery, setInstitutionQuery] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setInstitutionQuery(institutionName.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [institutionName]);
-  const institutionSuggestions = useQuery({
-    queryKey: ['owners', 'institutions', institutionQuery],
-    queryFn: async () =>
-      (await apiClient.get<OwnerRow[]>('/owners', { params: { ownerKind: 'INSTITUTION', search: institutionQuery, take: 5 } }))
-        .data,
-    enabled: ownerKind === 'INSTITUTION' && institutionQuery.length >= 2 && !owner,
-  });
-
   const createIndividual = useMutation({
     mutationFn: async () =>
       (
         await apiClient.post<OwnerRow>('/owners', {
           registrationStationId: stationId,
-          ownerKind: 'INDIVIDUAL',
           identityType: searchedIdentity!.type,
           identityNumber: searchedIdentity!.number,
           fullName: newOwnerName.trim(),
           phone: newOwnerPhone.trim(),
           address: newOwnerAddress.trim() || undefined,
-        })
-      ).data,
-    onSuccess: (created) => {
-      setOwner(created);
-      queryClient.invalidateQueries({ queryKey: ['owners'] });
-    },
-    onError: (err) => setOwnerError(registrationErrorMessage(err)),
-  });
-
-  const createInstitution = useMutation({
-    mutationFn: async () =>
-      (
-        await apiClient.post<OwnerRow>('/owners', {
-          registrationStationId: stationId,
-          ownerKind: 'INSTITUTION',
-          fullName: institutionName.trim(),
-          responsibleDriverNationalId: driverNationalId,
-          responsibleDriverName: driverName.trim() || undefined,
-          responsibleDriverPhone: driverPhone.trim() || undefined,
         })
       ).data,
     onSuccess: (created) => {
@@ -262,10 +216,6 @@ export function RegistrationPage() {
     setNewOwnerName('');
     setNewOwnerPhone('');
     setNewOwnerAddress('');
-    setInstitutionName('');
-    setDriverNationalId('');
-    setDriverName('');
-    setDriverPhone('');
     setOwnerError(null);
     setOwnerTouched(false);
   }
@@ -279,23 +229,8 @@ export function RegistrationPage() {
     createIndividual.mutate();
   }
 
-  function saveInstitution() {
-    setOwnerError(null);
-    setOwnerTouched(true);
-    const name = checkInstitutionName(institutionName);
-    const id = checkNationalId(driverNationalId);
-    const phone = checkLibyanMobile(driverPhone);
-    const dName = driverName.trim() ? checkArabicPersonName(driverName, 'اسم السائق') : null;
-    if (!name.ok || !id.ok || !phone.ok || (dName && !dName.ok)) return;
-    createInstitution.mutate();
-  }
-
   const individualNameCheck = newOwnerName ? checkArabicPersonName(newOwnerName, 'اسم المالك') : null;
   const individualPhoneCheck = newOwnerPhone ? checkLibyanMobile(newOwnerPhone, { required: true }) : null;
-  const institutionNameCheck = institutionName ? checkInstitutionName(institutionName) : null;
-  const driverIdCheck = driverNationalId ? checkNationalId(driverNationalId, { partial: true }) : null;
-  const driverPhoneCheck = driverPhone ? checkLibyanMobile(driverPhone) : null;
-  const driverNameCheck = driverName ? checkArabicPersonName(driverName, 'اسم السائق') : null;
 
   // ── 3. Vehicle ──────────────────────────────────────────────────────
   const [plate, setPlate] = useState('');
@@ -486,23 +421,6 @@ export function RegistrationPage() {
     );
   }
 
-  const ownerKindButton = (kind: OwnerKind, label: string) => (
-    <button
-      type="button"
-      aria-pressed={ownerKind === kind}
-      data-testid={`registration-owner-kind-${kind.toLowerCase()}`}
-      onClick={() => {
-        setOwnerKind(kind);
-        setOwnerError(null);
-      }}
-      className={`h-12 flex-1 rounded-full text-[16px] font-bold lg:h-10 lg:text-[14px] ${
-        ownerKind === kind ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
-      }`}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <PageHeader title="تسجيل المركبات" subtitle="تسجيل مالك ومركبة جديدين في مكتب التسجيل" />
@@ -532,7 +450,7 @@ export function RegistrationPage() {
             {stations.map((s) => (
               <option key={s.id} value={s.id} disabled={!canRegisterAt(s)}>
                 {s.name}
-                {canRegisterAt(s) ? '' : ` (${s.status !== 'ACTIVE' ? REGISTRATION_STATUS_LABELS[s.status] : 'البلدية غير مفعّلة'})`}
+                {canRegisterAt(s) ? '' : ` (${REGISTRATION_STATUS_LABELS[s.status]})`}
               </option>
             ))}
           </select>
@@ -548,9 +466,7 @@ export function RegistrationPage() {
         )}
         {station && !stationReady && (
           <p className="mt-2 text-[15px] text-danger lg:text-[13px]">
-            {station.status !== 'ACTIVE'
-              ? 'مكتب التسجيل هذا مغلق حاليًا، ولا يمكن التسجيل فيه.'
-              : 'بلدية مكتب التسجيل هذا لم تُفعَّل في المنظومة بعد، ولا يمكن التسجيل فيه.'}
+            مكتب التسجيل هذا مغلق حاليًا، ولا يمكن التسجيل فيه.
             {station.statusNote ? ` (${station.statusNote})` : ''}
           </p>
         )}
@@ -565,13 +481,7 @@ export function RegistrationPage() {
                 <div>
                   <p className="text-[17px] font-bold text-ink lg:text-[14px]">{owner.fullName}</p>
                   <p className="mt-0.5 text-[15px] text-ink-soft lg:text-[12px]">
-                    {owner.ownerKind === 'INSTITUTION' || owner.identityType === 'INSTITUTION' ? (
-                      'جهة / مؤسسة'
-                    ) : (
-                      <>
-                        {identityTypeLabel(owner.identityType)} <LtrText>{owner.identityNumber}</LtrText>
-                      </>
-                    )}
+                    {identityTypeLabel(owner.identityType)} <LtrText>{owner.identityNumber}</LtrText>
                   </p>
                 </div>
                 <PillButton size="field" variant="ghost" onClick={resetOwner}>
@@ -580,13 +490,7 @@ export function RegistrationPage() {
               </div>
             ) : (
               <>
-                <div className="flex gap-2" role="group" aria-label="نوع المالك">
-                  {ownerKindButton('INDIVIDUAL', 'فرد')}
-                  {ownerKindButton('INSTITUTION', 'جهة / مؤسسة')}
-                </div>
-
-                {ownerKind === 'INDIVIDUAL' ? (
-                  <>
+                <>
                     <p className="text-[15px] text-ink-soft lg:text-[13px]">
                       ابحث عن المالك أولًا برقم هويته — ربما هو مسجّل مسبقًا كمالك لمركبة أخرى.
                     </p>
@@ -612,7 +516,16 @@ export function RegistrationPage() {
                         ))}
                       </div>
                     </div>
-                    <div>
+                    {/* Enter searches, so the form can be filled without the mouse. */}
+                    <div
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && identityComplete) {
+                          e.preventDefault();
+                          setOwnerError(null);
+                          setSearchedIdentity({ type: identityType, number: identityNumber });
+                        }
+                      }}
+                    >
                       <Label>{identityType === 'NATIONAL_ID' ? 'الرقم الوطني' : 'الرقم الإداري'}</Label>
                       <DigitBoxInput
                         groups={IDENTITY_DIGIT_GROUPS}
@@ -682,70 +595,7 @@ export function RegistrationPage() {
                         </PillButton>
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div className="space-y-4" data-testid="registration-institution">
-                    <TextField
-                      label="اسم الجهة أو المؤسسة"
-                      data-testid="registration-institution-name"
-                      value={institutionName}
-                      onChange={(e) => setInstitutionName(e.target.value)}
-                      error={institutionNameCheck && !institutionNameCheck.ok && (ownerTouched || institutionName.length > 2) ? institutionNameCheck.message : null}
-                      hint="يظهر هذا الاسم اسمًا للمالك في كل مكان."
-                    />
-                    {(institutionSuggestions.data?.length ?? 0) > 0 && (
-                      <div className="rounded-md bg-accent-100 p-4" data-testid="registration-institution-suggestions">
-                        <p className="text-[15px] font-bold text-ink lg:text-[13px]">
-                          توجد جهات مسجّلة بأسماء مشابهة — اختر الجهة إن كانت هي نفسها:
-                        </p>
-                        <ul className="mt-2 space-y-2">
-                          {institutionSuggestions.data!.map((o) => (
-                            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-[16px] font-bold text-ink lg:text-[14px]">{o.fullName}</span>
-                              <PillButton size="field" variant="secondary" onClick={() => setOwner(o)}>
-                                اختيار هذه الجهة
-                              </PillButton>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <div className="space-y-4 rounded-md border border-line p-4">
-                      <p className="text-[16px] font-bold text-primary-dark lg:text-[14px]">السائق المسؤول</p>
-                      <div>
-                        <Label>الرقم الوطني للسائق المسؤول</Label>
-                        <DigitBoxInput
-                          groups={IDENTITY_DIGIT_GROUPS}
-                          value={driverNationalId}
-                          onChange={(v) => setDriverNationalId(restrictToIdentityNumber(v))}
-                          data-testid="registration-driver-id-input"
-                        />
-                        <FieldHelp check={driverIdCheck} help={NATIONAL_ID_HELP} testId="registration-driver-id-error" />
-                      </div>
-                      <TextField
-                        label="اسم السائق (اختياري)"
-                        value={driverName}
-                        onChange={(e) => setDriverName(e.target.value)}
-                        error={driverNameCheck && !driverNameCheck.ok && (ownerTouched || driverName.length > 2) ? driverNameCheck.message : null}
-                      />
-                      <TextField
-                        label="هاتف السائق (اختياري)"
-                        value={driverPhone}
-                        onChange={(e) => setDriverPhone(restrictToPhoneNumber(e.target.value))}
-                        error={driverPhoneCheck && !driverPhoneCheck.ok && (ownerTouched || driverPhone.length >= 10) ? driverPhoneCheck.message : null}
-                        placeholder="0912345678"
-                        inputMode="tel"
-                        ltr
-                      />
-                    </div>
-                    <PillButton size="field" data-testid="registration-institution-save" disabled={createInstitution.isPending} onClick={saveInstitution}>
-                      {createInstitution.isPending ? 'جارٍ الحفظ…' : 'تسجيل الجهة'}
-                    </PillButton>
-                    <p className="text-[14px] text-ink-soft lg:text-[12px]">
-                      مركبات الجهة لا تُجمع على حد المالك الأسبوعي؛ تُطبَّق عليها حدود كل مركبة وحدها.
-                    </p>
-                  </div>
-                )}
+                </>
                 {ownerError && (
                   <p role="alert" className="text-[15px] font-medium text-danger-dark lg:text-[13px]" data-testid="registration-owner-error">
                     {ownerError}
