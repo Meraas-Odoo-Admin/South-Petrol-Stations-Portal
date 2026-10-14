@@ -328,7 +328,7 @@ export function UsersListPage({
                   <tr
                     key={u.id}
                     onClick={() => navigate(personLink(u.id))}
-                    className="cursor-pointer border-b border-surface-alt align-middle last:border-0 hover:bg-surface-alt/60"
+                    className="cursor-pointer border-b border-line-soft align-middle last:border-0 hover:bg-surface-alt/60"
                   >
                     <td className="px-[18px] py-3">
                       <Link to={personLink(u.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -373,7 +373,7 @@ export function UsersListPage({
           </div>
 
           {/* Phone: one card per person; the whole card opens them. */}
-          <ul className="divide-y divide-surface-alt lg:hidden">
+          <ul className="divide-y divide-line-soft lg:hidden">
             {items.map((u) => (
               <li key={u.id}>
                 <Link
@@ -396,7 +396,7 @@ export function UsersListPage({
           </ul>
 
           {total > USERS_PAGE_SIZE && (
-            <nav aria-label="التنقل بين الصفحات" className="flex items-center justify-between gap-3 border-t border-surface-alt p-4 lg:px-[18px]">
+            <nav aria-label="التنقل بين الصفحات" className="flex items-center justify-between gap-3 border-t border-line-soft p-4 lg:px-[18px]">
               <span className="text-[14px] text-ink-soft lg:text-[12px]">
                 {filters.skip + 1}–{Math.min(filters.skip + USERS_PAGE_SIZE, total)} من {total}
               </span>

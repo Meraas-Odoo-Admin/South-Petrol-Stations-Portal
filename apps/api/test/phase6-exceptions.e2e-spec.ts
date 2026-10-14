@@ -337,6 +337,24 @@ describe('Phase 6 exceptions and the no-card fallback (e2e)', () => {
       ).toBe(3);
     });
 
+    it('a type with no limit set is no limit, never zero, even with the strict switch on', async () => {
+      const free = await prisma.exceptionType.create({
+        data: { key: `e2e_p6_free_${runId}`, name: `بلا حد ${runId}`, requiresProof: false },
+      });
+      expect(free.dailyLimitPerStation).toBeNull();
+      await setSetting('exceptions.strict_limit', 'true');
+      for (let i = 0; i < 4; i++) {
+        const res = await fill('employee', { cardNumber: vehicles[7]!.cardNumber, exceptionTypeId: free.id, reason: 'بلا حد' });
+        expect(res.status).toBe(201);
+        expect(res.body.exception.overLimit).toBe(false);
+      }
+      const types = await get('employee', `fillups/exception-types?stationId=${stationA.id}`).expect(200);
+      expect(types.body.find((t: { id: string }) => t.id === free.id)).toMatchObject({ dailyLimitPerStation: null, usedToday: 4 });
+      await setSetting('exceptions.strict_limit', 'false');
+      await prisma.exception.deleteMany({ where: { exceptionTypeId: free.id } });
+      await prisma.exceptionType.delete({ where: { id: free.id } });
+    });
+
     it('a manager cannot change another municipality, and an employee cannot change settings', async () => {
       expect((await patch('manager', `exceptions/settings/municipality/${otherMunicipalityId}`, { strictLimit: true })).status).toBe(403);
       expect((await patch('employee', `exceptions/settings/municipality/${municipalityId}`, { strictLimit: true })).status).toBe(403);

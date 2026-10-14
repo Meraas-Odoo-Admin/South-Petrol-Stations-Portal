@@ -178,7 +178,7 @@ export function MunicipalitiesAdminPage() {
                 </thead>
                 <tbody>
                   {rows.map((m) => (
-                    <tr key={m.id} className="border-b border-surface-alt last:border-0 hover:bg-surface-alt/60" data-testid={`municipality-row-${m.id}`}>
+                    <tr key={m.id} className="border-b border-line-soft last:border-0 hover:bg-surface-alt/60" data-testid={`municipality-row-${m.id}`}>
                       <td className="px-[18px] py-3 font-bold text-ink">
                         <Link to={`/admin/municipalities/${m.id}`} className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                           {m.name}
@@ -207,7 +207,7 @@ export function MunicipalitiesAdminPage() {
                 </tbody>
               </table>
             </div>
-            <ul className="divide-y divide-surface-alt lg:hidden">
+            <ul className="divide-y divide-line-soft lg:hidden">
               {rows.map((m) => (
                 <li key={m.id}>
                   <Link to={`/admin/municipalities/${m.id}`} className="block min-h-[88px] px-4 py-4 hover:bg-surface-alt/60">

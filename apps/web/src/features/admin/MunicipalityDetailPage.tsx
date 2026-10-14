@@ -96,7 +96,7 @@ export function MunicipalityDetailPage() {
           )}
         </div>
         {/* The headline numbers stay in view on every tab. */}
-        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-surface-alt pt-4" data-testid="municipality-counts">
+        <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-line-soft pt-4" data-testid="municipality-counts">
           {[
             ['المحطات', counts.stations, 'station'],
             ['المكاتب', counts.offices, 'office'],

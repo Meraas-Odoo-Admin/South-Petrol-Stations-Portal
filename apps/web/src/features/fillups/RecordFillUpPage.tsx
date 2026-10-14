@@ -30,6 +30,7 @@ import {
   type NoCardReason,
 } from '@fuel-tracking/shared-types';
 import { fuelTypeLabel } from '../../lib/labels';
+import { describeApiError } from '../../lib/apiError';
 import { StockStrip, StockWarning } from '../stock/StockStrip';
 import { useAuth } from '../auth/AuthProvider';
 import { useStations } from '../stations/useStations';
@@ -297,7 +298,7 @@ function DayListRail({
       </div>
       {highlightStationName && <p className="mt-2 text-[13px] lg:text-[12px] text-ink-faint">{highlightStationName}</p>}
 
-      <div className="mt-3.5 border-t border-surface-alt pt-3.5">
+      <div className="mt-3.5 border-t border-line-soft pt-3.5">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[13px] lg:text-[12px] font-bold text-ink-soft">تعبئات محطتك اليوم</span>
           <a href="/reports/daily" className="text-[13px] lg:text-[12px] font-bold text-accent-ink hover:underline">
@@ -700,13 +701,13 @@ export function RecordFillUpPage() {
             {(success.stationName ? `سُجّلت باسمك في ${success.stationName}، ` : 'سُجّلت باسمك، ') + 'ولا يمكن تعديلها أو حذفها بعد الآن.'}
           </p>
           <Card className="mt-6 w-full p-[18px] text-start sm:mt-0">
-            <div className="border-b border-surface-alt pb-4 text-center">
+            <div className="border-b border-line-soft pb-4 text-center">
               <PlateFigure plate={success.vehicleLabel} />
               <p className="mt-3 text-[28px] font-extrabold text-ink lg:text-[20px]">
                 {fuelTypeLabel(success.fuelType)} · <LtrText>{success.quantityLiters}</LtrText> لتر
               </p>
             </div>
-            <div className="flex justify-between border-b border-surface-alt py-2.5">
+            <div className="flex justify-between border-b border-line-soft py-2.5">
               <span className="text-[15px] text-ink-soft lg:text-[13px]">المالك</span>
               <span className="text-[15px] font-bold text-ink lg:text-[13px]">{success.ownerLabel}</span>
             </div>
@@ -1084,7 +1085,7 @@ export function RecordFillUpPage() {
           <>
             <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp, onInvalidFillUp)} className="space-y-3">
               <Card data-testid="rule-review-card-mobile" className={`p-3.5 ${effectiveRejection ? 'border-t-4 border-danger' : ''}`}>
-                <div className="mb-3 border-b border-surface-alt pb-3" data-testid="fillup-review-summary">
+                <div className="mb-3 border-b border-line-soft pb-3" data-testid="fillup-review-summary">
                   {vehicleLabel && <PlateFigure plate={vehicleLabel} />}
                   <p className="mt-2 text-center text-[24px] font-extrabold text-ink lg:text-[18px]">
                     {fuelTypeLabel(chosenFuel)} · <LtrText>{fillUpForm.watch('quantityLiters')}</LtrText> لتر
@@ -1269,5 +1270,5 @@ function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): s
     return 'هذه اللوحة غير مسجّلة في المنظومة. يسجّلها مكتب التسجيل أولًا.';
   }
   if (status === 403) return 'لا تملك صلاحية هذا الإجراء. تواصل مع المشرف.';
-  return 'تعذر إتمام العملية. تحقّق من الاتصال وحاول مرة أخرى.';
+  return describeApiError(error).message;
 }

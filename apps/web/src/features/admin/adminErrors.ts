@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { describeApiError } from '../../lib/apiError';
 
 // The API's machine-checkable refusal markers for the admin screens
 // (municipalities, security authorities, registration stations, users),
@@ -53,10 +54,10 @@ const SIDE_LABELS = { PETROL_STATION: 'محطات الوقود', REGISTRATION: '
 
 export function adminErrorMessage(error: unknown, fallback: string): string {
   if (!isAxiosError<{ message?: string | string[]; details?: SeparationDetails }>(error) || !error.response) {
-    return fallback;
+    return describeApiError(error, fallback).message;
   }
   const code = error.response.data?.message;
-  if (typeof code !== 'string') return fallback;
+  if (typeof code !== 'string') return describeApiError(error, fallback).message;
   // The API's own duplicate-username refusal is English prose, not a code.
   if (error.response.status === 409 && /username/i.test(code)) return 'اسم المستخدم هذا مستخدم مسبقًا، اختر اسمًا آخر.';
 
@@ -67,5 +68,5 @@ export function adminErrorMessage(error: unknown, fallback: string): string {
     const requested = details.requestedSide ? SIDE_LABELS[details.requestedSide] : 'الجهة المطلوبة';
     return `لا يمكن الجمع بين العمل في ${existing} و${requested} لنفس المستخدم — هذا المستخدم يعمل في ${existing} مسبقًا. أنشئ حسابًا منفصلًا بدلًا من ذلك.`;
   }
-  return MESSAGES[code] ?? fallback;
+  return MESSAGES[code] ?? describeApiError(error, fallback).message;
 }

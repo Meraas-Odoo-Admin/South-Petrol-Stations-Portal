@@ -301,7 +301,7 @@ export function VehiclesListPage() {
                     return (
                       <tr
                         key={vehicle.id}
-                        className={`animate-fade-in-up border-b border-surface-alt transition-colors last:border-0 hover:bg-surface-alt/60 ${pending ? 'bg-accent-100' : ''}`}
+                        className={`animate-fade-in-up border-b border-line-soft transition-colors last:border-0 hover:bg-surface-alt/60 ${pending ? 'bg-accent-100' : ''}`}
                         style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
                       >
                         <td className="px-[18px] py-3">

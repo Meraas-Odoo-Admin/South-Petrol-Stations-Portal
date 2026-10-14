@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { describeApiError } from '../../lib/apiError';
 
 // Registration pivot, phase 2: the API refuses registration with
 // machine-checkable markers (never English prose in this Arabic UI — same
@@ -6,7 +7,7 @@ import { isAxiosError } from 'axios';
 // them to what the registration employee should read.
 export function registrationErrorMessage(error: unknown): string {
   if (!isAxiosError<{ message?: string | string[] }>(error) || !error.response) {
-    return 'تعذر الاتصال بالخادم. حاول مرة أخرى.';
+    return describeApiError(error).message;
   }
   const { status, data } = error.response;
   // Field-level refusals from the shared rules come back as Arabic sentences

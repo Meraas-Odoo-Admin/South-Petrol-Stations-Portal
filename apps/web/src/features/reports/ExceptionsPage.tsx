@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { usePersistedState } from '../../lib/usePersistedState';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { downloadCsv } from '../../lib/csv';
@@ -11,6 +12,7 @@ import { StationSelect } from '../../components/StationSelect';
 import { DateField } from '../../components/DateField';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
+import { SkeletonRows } from '../../components/design/Skeleton';
 import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
@@ -96,9 +98,11 @@ export function ExceptionsPage() {
   const [stationId, setStationId] = useState(canViewAllStations || canByStation ? '' : (ownStation?.stationId ?? ''));
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [typeId, setTypeId] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
-  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  // Remembered for this person on this device.
+  const remember = `fuel.exceptions.${user?.id ?? 'anon'}`;
+  const [typeId, setTypeId] = usePersistedState(`${remember}.type`, '');
+  const [employeeId, setEmployeeId] = usePersistedState(`${remember}.employee`, '');
+  const [flaggedOnly, setFlaggedOnly] = usePersistedState(`${remember}.flagged`, false);
   const [skip, setSkip] = useState(0);
   const reset = <T,>(setter: (v: T) => void) => (v: T) => {
     setter(v);
@@ -153,6 +157,7 @@ export function ExceptionsPage() {
     <div>
       <PageHeader
         title="الاستثناءات"
+        subtitle="كل استخدام لنوع استثناء: متى ولماذا ومن سجّله، وما تجاوز حدّه اليومي."
         actions={
           tab === 'list' ? (
             <PillButton variant="secondary" size="sm" onClick={exportCsv} data-testid="exceptions-export-csv">
@@ -213,7 +218,11 @@ export function ExceptionsPage() {
           </div>
         </Card>
 
-        {list.isLoading && <p className="text-[15px] text-ink-soft">جارٍ التحميل…</p>}
+        {list.isLoading && (
+          <Card>
+            <SkeletonRows rows={6} />
+          </Card>
+        )}
         {list.isError && <p className="text-[15px] text-danger">تعذّر تحميل الاستثناءات.</p>}
         {list.data && (
           <Card>
@@ -233,7 +242,7 @@ export function ExceptionsPage() {
                 </thead>
                 <tbody>
                   {list.data.rows.map((r) => (
-                    <tr key={r.id} className="border-b border-surface-alt align-top last:border-0" data-testid="exceptions-row">
+                    <tr key={r.id} className="border-b border-line-soft align-top last:border-0" data-testid="exceptions-row">
                       <td className="px-[18px] py-3">
                         <LtrText>{formatDateTime(r.occurredAt)}</LtrText>
                       </td>
@@ -357,7 +366,7 @@ function ByStationPanel({ onOpenStation }: { onOpenStation: (stationId: string) 
               </thead>
               <tbody>
                 {stations.data.stations.map((s) => (
-                  <tr key={s.stationId} className="border-b border-surface-alt last:border-0" data-testid={`exceptions-station-${s.stationId}`}>
+                  <tr key={s.stationId} className="border-b border-line-soft last:border-0" data-testid={`exceptions-station-${s.stationId}`}>
                     <td className="px-[18px] py-3 font-bold text-ink">{s.station}</td>
                     <td className="px-[18px] py-3 text-ink-soft">{s.company}</td>
                     <td className="px-[18px] py-3 tabular-nums">{s.count}</td>

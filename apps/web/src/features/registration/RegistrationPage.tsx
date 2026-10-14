@@ -516,7 +516,16 @@ export function RegistrationPage() {
                         ))}
                       </div>
                     </div>
-                    <div>
+                    {/* Enter searches, so the form can be filled without the mouse. */}
+                    <div
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && identityComplete) {
+                          e.preventDefault();
+                          setOwnerError(null);
+                          setSearchedIdentity({ type: identityType, number: identityNumber });
+                        }
+                      }}
+                    >
                       <Label>{identityType === 'NATIONAL_ID' ? 'الرقم الوطني' : 'الرقم الإداري'}</Label>
                       <DigitBoxInput
                         groups={IDENTITY_DIGIT_GROUPS}

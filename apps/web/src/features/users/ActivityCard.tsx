@@ -24,7 +24,7 @@ export function ActivityCard({ userId }: { userId: string }) {
         <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد أنشطة مسجلة على هذا الحساب بعد.</p>
       )}
       {activity.data && activity.data.length > 0 && (
-        <ol className="divide-y divide-surface-alt">
+        <ol className="divide-y divide-line-soft">
           {activity.data.map((entry) => (
             <li key={entry.id} className="py-3">
               <p className="text-[16px] font-bold text-ink lg:text-[14px]">

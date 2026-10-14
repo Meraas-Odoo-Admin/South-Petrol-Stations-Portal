@@ -400,11 +400,15 @@ const EXCEPTION_TYPES = [
     key: 'OTHER',
     name: 'Other (synthetic placeholder — not a real client-confirmed category)',
     requiresProof: true,
+    // Phase 6: a default daily limit per station, editable in «القوائم». A type
+    // with NO limit (null) means no limit, never zero.
+    dailyLimitPerStation: 10,
   },
   {
     key: 'OTHER_NO_PROOF',
     name: 'Other, no proof required (synthetic placeholder — not a real client-confirmed category)',
     requiresProof: false,
+    dailyLimitPerStation: 10,
   },
 ];
 

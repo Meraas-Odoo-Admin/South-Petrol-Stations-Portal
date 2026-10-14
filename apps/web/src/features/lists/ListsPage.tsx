@@ -47,7 +47,7 @@ export function ListsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <PageHeader title="القوائم" />
+      <PageHeader title="القوائم" subtitle="الأنواع التي تُختار منها القيم في المنظومة: الاستثناءات والمركبات." />
       {tabs.length > 1 && <Tabs tabs={tabs} value={tab} onChange={setTab} label="القوائم" />}
       {canExceptions && (
         <TabPanel tab="exceptions" value={tab}>
@@ -210,7 +210,7 @@ function ExceptionTypesPanel() {
               </thead>
               <tbody>
                 {list.data.map((t) => (
-                  <tr key={t.id} className="border-b border-surface-alt last:border-0" data-testid={`exc-type-${t.key}`}>
+                  <tr key={t.id} className="border-b border-line-soft last:border-0" data-testid={`exc-type-${t.key}`}>
                     <td className="px-[18px] py-3">
                       <p className="font-bold text-ink">{t.name}</p>
                       <CodeText>{t.key}</CodeText>

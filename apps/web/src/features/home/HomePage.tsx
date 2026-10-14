@@ -5,6 +5,7 @@ import { Card } from '../../components/design/Card';
 import { roleLabel } from '../../lib/labels';
 import { Icon, ICONS } from '../../components/icons';
 import { NAV_ACCESS, type HasPermission } from '../../lib/navAccess';
+import { orderHomeLinks } from '../../lib/homeOrder';
 import { StockStrip } from '../stock/StockStrip';
 
 interface QuickLink {
@@ -46,7 +47,10 @@ function timeGreeting(): string {
 // can actually reach.
 export function HomePage() {
   const { user, hasPermission } = useAuth();
-  const links = QUICK_LINKS.filter((link) => link.show(hasPermission));
+  const links = orderHomeLinks(
+    QUICK_LINKS.filter((link) => link.show(hasPermission)),
+    hasPermission,
+  );
   // Petrol stations and/or registration stations the user is scoped to;
   // "كل المحطات" only for the directorate-wide roles that genuinely see all.
   const scopeNames = [

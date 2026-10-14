@@ -132,7 +132,7 @@ export function VehicleDetailPage() {
             action, not its own section) — one fewer nearly-blank card. */}
         <div className={`grid grid-cols-1 gap-4 ${canReadCards ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
           <Card className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}>
-            <div className="flex items-center justify-between gap-3 border-b border-surface-alt p-4">
+            <div className="flex items-center justify-between gap-3 border-b border-line-soft p-4">
               <div className="flex min-w-0 items-center gap-3">
                 {/* Round 14: "the car logo is an indicator of the car... it
                     should appear as the profile photo" — the brand's real logo
@@ -354,7 +354,7 @@ export function VehicleDetailPage() {
               </thead>
               <tbody>
                 {vehicle.plateHistory.map((entry) => (
-                  <tr key={entry.id} className="border-b border-surface-alt last:border-0">
+                  <tr key={entry.id} className="border-b border-line-soft last:border-0">
                     <td className="px-[18px] py-3">
                       <LtrText>{formatLicensePlate(entry.plate)}</LtrText>
                     </td>
@@ -397,7 +397,7 @@ export function VehicleDetailPage() {
                 </thead>
                 <tbody>
                   {historyQuery.data.rows.map((row) => (
-                    <tr key={row.id} className="border-b border-surface-alt last:border-0">
+                    <tr key={row.id} className="border-b border-line-soft last:border-0">
                       <td className="px-[18px] py-3">
                         <CodeText>{formatDateTime(row.occurredAt)}</CodeText>
                       </td>

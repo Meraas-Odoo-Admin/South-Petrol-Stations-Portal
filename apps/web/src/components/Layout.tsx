@@ -8,6 +8,7 @@ import { APP_NAME } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
 import { NAV_ACCESS, activeNavPath } from '../lib/navAccess';
+import { NetworkBanner } from './NetworkBanner';
 import { NotificationBell } from './NotificationBell';
 
 // Rebuilt against design/"Fuel Control System - Round 2 Screens.dc.html"
@@ -170,7 +171,7 @@ export function Layout() {
           to the main-axis end (the physical LEFT) instead — confirmed via
           a Playwright bounding-box measurement in the round-2 verification
           pass, not something a glance at the source would catch. */}
-      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-surface-alt bg-surface lg:flex">
+      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-line-soft bg-surface lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-6">
           <BrandMark size={34} />
           <div>
@@ -204,7 +205,7 @@ export function Layout() {
             name/role) with two proper icon buttons underneath, matching
             the same rounded-full/hover-tint vocabulary the nav items and
             PillButton already use elsewhere, not a new pattern. */}
-        <div className="border-t border-surface-alt p-3">
+        <div className="border-t border-line-soft p-3">
           <div className="flex items-center gap-2.5 rounded-lg bg-surface-alt/70 p-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[13px] lg:text-[12px] font-extrabold text-primary">
               {(user?.fullName ?? '').trim().slice(0, 2)}
@@ -238,7 +239,7 @@ export function Layout() {
       </aside>
 
       {/* Mobile top bar — hidden at lg+ */}
-      <header className="sticky top-0 z-30 flex items-center gap-2.5 border-b border-surface-alt bg-surface px-3.5 py-2.5 shadow-sm lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-2.5 border-b border-line-soft bg-surface px-3.5 py-2.5 shadow-sm lg:hidden">
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
@@ -279,6 +280,7 @@ export function Layout() {
         <div className="mb-4 hidden justify-end lg:flex">
           <NotificationBell align="start" />
         </div>
+        <NetworkBanner />
         <Outlet />
       </main>
 
@@ -287,7 +289,7 @@ export function Layout() {
           (env(safe-area-inset-bottom), which needs viewport-fit=cover). */}
       <nav
         aria-label="التنقل السريع"
-        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-surface-alt bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line-soft bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
         style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {bottomBarItems.map((item) => (
@@ -357,7 +359,7 @@ export function Layout() {
               <NavGroup key={group.title || 'home'} title={group.title} items={group.items} activeTo={activeTo} onNavigate={setSheetOpen} />
             ))}
 
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-surface-alt pt-3">
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line-soft pt-3">
               <NavLink
                 to="/change-password"
                 onClick={() => setSheetOpen(false)}

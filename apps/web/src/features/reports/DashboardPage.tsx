@@ -202,7 +202,7 @@ export function DirectorateOverview() {
                 {data.perStation.map((station) => (
                   <tr
                     key={station.stationId}
-                    className={`border-b border-surface-alt last:border-0 ${
+                    className={`border-b border-line-soft last:border-0 ${
                       station.stationId === worstStationId && station.exceptionCount > 0 ? 'bg-danger-100' : ''
                     }`}
                   >

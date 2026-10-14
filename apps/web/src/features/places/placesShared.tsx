@@ -303,7 +303,7 @@ export function ActivityCard({
         <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد تغييرات مسجّلة بعد.</p>
       )}
       {activity && activity.items.length > 0 && (
-        <ul className="divide-y divide-surface-alt">
+        <ul className="divide-y divide-line-soft">
           {activity.items.map((item) => (
             <li key={item.id} className="py-3">
               <p className="text-[16px] font-bold text-ink lg:text-[14px]">{placeActionLabel(item.action)}</p>

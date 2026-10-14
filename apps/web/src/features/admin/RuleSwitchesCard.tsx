@@ -70,7 +70,7 @@ export function RuleSwitchesCard({ settings }: { settings: SystemSettingRow[] })
           {error}
         </p>
       )}
-      <ul className="mt-3 divide-y divide-surface-alt">
+      <ul className="mt-3 divide-y divide-line-soft">
         {RULES.map((rule) => {
           const raw = byKey.get(rule.key);
           const on = raw === undefined ? rule.defaultOn : raw === 'true';

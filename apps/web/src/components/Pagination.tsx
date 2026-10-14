@@ -27,7 +27,7 @@ export function Pagination({ skip, take, total, onSkipChange, alwaysShow = false
     <nav
       aria-label="التنقل بين الصفحات"
       data-testid={testId}
-      className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-alt px-4 py-3 lg:px-[18px]"
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft px-4 py-3 lg:px-[18px]"
     >
       <p className="text-[15px] text-ink-soft lg:text-[13px]" role="status">
         <span data-testid={`${testId}-range`}>

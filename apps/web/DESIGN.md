@@ -15,13 +15,14 @@ colors:
   violation-red-tint: "#FBE6E0"
   approved-green: "#1F7A5C"
   approved-green-tint: "#E2F2EA"
-  warm-paper: "#F7F5EF"
+  warm-paper: "#E4EBE9"
   surface-white: "#FFFFFF"
-  mist-green: "#EEF2EE"
+  mist-green: "#F1F5F4"
   ink: "#132524"
-  ink-soft: "#5B6D6A"
-  ink-faint: "#93A19E"
-  hairline: "#E3E7E2"
+  ink-soft: "#475957"
+  ink-faint: "#566866"
+  hairline: "#6A7C79"
+  hairline-soft: "#CBD5D2"
 typography:
   headline:
     fontFamily: "Cairo, sans-serif"
@@ -246,15 +247,19 @@ A warm, low-saturation field with one deep teal and one amber, plus a status set
 - **Approved Green** (#1F7A5C): Approved and successful states. **Approved Green Tint** (#E2F2EA) for its pill fill.
 
 ### Neutral
-- **Warm Paper** (#F7F5EF): The page background. Warm, never pure white.
+- **Cool Paper** (#E4EBE9, token name warm-paper kept): The page background (Phase 6, B1: was a beige #F7F5EF that did not separate from white on a weak screen). A grey-teal, so a white card reads as a different surface.
 - **Surface White** (#FFFFFF): Cards, sheets, the sidebar and page headers.
-- **Mist Green** (#EEF2EE): Input fields, secondary buttons, hover washes, quiet dividers.
+- **Mist Green** (#F1F5F4): Input fill, secondary buttons, table headers, hover washes.
 - **Ink** (#132524): Primary text, a green-black rather than neutral black.
-- **Ink Soft** (#5B6D6A): Secondary text, inactive navigation, ghost buttons.
-- **Ink Faint** (#93A19E): Tertiary text, codes, captions.
-- **Hairline** (#E3E7E2): Field borders and the rare unavoidable rule.
+- **Ink Soft** (#475957): Secondary text, inactive navigation, ghost buttons (7.4:1 on white).
+- **Ink Faint** (#566866): Tertiary text, codes, captions (5.9:1 on white, 4.9:1 on the page; was 2.7:1 and failed).
+- **Hairline** (#6A7C79): A boundary: field borders, card edges, tabs (4.4:1 on white, 3.6:1 on the page, so WCAG 1.4.11 holds). **Hairline Soft** (#CBD5D2): decorative row dividers inside a table only, never a boundary a person must see.
 
 ### Named Rules
+**The Visible-Edge Rule (Phase 6, B1).** Every field has a visible 1px edge at 3:1 against what is next to it (set once for all inputs in index.css), and a card is separated from the page by colour and its edge, not by a shadow alone. `node scripts/contrast-check.mjs` checks every token pair and must exit 0; its table is docs/contrast-table.md.
+
+**The Say-What-To-Do Rule (Phase 6, B3).** An API failure is one Arabic sentence that says what happened and what to do next, from lib/apiError.ts; a transport failure shows the calm network banner with a retry and says nothing was saved. Never a raw code or English.
+
 **The Meaning-Fixed Rule.** Each hue carries one meaning: teal is structure and brand, amber is the next action, green is approved, red is broken or irreversible. Never borrow a hue for decoration.
 
 **The Text-on-Amber Rule (Phase 5C).** Text on an amber fill is Ink; amber-family text on white or on the tint is Gauge Amber Ink. Anything under 4.5:1 (3:1 for large text) is a defect.

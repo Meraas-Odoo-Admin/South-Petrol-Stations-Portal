@@ -153,6 +153,7 @@ export function DailyReportPage() {
     <div>
       <PageHeader
         title="اليوم"
+        subtitle="تعبئات يوم واحد، وأرقامه، ومن سجّلها."
         actions={
           <>
             <PillButton variant="secondary" size="sm" onClick={handleExportCsv} disabled={exporting !== null} data-testid="daily-export-csv">
@@ -324,7 +325,7 @@ export function DailyReportPage() {
                 </thead>
                 <tbody>
                   {data.rows.map((row) => (
-                    <tr key={row.id} className="border-b border-surface-alt last:border-0">
+                    <tr key={row.id} className="border-b border-line-soft last:border-0">
                       <td className="px-[18px] py-3">
                         <CodeText>{formatTime(row.occurredAt)}</CodeText>
                       </td>

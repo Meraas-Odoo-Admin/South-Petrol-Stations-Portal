@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { describeApiError } from '../../lib/apiError';
 import { apiClient } from '../../lib/apiClient';
 
 // Registration pivot, phase 3 — the printed vehicle card.
@@ -65,12 +66,12 @@ const CARD_ERRORS: Record<string, string> = {
   MUNICIPALITY_NOT_LIVE: 'بلدية مكتب التسجيل هذا لم تُفعَّل بعد.',
 };
 
-export function cardErrorMessage(error: unknown, fallback = 'تعذر إتمام العملية. حاول مرة أخرى.'): string {
-  if (!isAxiosError<{ message?: unknown }>(error) || !error.response) return fallback;
+export function cardErrorMessage(error: unknown, fallback = 'تعذر إتمام العملية.'): string {
+  if (!isAxiosError<{ message?: unknown }>(error) || !error.response) return describeApiError(error, fallback).message;
   const code = error.response.data?.message;
   if (typeof code === 'string' && CARD_ERRORS[code]) return CARD_ERRORS[code];
   if (error.response.status === 403) return 'لا تملك صلاحية هذا الإجراء في مكتب التسجيل هذا.';
-  return fallback;
+  return describeApiError(error, fallback).message;
 }
 
 // The desk this DEVICE prints at, per registration station — picked once and

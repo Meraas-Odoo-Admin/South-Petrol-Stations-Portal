@@ -104,7 +104,7 @@ export function EmployeeActivityPage() {
             <Card>
               <ol>
                 {data.rows.map((r) => (
-                  <li key={r.id} className="border-b border-surface-alt px-4 py-3 last:border-b-0">
+                  <li key={r.id} className="border-b border-line-soft px-4 py-3 last:border-b-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                       <span className="text-[16px] font-bold text-ink lg:text-[14px]">{actionLabel(r.action)}</span>
                       <time dateTime={r.createdAt} dir="ltr" className="text-[14px] text-ink-soft lg:text-[12px]">{stamp(r.createdAt)}</time>
