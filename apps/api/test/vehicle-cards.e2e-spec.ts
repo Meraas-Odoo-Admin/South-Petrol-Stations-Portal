@@ -313,29 +313,14 @@ describe('Vehicle cards (e2e)', () => {
     await pump.post(`/vehicles/${vehicleIds[2]!}/cards`, issueBody()).expect(403);
     await pump.post(`/cards/${replacementCard.id}/print`).expect(403);
     await pump.post(`/cards/${replacementCard.id}/failed-print`).expect(403);
-    await pump.get(`/cards/test-card?registrationStationId=${stationId}`).expect(403);
+    await pump.get('/cards/printer-setup').expect(403);
     expect(await prisma.vehicleCard.count({ where: { vehicleId: vehicleIds[2]! } })).toBe(0);
   });
 
-  it('serves a test card for desk setup', async () => {
+  // Phase 6: the separate test card was merged into the printer setup card.
+  it('has no separate test card any more', async () => {
     const registrar = await as('registrar');
-    const before = await prisma.cardPrint.count({ where: { registrationStationId: stationId, kind: 'TEST' } });
-    const res = await registrar
-      .get(`/cards/test-card?registrationStationId=${stationId}&deskId=${deskId}`)
-      .buffer(true)
-      .parse(binary)
-      .expect(200);
-    expect((res.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
-    for (const size of await pdfPageSizesMm(res.body as Buffer)) expect(isExactCardSize(size, 0.01)).toBe(true);
-
-    // Phase 6: a test card is for checking the printer; it is not counted.
-    expect(await prisma.cardPrint.count({ where: { registrationStationId: stationId, kind: 'TEST' } })).toBe(before);
-
-    // A desk is required, it must be at this station, and the station must be in scope.
-    await registrar.get(`/cards/test-card?registrationStationId=${stationId}`).expect(400);
-    await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=not-a-desk`).expect(404);
-    await registrar.get(`/cards/test-card?registrationStationId=${otherStationId}&deskId=${deskId}`).expect(403);
-    expect(await prisma.cardPrint.count({ where: { registrationStationId: stationId, kind: 'TEST' } })).toBe(before);
+    await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=${deskId}`).expect(404);
   });
 
   it('serves the printer setup card as one landscape page, recording nothing', async () => {
@@ -386,7 +371,6 @@ describe('Vehicle cards (e2e)', () => {
     // The failed print itself consumed no further blank; its replacement does, when printed.
     expect(await count('CARD')).toBe(cardBefore + 2);
     await registrar.post(`/cards/${replacement.id}/print`, { mode: 'full' }).buffer(true).parse(binary).expect(200);
-    await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=${deskId}`).buffer(true).parse(binary).expect(200);
 
     expect(await count('CARD')).toBe(cardBefore + 3);
     expect(await count('TEST')).toBe(testBefore);

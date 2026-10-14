@@ -24,7 +24,6 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { FillUpsModule } from './fillups/fillups.module';
 import { ReportsModule } from './reports/reports.module';
 import { RolesModule } from './roles/roles.module';
-import { StandingExceptionsModule } from './standing-exceptions/standing-exceptions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FuelStockModule } from './fuel-stock/fuel-stock.module';
 import { OpsReportsModule } from './ops-reports/ops-reports.module';
@@ -76,7 +75,6 @@ import { accountThrottleSkip, accountTracker } from './common/throttle/account-t
     FillUpsModule,
     ReportsModule,
     RolesModule,
-    StandingExceptionsModule,
     NotificationsModule,
     FuelStockModule,
     OpsReportsModule,

@@ -13,7 +13,6 @@ async function main(): Promise<void> {
   const renderer = new CardRendererService();
   try {
     const checks: Array<[string, Buffer, number]> = [
-      ['test card', await renderer.renderTestCardPdf('مديرية أمن سبها'), 1],
       ['printer setup card', await renderer.renderPrinterSetupPdf(), 1],
       [
         'sample card',

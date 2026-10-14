@@ -20,6 +20,7 @@ import type { OpsReportQueryDto } from './dto/ops-report-query.dto';
 
 export const IDENTIFICATION_LABELS_AR: Record<string, string> = {
   CARD_SCAN: 'بطاقة',
+  NO_CARD: 'بدون بطاقة',
   TYPED_REGISTERED: 'لوحة مكتوبة (مسجّلة)',
   TYPED_UNREGISTERED: 'لوحة غير مسجّلة',
   EMERGENCY_OVERRIDE: 'تجاوز طارئ',
@@ -482,11 +483,11 @@ export class OpsReportsService {
         SELECT u."id" AS id, u."fullName" AS name, count(*)::int AS n, COALESCE(sum(f."quantityLiters"), 0)::float AS liters
         FROM "FillUpTransaction" f JOIN "User" u ON u."id" = f."recordedById"
         WHERE ${where} GROUP BY 1, 2`,
-      this.prisma.$queryRaw<Array<{ day: Date; exceptions: number; overrides: number; standing: number }>>`
+      this.prisma.$queryRaw<Array<{ day: Date; exceptions: number; noCard: number; overLimit: number }>>`
         SELECT ${DAY_OF_FILLUP} AS day,
-          count(*) FILTER (WHERE f."isException" AND f."identifiedBy" <> 'EMERGENCY_OVERRIDE')::int AS exceptions,
-          count(*) FILTER (WHERE f."identifiedBy" = 'EMERGENCY_OVERRIDE')::int AS overrides,
-          count(*) FILTER (WHERE f."standingExceptionId" IS NOT NULL)::int AS standing
+          count(*) FILTER (WHERE f."isException")::int AS exceptions,
+          count(*) FILTER (WHERE f."identifiedBy" = 'NO_CARD')::int AS "noCard",
+          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM "Exception" e WHERE e."fillUpTransactionId" = f."id" AND e."overLimit"))::int AS "overLimit"
         FROM "FillUpTransaction" f WHERE ${where} GROUP BY 1`,
       this.prisma.fillUpTransaction.findMany({
         where: {
@@ -546,20 +547,20 @@ export class OpsReportsService {
       },
       {
         id: 'exceptions',
-        title: 'الاستثناءات والتجاوزات',
-        note: 'تعبئات سُجّلت باستثناء، أو بتجاوز طارئ بعد الموعد، أو غطّاها استثناء دائم.',
+        title: 'الاستثناءات وبدون بطاقة',
+        note: 'تعبئات سُجّلت باستثناء، أو بدون بطاقة (مركبة وُجدت بالبحث لأن بطاقتها لا تُستخدم)، أو تجاوزت حدّ نوع الاستثناء اليومي.',
         columns: [
           col('day', 'اليوم', 'date'),
           col('exceptions', 'استثناءات', 'number'),
-          col('overrides', 'تجاوزات طارئة', 'number'),
-          col('standing', 'بغطاء استثناء دائم', 'number'),
+          col('noCard', 'بدون بطاقة', 'number'),
+          col('overLimit', 'فوق الحد اليومي', 'number'),
         ],
         rows: days
           .map((day) => {
             const hit = perDayFlags.find((r) => dayString(r.day) === day);
-            return { day, exceptions: hit?.exceptions ?? 0, overrides: hit?.overrides ?? 0, standing: hit?.standing ?? 0 };
+            return { day, exceptions: hit?.exceptions ?? 0, noCard: hit?.noCard ?? 0, overLimit: hit?.overLimit ?? 0 };
           })
-          .filter((r) => r.exceptions + r.overrides + r.standing > 0),
+          .filter((r) => r.exceptions + r.noCard + r.overLimit > 0),
       },
       {
         id: 'mismatches',
@@ -782,7 +783,7 @@ export class OpsReportsService {
     const names = new Map(stations.map((s) => [s.id, s]));
 
     const where = this.fillupWhere({ stationIds, range, fuelType: query.fuelType });
-    const [perStationFuel, perStationDay, perStationFlags, topVehicles, institutions] = await Promise.all([
+    const [perStationFuel, perStationDay, perStationFlags, topVehicles] = await Promise.all([
       stationIds.length === 0
         ? []
         : this.prisma.$queryRaw<Array<{ station: string; fuel: string; n: number; liters: number }>>`
@@ -797,10 +798,10 @@ export class OpsReportsService {
             FROM "FillUpTransaction" f WHERE ${where} GROUP BY 1, 2`,
       stationIds.length === 0
         ? []
-        : this.prisma.$queryRaw<Array<{ station: string; exceptions: number; overrides: number; mismatches: number }>>`
+        : this.prisma.$queryRaw<Array<{ station: string; exceptions: number; noCard: number; mismatches: number }>>`
             SELECT f."stationId" AS station,
-              count(*) FILTER (WHERE f."isException" AND f."identifiedBy" <> 'EMERGENCY_OVERRIDE')::int AS exceptions,
-              count(*) FILTER (WHERE f."identifiedBy" = 'EMERGENCY_OVERRIDE')::int AS overrides,
+              count(*) FILTER (WHERE f."isException")::int AS exceptions,
+              count(*) FILTER (WHERE f."identifiedBy" = 'NO_CARD')::int AS "noCard",
               count(*) FILTER (WHERE f."fuelMismatch")::int AS mismatches
             FROM "FillUpTransaction" f WHERE ${where} GROUP BY 1`,
       stationIds.length === 0
@@ -810,16 +811,6 @@ export class OpsReportsService {
                    COALESCE(sum(f."quantityLiters"), 0)::float AS liters
             FROM "FillUpTransaction" f JOIN "Vehicle" v ON v."id" = f."vehicleId"
             WHERE ${where} GROUP BY 1, 2, 3 ORDER BY liters DESC LIMIT 10`,
-      stationIds.length === 0
-        ? []
-        : this.prisma.$queryRaw<Array<{ owner: string; vehicles: number; n: number; liters: number }>>`
-            SELECT o."fullName" AS owner, count(DISTINCT v."id")::int AS vehicles, count(*)::int AS n,
-                   COALESCE(sum(f."quantityLiters"), 0)::float AS liters
-            FROM "FillUpTransaction" f
-            JOIN "Vehicle" v ON v."id" = f."vehicleId"
-            JOIN "VehicleOwner" o ON o."id" = v."ownerId"
-            WHERE ${where} AND o."ownerKind" = 'INSTITUTION'
-            GROUP BY 1 ORDER BY liters DESC LIMIT 50`,
     ]);
 
     // Per station: totals and a column per fuel type.
@@ -994,17 +985,17 @@ export class OpsReportsService {
         },
         {
           id: 'flags',
-          title: 'المخالفات والاستثناءات والتجاوزات',
+          title: 'الاستثناءات وبدون بطاقة واختلاف الوقود',
           columns: [
             col('station', 'المحطة'),
             col('exceptions', 'استثناءات', 'number'),
-            col('overrides', 'تجاوزات طارئة', 'number'),
+            col('noCard', 'بدون بطاقة', 'number'),
             col('mismatches', 'اختلاف نوع الوقود', 'number'),
           ],
           rows: perStationFlags.map((r) => ({
             station: names.get(r.station)?.name ?? '',
             exceptions: r.exceptions,
-            overrides: r.overrides,
+            noCard: r.noCard,
             mismatches: r.mismatches,
           })),
         },
@@ -1022,22 +1013,6 @@ export class OpsReportsService {
             vehicle: [v.make, v.model].filter(Boolean).join(' ') || '—',
             count: v.n,
             liters: Math.round(v.liters * 10) / 10,
-          })),
-        },
-        {
-          id: 'institutions',
-          title: 'استهلاك مركبات الجهات والمؤسسات',
-          columns: [
-            col('owner', 'الجهة'),
-            col('vehicles', 'مركبات', 'number'),
-            col('count', 'عدد التعبئات', 'number'),
-            col('liters', 'اللترات', 'liters'),
-          ],
-          rows: institutions.map((i) => ({
-            owner: i.owner,
-            vehicles: i.vehicles,
-            count: i.n,
-            liters: Math.round(i.liters * 10) / 10,
           })),
         },
       ],

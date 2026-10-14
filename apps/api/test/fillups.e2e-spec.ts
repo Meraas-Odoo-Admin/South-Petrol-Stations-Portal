@@ -287,7 +287,6 @@ describe('Fill-ups (e2e)', () => {
   const loginAsRecorder = () => login(usernameRecorder);
   const loginAsRecorderOtherStation = () => login(usernameRecorderOtherStation);
   const loginAsRecorderNoException = () => login(usernameRecorderNoException);
-  const loginAsApprover = () => login(usernameApprover);
   const loginAsNoPerm = () => login(usernameNoPerm);
 
   function baseFillUpBody(overrides: Record<string, unknown> = {}) {
@@ -302,13 +301,13 @@ describe('Fill-ups (e2e)', () => {
 
   // ── 401 / 403 ────────────────────────────────────────────────────────
 
-  it('rejects unauthenticated requests to both fill-up endpoints', async () => {
+  it('rejects unauthenticated requests to the fill-up and exception endpoints', async () => {
     const server = app.getHttpServer();
     await request(server).post('/api/v1/fillups').send(baseFillUpBody()).expect(401);
-    await request(server).post('/api/v1/fillups/some-id/exceptions/approve').expect(401);
+    await request(server).get('/api/v1/exceptions').expect(401);
   });
 
-  it('blocks an actor without fillups:create/fillups:approve_exception', async () => {
+  it('blocks an actor without fillups:create', async () => {
     const accessToken = await loginAsNoPerm();
     const server = app.getHttpServer();
 
@@ -317,11 +316,6 @@ describe('Fill-ups (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .set('Idempotency-Key', `e2e-fu-noperm-${runId}`)
       .send(baseFillUpBody())
-      .expect(403);
-
-    await request(server)
-      .post('/api/v1/fillups/some-id/exceptions/approve')
-      .set('Authorization', `Bearer ${accessToken}`)
       .expect(403);
   });
 
@@ -472,7 +466,7 @@ describe('Fill-ups (e2e)', () => {
 
   // ── Reject -> exception -> approve, end to end ──────────────────────
 
-  it('rejects a fill-up over the weekly cap with 422 and creates nothing, then accepts the SAME request with exception fields, then lets an approver approve it', async () => {
+  it('rejects a fill-up over the weekly cap with 422 and creates nothing, then accepts the SAME request with exception fields (no approval step)', async () => {
     const accessToken = await loginAsRecorder();
     const server = app.getHttpServer();
 
@@ -553,23 +547,11 @@ describe('Fill-ups (e2e)', () => {
     );
     const fillUpId = exceptionRes.body.id;
 
-    // The approve endpoint's own guard (fillups:approve_exception) is
-    // still enforced independent of the exception's current state — the
-    // recorder (fillups:create + fillups:record_exception, but not
-    // fillups:approve_exception) still can't call it.
+    // Phase 6: there is no approval step any more, so the endpoint is gone.
     await request(server)
       .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .expect(403);
-
-    // An approver CAN reach the endpoint (permission-wise) but this
-    // exception is already approved — conflict, not a silent no-op or a
-    // second approval.
-    const approverToken = await loginAsApprover();
-    await request(server)
-      .post(`/api/v1/fillups/${fillUpId}/exceptions/approve`)
-      .set('Authorization', `Bearer ${approverToken}`)
-      .expect(409);
+      .expect(404);
   });
 
   // ── fillups:record_exception permission gate (round 12) ──────────────
@@ -615,64 +597,6 @@ describe('Fill-ups (e2e)', () => {
     await prisma.fillUpTransaction.deleteMany({ where: { vehicleId: vehicle5.id } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: vehicle5.id } });
     await prisma.vehicle.delete({ where: { id: vehicle5.id } });
-  });
-
-  // ── Station scoping on approve (CLAUDE.md rule 3) ────────────────────
-  // Same class of check as create()'s station-scope enforcement, applied to
-  // approveException: a user scoped to station A must not be able to
-  // approve an exception recorded at station B, even holding
-  // fillups:approve_exception. Distinct from the still-open §13 item 4
-  // (SecurityAuthority-scoped approval) flagged in the method's comment —
-  // this is the ordinary UserStationScope check.
-
-  it('blocks an approver scoped only to stationA from approving a still-pending exception recorded at stationB', async () => {
-    const server = app.getHttpServer();
-
-    // Round 12: every exception recorded through the API by a
-    // fillups:record_exception holder is now auto-approved at creation —
-    // there's no longer an API path that produces a genuinely PENDING
-    // exception (see the dedicated permission-gate test below for that
-    // behavior). A pending row is still a real, reachable state though —
-    // any Exception created before this permission existed, or by a future
-    // caller who somehow lacks the auto-approve path — so this seeds one
-    // directly via Prisma to test approveException's station-scope check,
-    // which runs on ANY pending exception regardless of how it got there.
-    const stationBFillUp = await prisma.fillUpTransaction.create({
-      data: {
-        vehicleId: vehicle1Id,
-        stationId: stationB.id,
-        municipalityId: municipality.id,
-        fuelType: 'PETROL_95',
-        quantityLiters: 10,
-        recordedById: recorderOtherStationUserId,
-        isException: true,
-        idempotencyKey: `e2e-fu-stationb-pending-${runId}`,
-        identifiedBy: 'TYPED_REGISTERED' as const,
-      },
-    });
-    await prisma.exception.create({
-      data: {
-        fillUpTransactionId: stationBFillUp.id,
-        exceptionTypeId,
-        reason: 'E2E test: pending exception recorded at stationB',
-        approvedById: null,
-      },
-    });
-    const stationBFillUpId = stationBFillUp.id;
-
-    // approverUser is scoped to stationA ONLY — no access to stationB.
-    const approverToken = await loginAsApprover();
-    await request(server)
-      .post(`/api/v1/fillups/${stationBFillUpId}/exceptions/approve`)
-      .set('Authorization', `Bearer ${approverToken}`)
-      .expect(403);
-
-    // Confirm it's genuinely still unapproved, not silently approved
-    // despite the 403.
-    const exception = await prisma.exception.findUnique({
-      where: { fillUpTransactionId: stationBFillUpId },
-    });
-    expect(exception?.approvedById).toBeNull();
   });
 
   // ── GET /fillups/rule-preview (round 7 item 1) ───────────────────────

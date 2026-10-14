@@ -25,7 +25,7 @@ const RULES: Array<{ key: string; title: string; text: string; defaultOn: boolea
   {
     key: 'fillup.rule.owner_gap.enabled',
     title: 'الفاصل الأدنى بين تعبئتين للمالك',
-    text: 'يُحسب على كل مركبات المالك الفرد معًا. لا يُطبَّق على مركبات الجهات والمؤسسات.',
+    text: 'يُحسب على كل مركبات المالك معًا.',
     defaultOn: true,
   },
   {

@@ -75,13 +75,13 @@ test('supervisor: scan the card, confirm the vehicle, trip the gap rule and reso
 
   await expect(page.getByTestId('fillup-success')).toBeVisible();
   await expect(page.getByTestId('fillup-success')).toContainText('استثناء');
-  // fillups:record_exception auto-approves at creation.
-  await expect(page.getByTestId('fillup-success')).toContainText('معتمدة');
+  // Phase 6: no approval step - it is recorded at once.
+  await expect(page.getByTestId('fillup-success')).not.toContainText('بانتظار');
 
-  // The violation appears approved in the list this supervisor can already see.
-  await page.getByRole('link', { name: 'المخالفات' }).click();
+  // It shows at once in the exceptions page this supervisor can already see.
+  await page.getByRole('link', { name: 'الاستثناءات' }).first().click();
   await expect(page).toHaveURL('/reports/violations');
-  const row = page.locator('tbody tr', { hasText: fixtures.ownerFullName });
-  await expect(row).toContainText('معتمدة');
-  await expect(row.getByTestId('approve-exception-button-desktop')).toHaveCount(0);
+  const row = page.getByTestId('exceptions-row').first();
+  await expect(row).toBeVisible();
+  await expect(row).toContainText(fixtures.stationName);
 });

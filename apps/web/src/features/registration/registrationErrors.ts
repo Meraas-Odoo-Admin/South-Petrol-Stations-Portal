@@ -19,10 +19,6 @@ export function registrationErrorMessage(error: unknown): string {
   switch (code) {
     case 'REGISTRATION_STATION_NOT_ACTIVE':
       return 'مكتب التسجيل هذا مغلق حاليًا، ولا يمكن التسجيل فيه.';
-    case 'MUNICIPALITY_NOT_LIVE':
-      return 'بلدية مكتب التسجيل هذا لم تُفعَّل في المنظومة بعد، ولا يمكن التسجيل فيه.';
-    case 'INSTITUTION_DUPLICATE':
-      return 'هذه الجهة مسجّلة مسبقًا باسم مطابق — اخترها من القائمة بدل إنشائها من جديد.';
     case 'REGISTRATION_STATION_ARCHIVED':
       return 'مكتب التسجيل هذا مؤرشف، ولا يمكن التسجيل فيه.';
     case 'MUNICIPALITY_ARCHIVED':

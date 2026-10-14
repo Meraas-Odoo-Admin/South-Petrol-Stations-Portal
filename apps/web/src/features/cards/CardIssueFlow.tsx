@@ -12,7 +12,6 @@ import {
   rememberedDeskId,
   rememberPrintMode,
   rememberedPrintMode,
-  testCardPdf,
   type IssuableReason,
   type RegistrationDeskRow,
   type VehicleCardRow,
@@ -141,17 +140,6 @@ export function CardIssueFlow({
     }
   }
 
-  async function printTestCard() {
-    setError(null);
-    // A test card is recorded against the desk it is printed at.
-    if (!desk) return;
-    try {
-      setFallbackUrl(printPdfBlob(await testCardPdf(registrationStationId, desk.id)));
-    } catch (err) {
-      setError(cardErrorMessage(err, 'تعذرت طباعة بطاقة الاختبار.'));
-    }
-  }
-
   return (
     <div className="space-y-3" data-testid="card-issue-flow">
       {/* Desk (per device) */}
@@ -191,9 +179,6 @@ export function CardIssueFlow({
             <span className="flex gap-3">
               <button type="button" className="font-bold text-accent-ink" onClick={() => setChoosingDesk(true)}>
                 تغيير المكتب
-              </button>
-              <button type="button" className="font-bold text-ink-soft" onClick={printTestCard} data-testid="card-print-test">
-                طباعة بطاقة اختبار
               </button>
               <button type="button" className="font-bold text-ink-soft" onClick={printSetupCard} data-testid="card-print-setup">
                 بطاقة إعداد الطابعة

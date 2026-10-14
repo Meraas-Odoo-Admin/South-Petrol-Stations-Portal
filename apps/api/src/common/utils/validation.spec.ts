@@ -3,12 +3,10 @@ import {
   checkArabicPersonName,
   checkBooklet,
   checkChassis,
-  checkInstitutionName,
   checkLibyanMobile,
   checkLiters,
   checkManufactureYear,
   checkNationalId,
-  institutionNameKey,
   normalizeLibyanMobile,
   tripoliYear,
 } from '@fuel-tracking/shared-types';
@@ -180,12 +178,5 @@ describe('names', () => {
     expect(checkArabicPersonName('Mohamed Ali').ok).toBe(false);
     expect(checkArabicPersonName('محمد 2').ok).toBe(false);
     expect(checkArabicPersonName('ab').ok).toBe(false);
-  });
-
-  it('an institution name is free text with letters; spellings that differ only in marks share one key', () => {
-    expect(checkInstitutionName('مصرف الجمهورية').ok).toBe(true);
-    expect(checkInstitutionName('12345').ok).toBe(false);
-    expect(institutionNameKey('مصرف  الجمهورية')).toBe(institutionNameKey('مصرف الجمهورية'));
-    expect(institutionNameKey('شركة الأمل')).toBe(institutionNameKey('شركة الامل'));
   });
 });

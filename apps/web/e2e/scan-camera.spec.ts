@@ -65,14 +65,14 @@ test('scan step: the panel stays inside the screen once a tall camera stream is 
 
   for (const phone of PHONES) {
     await page.setViewportSize({ width: phone.width, height: phone.height });
-    const override = page.getByTestId('fillup-override-open');
+    const override = page.getByTestId('fillup-nocard-open');
     const video = page.getByTestId('qr-scan-panel').locator('video');
     // The stream is really playing (frames arrived), not just requested.
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth), { message: phone.name })
       .toBeGreaterThan(0);
     await expect(page.getByTestId('fillup-type-plate-instead'), phone.name).toHaveCount(0);
-    // The supervisor's override entry sits under the panel and stays reachable.
+    // The no-card search entry sits under the panel and stays reachable.
     await expect(override, phone.name).toBeVisible();
     // And the panel itself did not grow past the screen because of the video.
     const panel = await page.getByTestId('qr-scan-panel').boundingBox();

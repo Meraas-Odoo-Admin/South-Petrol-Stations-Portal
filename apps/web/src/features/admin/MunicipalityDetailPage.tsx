@@ -13,6 +13,7 @@ import { Icon, ICONS } from '../../components/icons';
 import { Notice, SectionCard } from '../users/parts';
 import { PlaceSummaryRow } from '../places/MunicipalitySummary';
 import { PlacesList } from '../places/PlacesList';
+import { MunicipalitySettingsCard } from '../reports/ExceptionsPage';
 import { ArchiveRestoreButton, ArchivedBanner, type MunicipalityLite } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
 import { ActivityTab, PeopleTab, ReportsTab } from './MunicipalityTabs';
@@ -283,6 +284,8 @@ function SettingsTab({
           </div>
         </SectionCard>
       )}
+
+      {!archived && <MunicipalitySettingsCard municipalityId={m.id} />}
 
       {/* The danger zone: the only destructive action, set apart. */}
       <section

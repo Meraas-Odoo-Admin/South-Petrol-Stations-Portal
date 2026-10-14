@@ -21,10 +21,8 @@ export const PERMISSION_AREAS: Array<{ key: string; label: string }> = [
 export const PERMISSION_LABELS: Record<string, { area: string; label: string }> = {
   'fillups:create': { area: 'fillups', label: 'تسجيل تعبئة' },
   'fillups:update': { area: 'fillups', label: 'تعديل تعبئة' },
-  'fillups:approve_exception': { area: 'fillups', label: 'الموافقة على استثناء تعبئة' },
   'fillups:record_exception': { area: 'fillups', label: 'تسجيل تعبئة كاستثناء' },
-  'fillups:emergency_override': { area: 'fillups', label: 'السماح بتعبئة بلا بطاقة بعد الموعد (تجاوز طارئ)' },
-  'standing_exceptions:manage': { area: 'fillups', label: 'منح استثناء دائم لمركبة أو مالك' },
+  'exception_settings:manage': { area: 'fillups', label: 'ضبط حدود الاستثناءات اليومية' },
   'exception_types:manage': { area: 'fillups', label: 'إدارة أنواع الاستثناءات' },
   'cards:scan': { area: 'fillups', label: 'قراءة بطاقة المركبة عند المضخة' },
 

@@ -258,22 +258,17 @@ describe('Phase 6 card-only pump flow (e2e)', () => {
   // ── No card, no fill-up ───────────────────────────────────────────────
 
   describe('a card scan is required', () => {
-    it('refuses an unregistered typed plate, in preview and submit', async () => {
+    it('refuses a typed plate, in preview and submit: it is not a way to identify a vehicle', async () => {
       const unknown = `4-${String(Number(seq) + 5).padStart(6, '0')}`;
-      const prev = await preview('employee', { plate: unknown });
-      const submit = await postFillUp('employee', { plate: unknown });
-      for (const res of [prev, submit]) {
-        expect(res.status).toBe(409);
-        expect(res.body.message).toBe('CARD_REQUIRED');
-      }
+      expect((await preview('employee', { plate: unknown })).status).toBe(400);
+      expect((await postFillUp('employee', { plate: unknown })).status).toBe(400);
       expect(await prisma.fillUpTransaction.count({ where: { normalizedPlate: normalizePlate(unknown)! } })).toBe(0);
     });
 
-    it('refuses a registered vehicle named by id or plate when no card is scanned', async () => {
+    it('refuses a registered vehicle named by id when no card is scanned and no reason is given', async () => {
       const res = await postFillUp('employee', { vehicleId: carded.id });
       expect(res.status).toBe(409);
       expect(res.body.message).toBe('CARD_REQUIRED');
-      expect((await postFillUp('employee', { plate: carded.plate })).status).toBe(409);
       expect((await preview('employee', { vehicleId: carded.id })).status).toBe(409);
     });
 
@@ -306,61 +301,15 @@ describe('Phase 6 card-only pump flow (e2e)', () => {
     });
   });
 
-  // ── Emergency override ────────────────────────────────────────────────
-
-  describe('emergency override', () => {
-    let bare: { id: string; plate: string };
-
-    beforeAll(async () => {
-      const plate = `6-${String(Number(seq) + 9).padStart(6, '0')}`;
-      const vehicle = await prisma.vehicle.create({
-        data: { internalCode: `E2E-P6-BARE-${runId}`, currentPlate: plate, normalizedPlate: normalizePlate(plate) },
-      });
-      vehicleIds.push(vehicle.id);
-      bare = { id: vehicle.id, plate };
-    });
-
-    it('is refused for an employee and for a registration role, however it is asked', async () => {
-      const body = { plate: bare.plate, emergencyOverride: true, overrideReason: 'ambulance' };
-      expect((await postFillUp('employee', body)).status).toBe(403);
-      expect((await postFillUp('registrar', body)).status).toBe(403);
-      expect(await prisma.fillUpTransaction.count({ where: { vehicleId: bare.id } })).toBe(0);
-    });
-
-    it('needs a written reason', async () => {
-      const res = await postFillUp('supervisor', { plate: bare.plate, emergencyOverride: true });
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe('OVERRIDE_REASON_REQUIRED');
-    });
-
-    it('works for a registered vehicle only: an unregistered plate is refused', async () => {
-      const res = await postFillUp('supervisor', { plate: `3-${String(Number(seq) + 7).padStart(6, '0')}`, emergencyOverride: true, overrideReason: 'x y z' });
-      expect(res.status).toBe(404);
-      expect(res.body.message).toBe('VEHICLE_NOT_REGISTERED');
-    });
-
-    it('is not accepted next to a card scan', async () => {
-      const res = await postFillUp('supervisor', { cardNumber: scanned.cardNumber, emergencyOverride: true, overrideReason: 'x y z' });
-      expect(res.status).toBe(409);
-      expect(res.body.message).toBe('OVERRIDE_NOT_NEEDED');
-    });
-
-    it('waives only the card: records an exception, audits who/when/plate/reason, limits still apply', async () => {
-      const res = await postFillUp('supervisor', { plate: bare.plate, emergencyOverride: true, overrideReason: 'ambulance on the way' });
-      expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({
-        vehicleId: bare.id,
-        identifiedBy: 'EMERGENCY_OVERRIDE',
-        isException: true,
-        overrideReason: 'ambulance on the way',
-        recordedById: users.supervisor.id,
-      });
-      const audit = await prisma.auditLog.findFirst({ where: { action: 'EMERGENCY_OVERRIDE_FILLUP', entityId: res.body.id } });
-      expect(audit?.userId).toBe(users.supervisor.id);
-
-      const again = await postFillUp('supervisor', { plate: bare.plate, emergencyOverride: true, overrideReason: 'again' });
-      expect(again.status).toBe(422);
-      expect(again.body.reason).toBe('VEHICLE_GAP_TOO_SHORT');
-    });
+  // The emergency override was replaced by the no-card search (see
+  // phase6-exceptions.e2e-spec.ts): its fields are no longer accepted.
+  it('refuses the old emergency-override fields and a typed plate', async () => {
+    for (const body of [
+      { plate: carded.plate, emergencyOverride: true, overrideReason: 'ambulance on the way' },
+      { vehicleId: carded.id, emergencyOverride: true, overrideReason: 'ambulance on the way' },
+      { plate: carded.plate },
+    ]) {
+      expect((await postFillUp('supervisor', body)).status).toBe(400);
+    }
   });
 });

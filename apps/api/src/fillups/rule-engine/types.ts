@@ -11,6 +11,14 @@ export type RuleFailureReason =
   | 'OWNER_WEEKLY_CAP_REACHED'
   | 'LITERS_PER_PERSON_CAP_REACHED';
 
+export const RULE_FAILURE_REASONS: RuleFailureReason[] = [
+  'VEHICLE_GAP_TOO_SHORT',
+  'VEHICLE_WEEKLY_CAP_REACHED',
+  'OWNER_GAP_TOO_SHORT',
+  'OWNER_WEEKLY_CAP_REACHED',
+  'LITERS_PER_PERSON_CAP_REACHED',
+];
+
 // The specific prior fill-up that tripped an OWNER_*/LITERS_* check — an
 // owner-level rule can fire because of a fill-up on a DIFFERENT vehicle
 // than the one being submitted now, which looks like a false positive
@@ -33,16 +41,12 @@ export type RuleSubject =
       kind: 'vehicle';
       vehicleId: string;
       ownerId: string | null;
-      // Phase 5A: an INSTITUTION owner's vehicles are never lumped together
-      // by the owner-level rules (a bank with 20 cars would hit the owner
-      // weekly limit at once) - only the vehicle-level rules apply to them.
-      ownerKind?: 'INDIVIDUAL' | 'INSTITUTION';
     }
   | { kind: 'plate'; normalizedPlate: string };
 
 // Why the owner-level rules were left out of an evaluation, so the screen
 // says so instead of silently skipping them.
-export type SkippedBecause = 'UNREGISTERED_PLATE' | 'INSTITUTION_OWNER';
+export type SkippedBecause = 'UNREGISTERED_PLATE';
 
 // Phase 5A: every rule can be switched on or off by the super admin. The
 // switch lives in SystemSetting (never a constant), keyed per rule.

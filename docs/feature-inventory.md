@@ -1,7 +1,12 @@
 # Feature inventory (Phase 6, Part A4)
 
-An inventory only. **Nothing on this list has been removed.** Each row has a
-recommendation (keep / remove / merge) and why; the decision is the client's.
+Written as an inventory, before anything on it was removed. The client then
+decided (see OPEN_ITEMS #64 (b), (g), (h), (i)): the emergency override is
+replaced by the no-card search, institutions are removed, exceptions are
+redesigned (types with daily limits, no approval, standing exceptions removed),
+the guided tour is removed, the dashboard is merged into «اليوم», the test card
+is merged into the printer setup card, and vehicle types and exception types
+live in «القوائم». Everything else on the list was kept.
 
 "Main daily flow" means: scan card → confirm vehicle → fuel and amount → review
 → done at the pump, and issuing and printing a card at the office.

@@ -9,6 +9,8 @@ import { DashboardQueryDto, DEFAULT_DASHBOARD_RANGE_DAYS } from './dto/dashboard
 const VIEW_ALL_STATIONS_PERMISSION = 'reports:view_all_stations';
 
 const FILL_UP_HISTORY_INCLUDE = {
+  // Who recorded it (Phase 6: the day screen filters by employee).
+  recordedBy: { select: { id: true, fullName: true } },
   vehicle: {
     select: {
       id: true,
@@ -104,11 +106,15 @@ export class ReportsService {
       ...baseWhere,
       ...(query.ownerId ? { vehicle: { ownerId: query.ownerId } } : {}),
       ...(query.fuelType ? { fuelType: query.fuelType } : {}),
+      ...(query.employeeId ? { recordedById: query.employeeId } : {}),
+      ...(query.noCard ? { identifiedBy: 'NO_CARD' as const } : {}),
     };
 
     // Phase 5A: fill-ups where the fuel poured was not the vehicle's own fuel
     // type (a pump warning, never a block) - supervisors see how many.
     const fuelMismatchCount = await this.prisma.fillUpTransaction.count({ where: { ...where, fuelMismatch: true } });
+    // Phase 6: fill-ups recorded «بدون بطاقة» (found by search; the card could not be used).
+    const noCardCount = await this.prisma.fillUpTransaction.count({ where: { ...where, identifiedBy: 'NO_CARD' } });
 
     const [aggregate, exceptionsPending, exceptionsApproved, totalBeforeFilters, rows, byFuelRows] = await Promise.all([
       this.prisma.fillUpTransaction.aggregate({
@@ -150,6 +156,7 @@ export class ReportsService {
       totalFillUps: aggregate._count._all,
       totalLiters: aggregate._sum.quantityLiters?.toNumber() ?? 0,
       fuelMismatchCount,
+      noCardCount,
       exceptionsPending,
       exceptionsApproved,
       totalBeforeFilters,
@@ -180,24 +187,6 @@ export class ReportsService {
     ]);
 
     return { total, rows };
-  }
-
-  // How many violations still wait for a decision, limited to what the caller
-  // may see: every station for an all-stations holder, otherwise only the
-  // stations in their scope. For the navigation badge, which has no station
-  // to choose (getViolations demands one for a scoped caller, so using it
-  // there returned a 400 on every page).
-  async countPendingViolations(actorId: string): Promise<{ total: number }> {
-    // Same rule as every other report here: reports:view_all_stations means
-    // every station; anyone else is limited to the stations in their scope.
-    const scope = await this.rbac.getStationScope(actorId);
-    const total = await this.prisma.exception.count({
-      where: {
-        approvedById: null,
-        ...(scope === null ? {} : { fillUpTransaction: { stationId: { in: scope } } }),
-      },
-    });
-    return { total };
   }
 
   // Same filter logic as getViolations, minus pagination — used by export.

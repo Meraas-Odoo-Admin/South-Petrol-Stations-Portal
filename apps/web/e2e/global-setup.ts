@@ -112,9 +112,11 @@ async function writeFakeCamera(cardPng: Buffer, outPath: string): Promise<void> 
       c.width = ${width}; c.height = ${height};
       const x = c.getContext('2d');
       x.fillStyle = '#fff'; x.fillRect(0, 0, ${width}, ${height});
-      // The whole landscape card (QR and plate), scaled to the frame width.
-      const scale = ${width} / img.width, sh = img.height * scale;
-      x.drawImage(img, 0, (${height} - sh) / 2, ${width}, sh);
+      // The card's QR (left side, about x 194 y 300 in the 1011 x 638 card) is
+      // centred in the frame: a tall phone panel crops the frame's sides, so
+      // the code has to sit in the middle of it.
+      const scale = 0.8;
+      x.drawImage(img, ${width} / 2 - 194 * scale, ${height} / 2 - 300 * scale, img.width * scale, img.height * scale);
       const d = x.getImageData(0, 0, ${width}, ${height}).data;
       const y = new Array(${width * height});
       for (let i = 0; i < y.length; i++) y[i] = Math.round(0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]);

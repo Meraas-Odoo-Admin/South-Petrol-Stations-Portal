@@ -116,7 +116,7 @@ test.beforeAll(async () => {
       username: fixtures.adminUsername,
       password: fixtures.adminPassword,
       routes: [
-        '/reports/dashboard',
+        '/reports/daily',
         '/reports/violations',
         '/reports',
         '/vehicles/change-requests',
@@ -124,7 +124,7 @@ test.beforeAll(async () => {
         '/manage/stations/new',
         '/manage/offices/new',
       ],
-      mustSee: ['/manage', '/reports/dashboard', '/reports'],
+      mustSee: ['/manage', '/reports/daily', '/reports'],
       mustNotSee: ['/admin', '/my-station'],
     },
   ];

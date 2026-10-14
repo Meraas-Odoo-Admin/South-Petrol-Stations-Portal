@@ -401,6 +401,7 @@ export class VehiclesService {
               { currentPlate: { contains: query.search, mode: 'insensitive' } },
               ...(plateSearchTerm(query.search) ? [{ normalizedPlate: { contains: plateSearchTerm(query.search) } }] : []),
               { chassisNumber: { contains: query.search, mode: 'insensitive' } },
+              { registrationBooklet: { contains: query.search, mode: 'insensitive' } },
               { owner: { fullName: { contains: query.search, mode: 'insensitive' } } },
               { owner: { identityNumber: { contains: query.search } } },
             ]
@@ -414,7 +415,6 @@ export class VehiclesService {
           identityType: true,
           identityNumber: true,
           phone: true,
-          ownerKind: true,
           responsibleDriverName: true,
           responsibleDriverPhone: true,
         },
@@ -466,7 +466,6 @@ export class VehiclesService {
             identityType: true,
             identityNumber: true,
             phone: true,
-            ownerKind: true,
             responsibleDriverName: true,
             responsibleDriverPhone: true,
           },

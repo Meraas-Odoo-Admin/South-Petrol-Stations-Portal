@@ -36,7 +36,7 @@ test('the owner, vehicle and user DTOs use those validators, not their own patte
   const owner = read('apps/api/src/owners/dto/create-owner.dto.ts');
   assert.match(owner, /IsValidIdentityNumber/);
   assert.match(owner, /IsLibyanMobileNumber/);
-  assert.match(owner, /IsNationalIdNumber/);
+  assert.match(owner, /IsOwnerName/);
   const vehicle = read('apps/api/src/vehicles/dto/create-vehicle.dto.ts');
   assert.match(vehicle, /IsChassisNumber/);
   assert.match(vehicle, /IsBookletNumber/);

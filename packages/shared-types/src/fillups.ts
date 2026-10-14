@@ -19,30 +19,38 @@ export type RuleFailureReason =
   | 'LITERS_PER_PERSON_CAP_REACHED';
 
 // How a fill-up identified its vehicle. Set by the server only. Phase 6: new
-// fill-ups are CARD_SCAN or EMERGENCY_OVERRIDE; the typed values stay in the
-// union because older rows carry them.
+// fill-ups are CARD_SCAN, or NO_CARD (a registered vehicle found by search when
+// its card could not be used, with a reason). The other values stay in the union
+// because older rows carry them.
 export type FillUpIdentification =
   | 'CARD_SCAN'
+  | 'NO_CARD'
   | 'TYPED_REGISTERED'
   | 'TYPED_UNREGISTERED'
   | 'EMERGENCY_OVERRIDE';
 
+// Why a card could not be used at the pump («بدون بطاقة»).
+export const NO_CARD_REASONS = ['CARD_DAMAGED', 'CAMERA_NOT_WORKING', 'CARD_NOT_FOUND'] as const;
+export type NoCardReason = (typeof NO_CARD_REASONS)[number];
+export const NO_CARD_REASON_LABELS_AR: Record<NoCardReason, string> = {
+  CARD_DAMAGED: 'البطاقة تالفة',
+  CAMERA_NOT_WORKING: 'الكاميرا لا تعمل',
+  CARD_NOT_FOUND: 'البطاقة غير موجودة',
+};
+
 export interface CreateFillUpRequest {
-  // One of vehicleId / cardNumber / plate identifies the vehicle (the server
-  // resolves them in that order: card, vehicle, typed plate).
-  vehicleId?: string;
+  // A card scan names its vehicle by cardNumber. Without a card, a REGISTERED
+  // vehicle can be named by vehicleId together with noCardReason (found by
+  // search). Nothing else identifies a vehicle at the pump.
   cardNumber?: string;
-  plate?: string;
-  // Waives only the card requirement. Needs the
-  // fillups:emergency_override permission and a written reason.
-  emergencyOverride?: boolean;
-  overrideReason?: string;
+  vehicleId?: string;
+  noCardReason?: NoCardReason;
   stationId: string;
   fuelType: FuelType;
   quantityLiters: number;
   occurredAt?: string;
-  // Presence of ANY of these three puts the request in "exception mode" —
-  // see CreateFillUpDto's comment. All three or none.
+  // Phase 6: when a rule blocks the fill-up, the employee picks an active
+  // exception type and writes a short reason; the fill-up then goes through.
   exceptionTypeId?: string;
   reason?: string;
   proofReference?: string;
@@ -57,6 +65,16 @@ export interface ExceptionTypeOption {
   name: string;
   requiresProof: boolean;
   isActive: boolean;
+  // Phase 6: the rules this type may override (empty = any rule), its daily
+  // limit per station (null = none) and the municipality it belongs to (null =
+  // offered everywhere).
+  overridableRules?: RuleFailureReason[];
+  dailyLimitPerStation?: number | null;
+  municipalityId?: string | null;
+  // Only in the list for one station: uses today at that station, and whether
+  // going past the limit is refused there (the strict switch).
+  usedToday?: number;
+  strictLimit?: boolean;
 }
 
 // The specific prior fill-up that tripped an OWNER_*/LITERS_* check (a
@@ -86,6 +104,8 @@ export interface FillUpExceptionRaw {
   createdAt: string;
   triggerReason: RuleFailureReason | null;
   triggerDetail: RuleTriggerDetail | null;
+  // Phase 6: this use went past the type's daily limit at the station.
+  overLimit?: boolean;
 }
 
 // The raw FillUpTransaction row as POST /fillups returns it — flat
@@ -103,6 +123,7 @@ export interface FillUpTransactionRaw {
   normalizedPlate: string | null;
   identifiedBy: FillUpIdentification;
   overrideReason: string | null;
+  noCardReason: string | null;
   driverId: string | null;
   stationId: string;
   // The municipality the fill-up happened in, stamped at creation from
@@ -142,9 +163,8 @@ export interface RulePreviewResponse {
   // Owner-level rules that cannot be evaluated for an unregistered plate
   // (there is no owner yet). Empty for a registered vehicle.
   skippedRules: RuleFailureReason[];
-  // Why they were left out: no registered vehicle (so no owner), or the owner
-  // is an institution (only the vehicle-level rules apply to its vehicles).
-  skippedReason?: 'UNREGISTERED_PLATE' | 'INSTITUTION_OWNER' | null;
+  // Why they were left out: no registered vehicle (so no owner).
+  skippedReason?: 'UNREGISTERED_PLATE' | null;
   // Rules the super admin has switched off - not applied at all.
   disabledRules?: RuleFailureReason[];
   // The vehicle's own fuel type, and whether the fuel asked about (the

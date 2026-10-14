@@ -67,12 +67,9 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'fillups:create': 'تسجيل تعبئة',
   'fillups:update': 'تعديل تعبئة (غير مفعّلة حاليًا)',
   'fillups:record_exception': 'تسجيل تعبئة كاستثناء دون موافقة',
-  'fillups:emergency_override': 'تفويض طارئ لتعبئة بدون بطاقة',
-  'fillups:approve_exception': 'اعتماد استثناء تعبئة',
   'settings:manage': 'إدارة إعدادات المنظومة',
   'audit:view': 'عرض سجل التغييرات',
   'exception_types:manage': 'إدارة أنواع الاستثناءات',
-  'standing_exceptions:manage': 'منح/سحب استثناء مستمر',
 };
 
 export function permissionLabel(key: string): string {

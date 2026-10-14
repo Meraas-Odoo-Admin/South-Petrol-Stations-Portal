@@ -170,7 +170,7 @@ test('station supervisor creates an employee in «محطتي»; office manager o
   await omContext.close();
 });
 
-test('registration: every national-ID rule in Arabic, and an institution owner', async ({ browser }) => {
+test('registration: every national-ID rule in Arabic, and no institution choice', async ({ browser }) => {
   test.setTimeout(240_000);
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
@@ -195,15 +195,10 @@ test('registration: every national-ID rule in Arabic, and an institution owner',
   await fillDigitBoxes(page, 'registration-identity-input', `119${random(9)}`);
   await expect(error).toHaveCount(0);
 
-  // An institution, with its responsible driver.
-  await page.getByTestId('registration-owner-kind-institution').click();
-  await page.getByTestId('registration-institution-name').fill(`مصرف الاختبار ${tag(5)}`);
-  await fillDigitBoxes(page, 'registration-driver-id-input', '319900123456');
-  await expect(page.getByTestId('registration-driver-id-error')).toContainText('يجب أن يبدأ بالرقم 1');
-  await fillDigitBoxes(page, 'registration-driver-id-input', `119${random(9)}`);
-  await shots(page, '31-institution-owner-form');
-  await page.getByTestId('registration-institution-save').click();
-  await expect(page.getByTestId('registration-owner-selected')).toContainText('جهة / مؤسسة');
-  await shots(page, '32-institution-owner-selected');
+  // Phase 6: only individuals are registered; there is no فرد / جهة choice.
+  await expect(page.getByTestId('registration-owner-kind-institution')).toHaveCount(0);
+  await expect(page.getByTestId('registration-institution')).toHaveCount(0);
+  await expect(page.getByText('جهة / مؤسسة')).toHaveCount(0);
+  await shots(page, '31-registration-individual-only');
   await context.close();
 });

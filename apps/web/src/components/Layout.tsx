@@ -7,7 +7,6 @@ import { roleLabel } from '../lib/labels';
 import { APP_NAME } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
-import { OnboardingTour } from './OnboardingTour';
 import { NAV_ACCESS, activeNavPath } from '../lib/navAccess';
 import { NotificationBell } from './NotificationBell';
 
@@ -40,17 +39,6 @@ export function Layout() {
   const stationName = user?.stationScope[0]?.name;
   const roleName = user?.roles[0] ? roleLabel(user.roles[0]) : '';
 
-  const canApprove = hasPermission('fillups:approve_exception') || hasPermission('reports:view');
-  const violationsBadgeQuery = useQuery({
-    queryKey: ['nav', 'violations-pending-count'],
-    // A count limited to what the caller may see, with no station to choose:
-    // the list endpoint demands a station from scoped callers, so asking it
-    // for the badge was a 400 on every page for supervisors.
-    queryFn: async () => (await apiClient.get<{ total: number }>('/reports/violations/pending-count')).data.total,
-    enabled: canApprove,
-    staleTime: 60_000,
-  });
-
   const canSeeChangeRequests = hasPermission('vehicles:approve_change');
   const changeRequestsBadgeQuery = useQuery({
     queryKey: ['nav', 'change-requests-pending-count'],
@@ -71,13 +59,6 @@ export function Layout() {
     // bottom bar). Always shown. Who sees each destination below comes from
     // lib/navAccess.ts, the same list the home screen's cards read.
     { to: '/', label: 'الرئيسية', icon: <Icon d={ICONS.home} />, show: NAV_ACCESS.home() },
-    {
-      to: '/reports/dashboard',
-      label: 'لوحة المتابعة',
-      shortLabel: 'المتابعة',
-      icon: <Icon d={ICONS.dashboard} />,
-      show: NAV_ACCESS.dashboard(hasPermission),
-    },
     {
       to: '/fillups/new',
       label: 'تسجيل تعبئة',
@@ -102,11 +83,10 @@ export function Layout() {
     },
     {
       to: '/reports/violations',
-      label: 'المخالفات والاستثناءات',
-      shortLabel: 'المخالفات',
+      label: 'الاستثناءات',
+      shortLabel: 'الاستثناءات',
       icon: <Icon d={ICONS.violations} />,
       show: NAV_ACCESS.violations(hasPermission),
-      badge: violationsBadgeQuery.data,
     },
     {
       to: '/vehicles/change-requests',
@@ -132,6 +112,7 @@ export function Layout() {
     { to: '/my-station', label: 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
     { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
+    { to: '/lists', label: 'القوائم', icon: <Icon d={ICONS.reports} />, show: NAV_ACCESS.lists(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
   // One current item for the address, the same on the side menu, the phone bar
@@ -147,7 +128,7 @@ export function Layout() {
   // — see 5a), matching the earlier decision that search is not its own
   // destination.
   const mostUsed = navItems.filter((i) =>
-    ['/fillups/new', '/vehicles', '/reports/violations', '/reports/dashboard'].includes(i.to),
+    ['/fillups/new', '/vehicles', '/reports/violations', '/reports/daily'].includes(i.to),
   );
   // A registration employee has none of the fuel destinations, so their own
   // workspace takes a tab instead of leaving the bar with one item.
@@ -163,10 +144,10 @@ export function Layout() {
   // («تسجيل المركبات» was).
   const SHEET_GROUPS: Array<{ title: string; paths: string[] }> = [
     { title: '', paths: ['/'] },
-    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations', '/reports/dashboard'] },
+    { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
     { title: 'محطتي ومكتبي', paths: ['/manage', '/my-station', '/my-office'] },
-    { title: 'الإدارة', paths: ['/admin'] },
+    { title: 'الإدارة', paths: ['/lists', '/admin'] },
   ];
   const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));
   const sheetGroups = [
@@ -398,7 +379,6 @@ export function Layout() {
         </div>
       )}
 
-      <OnboardingTour />
     </div>
   );
 }

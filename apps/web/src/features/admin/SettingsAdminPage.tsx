@@ -5,6 +5,7 @@ import { Card } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { systemSettingLabel, FUEL_TYPE_LABELS, fuelTypeLabel, USAGE_TYPE_LABELS, usageTypeLabel } from '../../lib/labels';
 import { RuleSwitchesCard } from './RuleSwitchesCard';
+import { GlobalExceptionSettingsCard } from './GlobalExceptionSettingsCard';
 import type { SystemSettingRow } from './types';
 
 const WEEK_WINDOW_MODES: { value: string; label: string; hint: string }[] = [
@@ -97,6 +98,7 @@ export function SettingsAdminPage() {
       {data && (
         <div className="flex flex-col gap-4">
           <RuleSwitchesCard settings={data} />
+          <GlobalExceptionSettingsCard />
           {byKey.get('fillup.week_window_mode') && (
             <Card className="p-4">
               <span className="text-[13px] lg:text-[12.5px] font-bold text-ink">{systemSettingLabel('fillup.week_window_mode').label}</span>

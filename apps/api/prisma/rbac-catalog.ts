@@ -131,22 +131,13 @@ export const PERMISSIONS = [
   // bad entry?) isn't specified anywhere in the plan — needs a decision
   // before anything is built against this permission.
   { key: 'fillups:update', description: '(Unused in M3 — see comment above.)' },
-  { key: 'fillups:approve_exception', description: 'Approve a requested fill-up exception' },
   // Round 12: separate from fillups:create — the client wants exception
   // recording to be a right specific employees are given, not everyone who
   // can record a normal fill-up. Also grantable directly to an individual
   // user (see UserPermission) independent of role. A holder of this
   // permission needs no separate approval — their exceptions are
   // auto-approved at creation (see FillUpsService.create).
-  { key: 'fillups:record_exception', description: 'Record a fill-up as an exception — auto-approved, no separate approval step' },
-  // Registration pivot, phase 4a: from the card deadline on, a station
-  // supervisor can authorize ONE fill-up for a vehicle with no card (an
-  // ambulance, an official convoy, a genuine emergency). Only supervisors
-  // and admins — never a station employee, never a registration role.
-  {
-    key: 'fillups:emergency_override',
-    description: 'Authorize a single fill-up without a card (written reason required, audited)',
-  },
+  { key: 'fillups:record_exception', description: 'Use an exception type to record a fill-up a rule blocked (Phase 6: no approval step; limited per type per station per day)' },
   {
     key: 'vehicle_types:read',
     description: 'View the vehicle type list',
@@ -171,8 +162,8 @@ export const PERMISSIONS = [
     description: 'Create/update fill-up exception categories (admin panel)',
   },
   {
-    key: 'standing_exceptions:manage',
-    description: 'Grant/revoke a standing (ongoing) rule exemption for a vehicle owner and/or vehicle',
+    key: 'exception_settings:manage',
+    description: 'Set the strict daily-limit switch and the unreasonable-station threshold (global for the super admin, own municipality for its manager)',
   },
   {
     key: 'owners:reveal_identity',
@@ -236,10 +227,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'cards:scan',
     'fillups:create',
     'fillups:update',
-    'fillups:approve_exception',
     'fillups:record_exception',
-    'fillups:emergency_override',
-    'standing_exceptions:manage',
     'owners:read',
     'owners:reveal_identity',
     'reports:view',
@@ -325,16 +313,15 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'owners:approve_change',
     'fillups:create',
     'fillups:update',
-    'fillups:approve_exception',
     'fillups:record_exception',
-    'fillups:emergency_override',
-    'standing_exceptions:manage',
     'owners:reveal_identity',
     'registration_reports:view',
     'fuel_stock:read',
     'notifications:read',
     'notifications:municipality_events',
     'reports:municipality',
+    'exception_types:manage',
+    'exception_settings:manage',
   ],
   system_admin: PERMISSIONS.map((p) => p.key),
 };
@@ -414,6 +401,19 @@ export const SYSTEM_SETTINGS = [
     key: 'fillup.rule.owner_liters.enabled',
     value: 'false',
     description: 'Rule switch: weekly liters per owner',
+  },
+  // Phase 6: exceptions. The strict switch refuses a use past a type's daily limit
+  // at a station; the threshold flags a station with too many exceptions in one
+  // day. A municipality manager may override either for their municipality.
+  {
+    key: 'exceptions.strict_limit',
+    value: 'false',
+    description: 'Refuse an exception use beyond the type daily limit at a station (otherwise it is allowed, flagged and notified)',
+  },
+  {
+    key: 'exceptions.station_daily_threshold',
+    value: '20',
+    description: 'Exceptions of all types at one station in one day beyond which the station is flagged',
   },
   {
     key: 'stock.low_threshold_liters',

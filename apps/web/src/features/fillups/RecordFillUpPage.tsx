@@ -21,7 +21,14 @@ import { apiClient } from '../../lib/apiClient';
 import { StationSelect } from '../../components/StationSelect';
 import { LtrText } from '../../components/LtrText';
 import { formatLicensePlate } from '../../lib/libyanFormats';
-import { MAX_FILLUP_LITERS, VEHICLE_FUEL_TYPE_LABELS_AR, fuelTypeMismatch, normalizePlate } from '@fuel-tracking/shared-types';
+import {
+  MAX_FILLUP_LITERS,
+  NO_CARD_REASONS,
+  NO_CARD_REASON_LABELS_AR,
+  VEHICLE_FUEL_TYPE_LABELS_AR,
+  fuelTypeMismatch,
+  type NoCardReason,
+} from '@fuel-tracking/shared-types';
 import { fuelTypeLabel } from '../../lib/labels';
 import { StockStrip, StockWarning } from '../stock/StockStrip';
 import { useAuth } from '../auth/AuthProvider';
@@ -57,6 +64,15 @@ export function TriggerDetail({ trigger }: { trigger: RuleTriggerDetail | null }
 }
 
 type Rejection = { reason: RuleFailureReason; trigger: RuleTriggerDetail | null };
+
+// One row of GET /vehicles?search= as the no-card search shows it.
+interface VehicleSearchRow {
+  id: string;
+  currentPlate: string;
+  make?: string | null;
+  model?: string | null;
+  owner?: { fullName: string } | null;
+}
 
 // The same per-rule breakdown content, used by both the review step and
 // (round 10) the confirmation-adjacent contexts. idSuffix is a round-8
@@ -164,6 +180,12 @@ function ExceptionFormFields({
   idSuffix?: string;
   submitError?: string | null;
 }) {
+  const limitState =
+    selectedExceptionType &&
+    selectedExceptionType.dailyLimitPerStation != null &&
+    (selectedExceptionType.usedToday ?? 0) >= selectedExceptionType.dailyLimitPerStation
+      ? { strict: Boolean(selectedExceptionType.strictLimit) }
+      : null;
   const fieldLabelClass = 'mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft';
   const fieldErrorClass = 'mt-1 text-[13px] lg:text-[12px] text-danger';
   const textInputClass =
@@ -182,9 +204,20 @@ function ExceptionFormFields({
           {exceptionTypes?.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
+              {t.dailyLimitPerStation != null ? ` (${t.usedToday ?? 0}/${t.dailyLimitPerStation} اليوم)` : ''}
             </option>
           ))}
         </select>
+        {limitState && (
+          <p
+            role="alert"
+            data-testid={limitState.strict ? 'exception-limit-refused' : 'exception-limit-warning'}
+            className={`mt-2 rounded-sm p-3 text-[14px] font-bold leading-[1.7] lg:text-[12px] ${limitState.strict ? 'bg-danger-100 text-danger-dark' : 'bg-accent-100 text-ink'}`}
+          >
+            تجاوزت المحطة الحد اليومي لاستثناء «{selectedExceptionType!.name}» ({selectedExceptionType!.dailyLimitPerStation}).{' '}
+            {limitState.strict ? 'لا يُسمح بتجاوز الحد. اطلب من المشرف.' : 'سيتم تسجيله وإبلاغ المشرف ومدير البلدية.'}
+          </p>
+        )}
         {exceptionForm.formState.errors.exceptionTypeId && (
           <p className={fieldErrorClass}>{exceptionForm.formState.errors.exceptionTypeId.message}</p>
         )}
@@ -228,7 +261,7 @@ function ExceptionFormFields({
           type="submit"
           data-testid={`exception-submit${idSuffix}`}
           variant="danger"
-          disabled={exceptionForm.formState.isSubmitting}
+          disabled={exceptionForm.formState.isSubmitting || Boolean(limitState?.strict)}
           className="!bg-danger !text-white !border-0 flex-1"
         >
           {exceptionForm.formState.isSubmitting ? '...جارٍ الإرسال' : 'تسجيل كاستثناء'}
@@ -372,15 +405,17 @@ interface ConfirmationSummary {
   occurredAt: string;
   isException: boolean;
   isApproved: boolean;
-  isOverride: boolean;
+  noCardReason: NoCardReason | null;
+  // The exception went past its type's daily limit at this station (flagged).
+  overLimit: boolean;
 }
 
 // Phase 6: a fill-up is recorded from a CARD SCAN. The journey:
 //   scan the card -> confirm the vehicle -> fuel type and amount -> review the
 //   rules -> done. (An exception step exists only when a rule is broken.)
-// The pump never accepts a typed plate on its own. The one other way in is the
-// supervisor's emergency override, offered inside the scan step to a holder of
-// fillups:emergency_override: a registered vehicle's plate and a written reason.
+// The pump never accepts a typed plate. When the card cannot be used, the
+// employee searches a REGISTERED vehicle (plate, owner name or booklet number)
+// and says why; it is recorded «بدون بطاقة» and counted in the reports.
 type Step = 'scan' | 'match' | 'fuel' | 'review' | 'exception';
 
 const STEP_TITLES: Record<Step, string> = {
@@ -398,7 +433,6 @@ export function RecordFillUpPage() {
   const canViewAllStations = hasPermission('reports:view_all_stations');
   const canViewReports = hasPermission('reports:view');
   const canRecordException = hasPermission('fillups:record_exception');
-  const canOverride = hasPermission('fillups:emergency_override');
   const ownStation = user?.stationScope[0] ?? null;
   const { data: stations } = useStations();
   const { data: fuelPrices } = useFuelPrices();
@@ -411,11 +445,13 @@ export function RecordFillUpPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const idempotencyKeyRef = useRef(newIdempotencyKey());
   const [scannedCard, setScannedCard] = useState<ScannedCard | null>(null);
-  // The emergency override: a plate and the reason, both written by the supervisor.
-  const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overridePlate, setOverridePlate] = useState('');
-  const [overrideReason, setOverrideReason] = useState('');
-  const [override, setOverride] = useState<{ plate: string; reason: string } | null>(null);
+  // The no-card fallback: search a registered vehicle, pick it, say why.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [pickedVehicle, setPickedVehicle] = useState<VehicleSearchRow | null>(null);
+  const [pickedReason, setPickedReason] = useState<NoCardReason | ''>('');
+  const [noCard, setNoCard] = useState<{ vehicleId: string; reason: NoCardReason } | null>(null);
 
   const fillUpForm = useForm<FillUpFormValues>({
     resolver: zodResolver(fillUpSchema),
@@ -435,14 +471,14 @@ export function RecordFillUpPage() {
   const chosenFuel = fillUpForm.watch('fuelType');
 
   // Who the fill-up is for, as the server wants it: the scanned card's number
-  // (the server records CARD_SCAN) or, for an override only, the plate.
-  const identifiers: Pick<CreateFillUpRequest, 'cardNumber' | 'plate'> & { emergencyOverride?: boolean; overrideReason?: string } =
-    scannedCard
-      ? { cardNumber: scannedCard.cardNumber }
-      : override
-        ? { plate: override.plate, emergencyOverride: true, overrideReason: override.reason }
-        : {};
-  const hasSubject = Boolean(scannedCard || override);
+  // (recorded CARD_SCAN) or a registered vehicle with the reason its card could
+  // not be used (recorded «بدون بطاقة»).
+  const identifiers: Pick<CreateFillUpRequest, 'cardNumber' | 'vehicleId' | 'noCardReason'> = scannedCard
+    ? { cardNumber: scannedCard.cardNumber }
+    : noCard
+      ? { vehicleId: noCard.vehicleId, noCardReason: noCard.reason }
+      : {};
+  const hasSubject = Boolean(scannedCard || noCard);
 
   const rulePreviewQuery = useQuery({
     queryKey: ['fillups', 'rule-preview', identifiers, stationId, chosenFuel],
@@ -456,14 +492,7 @@ export function RecordFillUpPage() {
     retry: (failureCount, error) => !(isAxiosError(error) && error.response?.status && error.response.status >= 400 && error.response.status < 500) && failureCount < 3,
   });
 
-  // An override identifies the vehicle on the server: read it back to confirm.
-  const overrideVehicleId = override ? (rulePreviewQuery.data?.vehicleId ?? null) : null;
-  const { data: overrideVehicle } = useQuery({
-    queryKey: ['vehicles', overrideVehicleId, 'preview'],
-    queryFn: async () => (await apiClient.get<VehicleBasicInfo>(`/vehicles/${overrideVehicleId}`)).data,
-    enabled: !!overrideVehicleId,
-  });
-  const vehicleId = scannedCard?.vehicle.id ?? overrideVehicleId ?? '';
+  const vehicleId = scannedCard?.vehicle.id ?? noCard?.vehicleId ?? '';
   const { data: selectedVehicle } = useQuery({
     queryKey: ['vehicles', vehicleId, 'preview'],
     queryFn: async () => (await apiClient.get<VehicleBasicInfo>(`/vehicles/${vehicleId}`)).data,
@@ -490,9 +519,21 @@ export function RecordFillUpPage() {
   const effectiveRejection = rejection ?? previewRejection;
 
   const { data: exceptionTypes } = useQuery({
-    queryKey: ['fillups', 'exception-types'],
-    queryFn: async () => (await apiClient.get<ExceptionTypeOption[]>('/fillups/exception-types')).data,
-    enabled: effectiveRejection !== null && canRecordException,
+    queryKey: ['fillups', 'exception-types', stationId],
+    queryFn: async () =>
+      (await apiClient.get<ExceptionTypeOption[]>('/fillups/exception-types', { params: { stationId } })).data,
+    enabled: effectiveRejection !== null && canRecordException && !!stationId,
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchText.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+  const searchQuery = useQuery({
+    queryKey: ['vehicles', 'nocard-search', debouncedSearch],
+    queryFn: async () =>
+      (await apiClient.get<VehicleSearchRow[]>('/vehicles', { params: { search: debouncedSearch, take: 8 } })).data,
+    enabled: searchOpen && debouncedSearch.length >= 2,
   });
 
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -524,10 +565,11 @@ export function RecordFillUpPage() {
     setAmountLyd('');
     setStep('scan');
     setScannedCard(null);
-    setOverride(null);
-    setOverrideOpen(false);
-    setOverridePlate('');
-    setOverrideReason('');
+    setNoCard(null);
+    setSearchOpen(false);
+    setSearchText('');
+    setPickedVehicle(null);
+    setPickedReason('');
     setSubmitError(null);
     idempotencyKeyRef.current = newIdempotencyKey();
   }
@@ -577,7 +619,8 @@ export function RecordFillUpPage() {
       occurredAt: new Date().toISOString(),
       isApproved,
       isException,
-      isOverride: Boolean(override),
+      noCardReason: noCard?.reason ?? null,
+      overLimit: false,
     };
   }
 
@@ -595,7 +638,7 @@ export function RecordFillUpPage() {
         setRejection({ reason: result.reason, trigger: result.trigger });
         return;
       }
-      setSuccess(buildConfirmationSummary(values, result.isException, !result.isException || result.exception?.approvedById != null));
+      setSuccess({ ...buildConfirmationSummary(values, result.isException, true), overLimit: Boolean(result.exception?.overLimit) });
     } catch (error) {
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
@@ -624,9 +667,10 @@ export function RecordFillUpPage() {
         setSubmitError('تعذر تسجيل الاستثناء.');
         return;
       }
-      setSuccess(
-        buildConfirmationSummary(fillUpForm.getValues(), result.isException, !result.isException || result.exception?.approvedById != null),
-      );
+      setSuccess({
+        ...buildConfirmationSummary(fillUpForm.getValues(), result.isException, true),
+        overLimit: Boolean(result.exception?.overLimit),
+      });
     } catch (error) {
       setSubmitError(isAxiosError(error) ? formatAxiosError(error) : 'حدث خطأ غير متوقع.');
     }
@@ -644,34 +688,16 @@ export function RecordFillUpPage() {
           <DayListRail query={dayListQuery} visible={canViewReports} highlightStationName={success.stationName} />
         </div>
         <div className="mx-auto flex max-w-xl flex-col items-center py-6 text-center sm:mx-0 sm:max-w-none">
-          <div
-            className={`flex h-[88px] w-[88px] items-center justify-center rounded-full ${
-              success.isException && !success.isApproved ? 'bg-accent-100' : 'bg-ok-100'
-            }`}
-          >
-            {success.isException && !success.isApproved ? (
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#a8681c" strokeWidth="2.2">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3.5 2" />
-              </svg>
-            ) : (
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#1f7a5c" strokeWidth="2.6">
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
-            )}
+          <div className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-ok-100">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#1f7a5c" strokeWidth="2.6">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
           </div>
           <h1 className="mt-6 text-[24px] font-black text-ink" data-testid="fillup-success-heading">
-            {success.isException
-              ? success.isApproved
-                ? 'سُجِّل كاستثناء — معتمدة'
-                : 'سُجِّل كاستثناء — بانتظار اعتماد المشرف'
-              : 'تم تسجيل التعبئة'}
+            {success.isException ? 'سُجِّل كاستثناء' : 'تم تسجيل التعبئة'}
           </h1>
           <p className="mt-2.5 text-[16px] leading-[1.8] text-ink-soft lg:text-[14px]">
-            {success.isException && !success.isApproved
-              ? 'لا يمكنك تعديلها أو حذفها بعد الآن — لن تحتسب ضمن التعبئات المعتمدة حتى يوافق عليها المشرف.'
-              : (success.stationName ? `سُجّلت باسمك في ${success.stationName}، ` : 'سُجّلت باسمك، ') +
-                'ولا يمكن تعديلها أو حذفها بعد الآن.'}
+            {(success.stationName ? `سُجّلت باسمك في ${success.stationName}، ` : 'سُجّلت باسمك، ') + 'ولا يمكن تعديلها أو حذفها بعد الآن.'}
           </p>
           <Card className="mt-6 w-full p-[18px] text-start sm:mt-0">
             <div className="border-b border-surface-alt pb-4 text-center">
@@ -691,9 +717,14 @@ export function RecordFillUpPage() {
               </span>
             </div>
           </Card>
-          {success.isOverride && (
-            <p className="mt-4 w-full rounded-sm bg-danger-100 p-3 text-[15px] font-bold text-danger-dark lg:text-[13px]" data-testid="fillup-success-override">
-              سُجِّلت بتفويض طارئ وستظهر كاستثناء في التقارير.
+          {success.noCardReason && (
+            <p className="mt-4 w-full rounded-sm bg-accent-100 p-3 text-[15px] font-bold text-ink lg:text-[13px]" data-testid="fillup-success-nocard">
+              سُجِّلت «بدون بطاقة» — {NO_CARD_REASON_LABELS_AR[success.noCardReason]} — وتُحتسب في التقارير.
+            </p>
+          )}
+          {success.overLimit && (
+            <p className="mt-4 w-full rounded-sm bg-danger-100 p-3 text-[15px] font-bold text-danger-dark lg:text-[13px]" data-testid="fillup-success-overlimit">
+              تجاوز هذا الاستثناء حدّه اليومي في المحطة. سُجِّل وأُبلغ المشرف ومدير البلدية.
             </p>
           )}
           <ThumbBar>
@@ -714,7 +745,7 @@ export function RecordFillUpPage() {
   function back() {
     if (step === 'match') {
       setScannedCard(null);
-      setOverride(null);
+      setNoCard(null);
       setStep('scan');
     } else if (step === 'fuel') setStep('match');
     else if (step === 'review') setStep('fuel');
@@ -773,7 +804,7 @@ export function RecordFillUpPage() {
                 autoStart
                 onResolved={(card) => {
                   setScannedCard(card);
-                  setOverride(null);
+                  setNoCard(null);
                   fillUpForm.setValue('vehicleId', card.vehicle.id, { shouldValidate: true });
                   setVehicleLabel(formatLicensePlate(card.vehicle.currentPlate));
                   setStep('match');
@@ -783,58 +814,108 @@ export function RecordFillUpPage() {
               />
             )}
 
-            {canOverride && !needStationFirst && (
-              <div className="mt-4 border-t border-line pt-3" data-testid="fillup-override-area">
-                {!overrideOpen ? (
+            {!needStationFirst && (
+              <div className="mt-4 border-t border-line pt-3" data-testid="fillup-nocard-area">
+                {!searchOpen ? (
                   <button
                     type="button"
-                    data-testid="fillup-override-open"
-                    className="min-h-[44px] text-[15px] font-bold text-danger-dark underline lg:text-[13px]"
-                    onClick={() => setOverrideOpen(true)}
+                    data-testid="fillup-nocard-open"
+                    className="min-h-[44px] text-[15px] font-bold text-primary underline lg:text-[13px]"
+                    onClick={() => setSearchOpen(true)}
                   >
-                    تعذّرت قراءة البطاقة؟ تفويض طارئ بدون بطاقة (للمشرف فقط)
+                    البطاقة لا تعمل؟ ابحث عن المركبة
                   </button>
                 ) : (
-                  <div data-testid="fillup-override-form" className="space-y-3">
+                  <div data-testid="fillup-nocard-form" className="space-y-3">
                     <p className="text-[15px] leading-[1.8] text-ink lg:text-[13px]">
-                      يتجاوز التفويض شرط البطاقة فقط، ولمركبة مسجّلة فقط. تبقى الفواصل والحدود الأسبوعية سارية، وتُسجَّل التعبئة كاستثناء باسمك.
+                      تعمل هذه الطريقة لمركبة مسجّلة فقط. تبقى الفواصل والحدود سارية، وتُسجَّل التعبئة «بدون بطاقة» باسمك وتُحتسب في التقارير.
                     </p>
-                    <div>
-                      <label className={fieldLabelClass} htmlFor="override-plate">رقم لوحة المركبة المسجّلة</label>
-                      <input
-                        id="override-plate"
-                        dir="ltr"
-                        value={overridePlate}
-                        onChange={(e) => setOverridePlate(e.target.value)}
-                        data-testid="fillup-override-plate"
-                        className={textInputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={fieldLabelClass} htmlFor="override-reason">سبب التفويض (إلزامي)</label>
-                      <textarea
-                        id="override-reason"
-                        value={overrideReason}
-                        onChange={(e) => setOverrideReason(e.target.value)}
-                        rows={2}
-                        maxLength={500}
-                        data-testid="fillup-override-reason"
-                        className="w-full rounded-sm border border-line bg-surface-alt p-2 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:text-[14px]"
-                      />
-                    </div>
-                    <PillButton
-                      variant="danger"
-                      data-testid="fillup-override-confirm"
-                      className="h-12 w-full !border-0 !bg-danger !text-white"
-                      disabled={overrideReason.trim().length < 3 || normalizePlate(overridePlate.trim()) === null}
-                      onClick={() => {
-                        setScannedCard(null);
-                        setOverride({ plate: overridePlate.trim(), reason: overrideReason.trim() });
-                        setStep('match');
-                      }}
-                    >
-                      متابعة بتفويض طارئ
-                    </PillButton>
+                    {!pickedVehicle && (
+                      <>
+                        <div>
+                          <label className={fieldLabelClass} htmlFor="nocard-search">اللوحة أو اسم المالك أو رقم الكتيب</label>
+                          <input
+                            id="nocard-search"
+                            value={searchText}
+                            onChange={(e) => setSearchText(e.target.value)}
+                            data-testid="fillup-nocard-search"
+                            className={textInputClass}
+                            autoComplete="off"
+                          />
+                        </div>
+                        {searchQuery.isFetching && <p className="text-[14px] text-ink-soft">جارٍ البحث…</p>}
+                        {searchQuery.data && searchQuery.data.length === 0 && (
+                          <p className="rounded-sm bg-accent-100 p-3 text-[15px] font-bold text-ink lg:text-[13px]" data-testid="fillup-nocard-none">
+                            لا توجد مركبة مسجّلة بهذا البحث. لا يمكن التعبئة لمركبة غير مسجّلة؛ يسجّلها مكتب التسجيل أولًا.
+                          </p>
+                        )}
+                        <ul className="space-y-2">
+                          {(searchQuery.data ?? []).map((row) => (
+                            <li key={row.id}>
+                              <button
+                                type="button"
+                                data-testid="fillup-nocard-result"
+                                onClick={() => setPickedVehicle(row)}
+                                className="flex w-full flex-wrap items-center justify-between gap-2 rounded-sm bg-surface-alt px-3 py-3 text-start"
+                              >
+                                <span className="text-[17px] font-black text-ink">
+                                  <LtrText>{formatLicensePlate(row.currentPlate)}</LtrText>
+                                </span>
+                                <span className="text-[14px] text-ink-soft">
+                                  {[row.make, row.model].filter(Boolean).join(' ')}
+                                  {row.owner?.fullName ? ` — ${row.owner.fullName}` : ''}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {pickedVehicle && (
+                      <div className="space-y-3">
+                        <div className="rounded-sm bg-ok-100 p-3" data-testid="fillup-nocard-picked">
+                          <p className="text-[18px] font-black text-ink">
+                            <LtrText>{formatLicensePlate(pickedVehicle.currentPlate)}</LtrText>
+                          </p>
+                          <button type="button" className="mt-1 text-[14px] font-bold text-primary underline" onClick={() => { setPickedVehicle(null); setPickedReason(''); }}>
+                            اختيار مركبة أخرى
+                          </button>
+                        </div>
+                        <fieldset>
+                          <legend className={fieldLabelClass}>لماذا لا تُستخدم البطاقة؟</legend>
+                          <div className="space-y-2">
+                            {NO_CARD_REASONS.map((reason) => (
+                              <label key={reason} className="flex min-h-[44px] items-center gap-3 rounded-sm bg-surface-alt px-3 text-[16px] font-bold text-ink lg:text-[14px]">
+                                <input
+                                  type="radio"
+                                  name="nocard-reason"
+                                  value={reason}
+                                  checked={pickedReason === reason}
+                                  data-testid={`fillup-nocard-reason-${reason}`}
+                                  onChange={() => setPickedReason(reason)}
+                                />
+                                {NO_CARD_REASON_LABELS_AR[reason]}
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                        <PillButton
+                          data-testid="fillup-nocard-confirm"
+                          className="h-12 w-full"
+                          disabled={pickedReason === ''}
+                          onClick={() => {
+                            if (pickedReason === '') return;
+                            setScannedCard(null);
+                            setNoCard({ vehicleId: pickedVehicle.id, reason: pickedReason });
+                            fillUpForm.setValue('vehicleId', pickedVehicle.id, { shouldValidate: true });
+                            setVehicleLabel(formatLicensePlate(pickedVehicle.currentPlate));
+                            setStep('match');
+                          }}
+                        >
+                          متابعة
+                        </PillButton>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -860,49 +941,42 @@ export function RecordFillUpPage() {
           />
         )}
 
-        {step === 'match' && override && (
+        {step === 'match' && noCard && (
           <>
-            <Card className="p-5 text-center" data-testid="fillup-override-confirm-vehicle">
+            <Card className="p-5 text-center" data-testid="fillup-nocard-confirm-vehicle">
               <p className="text-[16px] font-bold text-ink-soft lg:text-[14px]">هل هذه هي المركبة التي أمامك؟</p>
-              {rulePreviewQuery.isLoading && <p className="mt-3 text-[15px] text-ink-soft">جارٍ البحث عن المركبة…</p>}
               {rulePreviewQuery.isError && (
-                <p role="alert" className="mt-3 rounded-sm bg-danger-100 p-3 text-[15px] font-bold text-danger-dark" data-testid="fillup-override-error">
-                  {isAxiosError(rulePreviewQuery.error) && rulePreviewQuery.error.response?.status === 404
-                    ? 'هذه اللوحة غير مسجّلة في المنظومة. لا يمكن التعبئة لمركبة غير مسجّلة؛ يسجّلها مكتب التسجيل أولًا.'
-                    : (rulePreviewErrorMessage ?? 'تعذّر التحقق من المركبة. حاول مرة أخرى.')}
+                <p role="alert" className="mt-3 rounded-sm bg-danger-100 p-3 text-[15px] font-bold text-danger-dark" data-testid="fillup-nocard-error">
+                  {rulePreviewErrorMessage ?? 'هذه المركبة غير مسجّلة في المنظومة. لا يمكن التعبئة لمركبة غير مسجّلة.'}
                 </p>
               )}
-              {overrideVehicle && (
+              {selectedVehicle && (
                 <>
-                  <PlateFigure plate={formatLicensePlate(overrideVehicle.currentPlate)} />
+                  <PlateFigure plate={formatLicensePlate(selectedVehicle.currentPlate)} />
                   <div className="mt-4">
-                    <VehiclePreviewCard vehicleId={overrideVehicle.id} idSuffix="-override" />
+                    <VehiclePreviewCard vehicleId={selectedVehicle.id} idSuffix="-nocard" />
                   </div>
                 </>
               )}
-              <p className="mt-4 rounded-sm bg-danger-100 p-2.5 text-[15px] font-bold text-danger-dark lg:text-[13px]" data-testid="fillup-override-active">
-                تفويض طارئ فعّال — شرط البطاقة متجاوَز لهذه التعبئة فقط.
+              <p className="mt-4 rounded-sm bg-accent-100 p-2.5 text-[15px] font-bold text-ink lg:text-[13px]" data-testid="fillup-nocard-active">
+                بدون بطاقة — {NO_CARD_REASON_LABELS_AR[noCard.reason]}
               </p>
             </Card>
             <ThumbBar>
               <PillButton
                 data-testid="fillup-mobile-continue-to-fuel"
                 className="h-14 w-full text-[18px] lg:h-12 lg:text-[14px]"
-                disabled={!overrideVehicle}
-                onClick={() => {
-                  if (overrideVehicle) {
-                    fillUpForm.setValue('vehicleId', overrideVehicle.id, { shouldValidate: true });
-                    setVehicleLabel(formatLicensePlate(overrideVehicle.currentPlate));
-                    setStep('fuel');
-                  }
-                }}
+                disabled={!selectedVehicle || rulePreviewQuery.isError}
+                onClick={() => setStep('fuel')}
               >
                 نعم، متابعة إلى الوقود
               </PillButton>
               <button
                 type="button"
                 onClick={() => {
-                  setOverride(null);
+                  setNoCard(null);
+                  setPickedVehicle(null);
+                  setPickedReason('');
                   setStep('scan');
                 }}
                 className="mt-1 block h-11 w-full text-center text-[16px] font-bold text-ink-soft lg:text-[13px]"
@@ -1029,12 +1103,6 @@ export function RecordFillUpPage() {
                   rejection={effectiveRejection}
                   idSuffix="-mobile"
                 />
-                {rulePreviewQuery.data && rulePreviewQuery.data.skippedRules.length > 0 && (
-                  <p className="mt-3 rounded-sm bg-accent-100 p-3 text-[16px] leading-[1.7] text-ink lg:text-[14px]" data-testid="fillup-skipped-rules">
-                    مركبة تابعة لجهة أو مؤسسة — تُطبَّق عليها قواعد المركبة وحدها، ولا تُجمع مع مركبات الجهة الأخرى (
-                    {rulePreviewQuery.data.skippedRules.map((r) => RULE_CHECK_LABELS[r]).join('، ')}).
-                  </p>
-                )}
                 {fuelMismatch && vehicleFuelType && (
                   <p role="alert" className="mt-3 rounded-sm bg-accent-100 p-3 text-[16px] font-bold leading-[1.7] text-ink lg:text-[14px]" data-testid="fillup-fuel-mismatch-review">
                     تنبيه: المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[vehicleFuelType]} والوقود المختار مختلف. سيُسجَّل التنبيه للمشرف.
@@ -1185,14 +1253,20 @@ function formatAxiosError(error: AxiosError<{ message?: string | string[] }>): s
   if (status === 409 && marker === 'CARD_REVOKED') {
     return 'هذه البطاقة ملغاة. اطلب من صاحب المركبة مراجعة مكتب التسجيل لاستلام بطاقة جديدة.';
   }
+  if (status === 409 && marker === 'NO_CARD_NOT_NEEDED') {
+    return 'تمّ مسح البطاقة، فلا حاجة لسبب «بدون بطاقة».';
+  }
+  if (status === 409 && marker === 'EXCEPTION_TYPE_NOT_FOR_RULE') {
+    return 'نوع الاستثناء هذا لا يشمل القاعدة التي منعت التعبئة. اختر نوعًا آخر.';
+  }
+  if (status === 409 && marker === 'EXCEPTION_TYPE_NOT_FOR_MUNICIPALITY') {
+    return 'نوع الاستثناء هذا غير متاح في بلدية هذه المحطة.';
+  }
+  if (status === 409 && marker === 'EXCEPTION_LIMIT_REACHED') {
+    return 'تجاوزت المحطة الحد اليومي لهذا النوع من الاستثناءات، ولا يُسمح بتجاوزه. اطلب من المشرف.';
+  }
   if (status === 404 && marker === 'VEHICLE_NOT_REGISTERED') {
     return 'هذه اللوحة غير مسجّلة في المنظومة. يسجّلها مكتب التسجيل أولًا.';
-  }
-  if (status === 400 && marker === 'PLATE_INVALID') {
-    return 'رقم اللوحة غير صالح: رمز المدينة ثم رقم اللوحة يفصل بينهما فاصل.';
-  }
-  if (status === 409 && marker === 'PLATE_AMBIGUOUS') {
-    return 'تطابق هذه اللوحة أكثر من مركبة مسجّلة. اطلب من مكتب التسجيل مراجعتها.';
   }
   if (status === 403) return 'لا تملك صلاحية هذا الإجراء. تواصل مع المشرف.';
   return 'تعذر إتمام العملية. تحقّق من الاتصال وحاول مرة أخرى.';

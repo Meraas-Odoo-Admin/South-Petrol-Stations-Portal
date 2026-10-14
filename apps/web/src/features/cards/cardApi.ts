@@ -131,13 +131,6 @@ export function printerSetupPdf(): Promise<Blob> {
   return fetchPdf(() => apiClient.get<Blob>('/cards/printer-setup', { responseType: 'blob' }));
 }
 
-// A test card is for checking the printer; it is not counted anywhere.
-export function testCardPdf(registrationStationId: string, deskId: string): Promise<Blob> {
-  return fetchPdf(() =>
-    apiClient.get<Blob>('/cards/test-card', { params: { registrationStationId, deskId }, responseType: 'blob' }),
-  );
-}
-
 // Opens the browser's print dialog for a PDF without leaving the page: the
 // PDF loads in a hidden frame and that frame prints. At a desk running
 // Chrome with --kiosk-printing, this prints straight to the card printer

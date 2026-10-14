@@ -22,8 +22,6 @@ export function AdminLayout() {
   const tabs = [
     { to: '/admin/municipalities', label: 'البلديات', show: hasPermission('municipalities:manage') },
     { to: '/admin/settings', label: 'الإعدادات وقواعد التعبئة', show: hasPermission('settings:manage') },
-    { to: '/admin/exception-types', label: 'أنواع الاستثناءات', show: hasPermission('exception_types:manage') },
-    { to: '/admin/vehicle-types', label: 'أنواع المركبات', show: hasPermission('vehicle_types:manage') },
     { to: '/admin/audit-log', label: 'سجل التغييرات', show: hasPermission('audit:view') },
   ].filter((tab) => tab.show);
 

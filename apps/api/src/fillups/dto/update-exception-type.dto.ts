@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { RULE_FAILURE_REASONS } from '../rule-engine/types';
 
-// key is deliberately absent — immutable after creation, same reasoning as
-// every other identity field in this codebase (Driver.identityNumber,
-// Vehicle.internalCode, User.username).
+// key and municipalityId are deliberately absent — immutable after creation,
+// same reasoning as every other identity field in this codebase.
 export class UpdateExceptionTypeDto {
   @ApiProperty({ required: false })
   @IsOptional()
@@ -20,4 +20,18 @@ export class UpdateExceptionTypeDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiProperty({ required: false, description: 'Empty = any rule.' })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(RULE_FAILURE_REASONS, { each: true })
+  overridableRules?: string[];
+
+  @ApiProperty({ required: false, description: 'null clears the limit.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  dailyLimitPerStation?: number | null;
 }

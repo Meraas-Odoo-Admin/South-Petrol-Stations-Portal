@@ -4,7 +4,6 @@ import QRCode from 'qrcode';
 import {
   buildCardHtml,
   buildPrinterSetupHtml,
-  buildTestCardHtml,
   QR_BOX_PX,
   type CardFaceData,
   type CardLayout,
@@ -159,12 +158,5 @@ export class CardRendererService implements OnModuleDestroy {
       this.qrSvg('TEST-CARD', 260),
     ]);
     return { small, medium, large };
-  }
-
-  // Desk setup / ribbon change: alignment marks + a sample QR that is NOT a
-  // card number, so scanning it at a pump never resolves to a vehicle.
-  async renderTestCardPdf(officeName: string): Promise<Buffer> {
-    const qrSvg = await this.qrSvg('TEST-CARD');
-    return this.pdfFromHtml(buildTestCardHtml(qrSvg, officeName, loadCardAssets()));
   }
 }

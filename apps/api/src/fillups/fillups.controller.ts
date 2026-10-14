@@ -54,19 +54,13 @@ export class FillUpsController {
     return result.transaction;
   }
 
-  @RequirePermission('fillups:approve_exception')
-  @Post(':id/exceptions/approve')
-  approveException(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
-    return this.fillups.approveException(id, actor.id);
-  }
-
   // Registered BEFORE @Get(':id')-shaped routes would go, if this
   // controller ever grows one — static path segments must win over a
   // dynamic :id at the same depth.
   @RequirePermission('exception_types:manage')
   @Get('exception-types/all')
-  listAllExceptionTypes() {
-    return this.fillups.listAllExceptionTypes();
+  listAllExceptionTypes(@CurrentUser() actor: AuthenticatedUser) {
+    return this.fillups.listAllExceptionTypes(actor.id);
   }
 
   @RequirePermission('exception_types:manage')
@@ -85,15 +79,13 @@ export class FillUpsController {
     return this.fillups.updateExceptionType(id, dto, actor.id);
   }
 
-  // Gated on fillups:create (not a separate permission) — anyone who can
-  // submit a fill-up needs this to know the exception categories and
-  // whether each requires proof, same as approving needs its own gate.
-  // Only ACTIVE types — the admin-only "see everything, including
-  // deactivated" view is listAllExceptionTypes above.
+  // Anyone who can record a fill-up needs this to pick an exception type. Only
+  // ACTIVE types; with a stationId, those usable at that station with today's
+  // uses and the strict switch (the admin view is exception-types/all above).
   @RequirePermission('fillups:create')
   @Get('exception-types')
-  listExceptionTypes() {
-    return this.fillups.listActiveExceptionTypes();
+  listExceptionTypes(@Query('stationId') stationId: string | undefined, @CurrentUser() actor: AuthenticatedUser) {
+    return this.fillups.listActiveExceptionTypes(stationId || undefined, actor.id);
   }
 
   @RequirePermission('fillups:create')
@@ -102,22 +94,20 @@ export class FillUpsController {
     return this.fillups.getFuelPrices();
   }
 
-  // Round 7 item 1: pre-submit rule-review breakdown — see
-  // FillUpsService.previewRules for why this is gated the same as
-  // getFuelPrices/listExceptionTypes rather than vehicles:read.
+  // The pre-submit rule-review breakdown — gated like getFuelPrices rather
+  // than vehicles:read.
   @RequirePermission('fillups:create')
   @Get('rule-preview')
   previewRules(
     @Query('stationId') stationId: string,
     @Query('vehicleId') vehicleId: string | undefined,
     @Query('cardNumber') cardNumber: string | undefined,
-    @Query('plate') plate: string | undefined,
-    @Query('emergencyOverride') emergencyOverride: string | undefined,
+    @Query('noCardReason') noCardReason: string | undefined,
     @Query('fuelType') fuelType: string | undefined,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    if (!vehicleId && !cardNumber && !plate) {
-      throw new BadRequestException('vehicleId, cardNumber or plate is required.');
+    if (!vehicleId && !cardNumber) {
+      throw new BadRequestException('vehicleId or cardNumber is required.');
     }
     // Allowances are counted per municipality, and the station decides
     // which one — without it the preview can't match a real submit.
@@ -128,8 +118,7 @@ export class FillUpsController {
       {
         vehicleId: vehicleId || undefined,
         cardNumber: cardNumber || undefined,
-        plate: plate || undefined,
-        emergencyOverride: emergencyOverride === 'true',
+        noCardReason: noCardReason || undefined,
         fuelType:
           fuelType === 'PETROL_95' || fuelType === 'DIESEL' || fuelType === 'KEROSENE' ? fuelType : undefined,
       },

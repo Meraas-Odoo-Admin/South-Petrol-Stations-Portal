@@ -49,7 +49,7 @@ export class FindVehiclesQueryDto extends PaginationQueryDto {
   // matches.
   @ApiProperty({
     required: false,
-    description: 'Free-text OR search across internalCode, currentPlate, chassisNumber, and owner fullName/identityNumber.',
+    description: 'Free-text OR search across internalCode, currentPlate, chassisNumber, registrationBooklet, and owner fullName/identityNumber.',
   })
   @IsOptional()
   @IsString()

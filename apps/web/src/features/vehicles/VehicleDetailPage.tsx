@@ -22,7 +22,6 @@ import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
-import { StandingExceptionsSection } from '../standing-exceptions/StandingExceptionsSection';
 import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { ChangeRequestForm } from './ChangeRequestForm';
@@ -187,21 +186,12 @@ export function VehicleDetailPage() {
                         ownerId={vehicle.owner.id}
                         fullName={vehicle.owner.fullName}
                         phone={vehicle.owner.phone}
-                        isInstitution={vehicle.owner.ownerKind === 'INSTITUTION'}
                         onDone={() => setEditingOwner(false)}
                       />
                     </div>
                   ) : (
                     <>
                       {vehicle.owner?.fullName ?? '—'}
-                      {vehicle.owner?.ownerKind === 'INSTITUTION' && (
-                        <div className="mt-1">
-                          <StatusPill variant="neutral">جهة / مؤسسة</StatusPill>
-                          {vehicle.owner.responsibleDriverName && (
-                            <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">السائق المسؤول: {vehicle.owner.responsibleDriverName}</p>
-                          )}
-                        </div>
-                      )}
                       {vehicle.owner && canEditOwner && (
                         <button
                           type="button"
@@ -385,15 +375,6 @@ export function VehicleDetailPage() {
             </div>
           )}
         </Card>
-
-        <div className={mobileTab === 'identity' ? '' : 'hidden sm:!block'}>
-          <StandingExceptionsSection
-            vehicleId={vehicle.id}
-            vehicleLabel={formatLicensePlate(vehicle.currentPlate)}
-            contextOwnerId={vehicle.owner?.id}
-            contextOwnerLabel={vehicle.owner?.fullName}
-          />
-        </div>
 
         <Card className={mobileTab === 'history' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل التعبئات" />

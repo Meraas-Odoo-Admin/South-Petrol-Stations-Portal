@@ -4,7 +4,7 @@ import { RbacService } from '../rbac/rbac.service';
 import { NotificationsService } from './notifications.service';
 
 // Notifications that come from STATE rather than from an event: there is no
-// moment to hook (a municipality that has no manager, an exception waiting).
+// moment to hook (a municipality that has no manager, a replacement card not printed yet).
 // They are evaluated when the person opens the
 // bell, at most every few minutes per user, and each writes under a dedupeKey
 // so the same condition is told once.
@@ -28,7 +28,6 @@ export class NotificationChecksService {
     this.lastRun.set(userId, now);
     try {
       const permissions = await this.rbac.getPermissionsForUser(userId);
-      if (permissions.has('notifications:station_events')) await this.stationChecks(userId);
       if (permissions.has('notifications:system_events')) await this.systemChecks(userId);
       if (permissions.has('cards:issue')) await this.printChecks(userId);
     } catch (error) {
@@ -39,28 +38,6 @@ export class NotificationChecksService {
   // Used by tests to run the checks again without waiting out the interval.
   forget(userId: string) {
     this.lastRun.delete(userId);
-  }
-
-  // Exceptions waiting for approval at the supervisor's stations.
-  private async stationChecks(userId: string) {
-    const scope = await this.rbac.getStationScope(userId);
-    if (!scope || scope.length === 0) return;
-    const pending = await this.prisma.exception.findMany({
-      where: { approvedById: null, fillUpTransaction: { stationId: { in: scope } } },
-      select: { id: true, fillUpTransaction: { select: { stationId: true, station: { select: { name: true } } } } },
-      take: 50,
-    });
-    for (const exception of pending) {
-      await this.notifications.notifyUsers([userId], {
-        kind: 'EXCEPTION_PENDING',
-        title: `استثناء بانتظار الموافقة في ${exception.fillUpTransaction.station.name}`,
-        body: 'تعبئة سُجّلت باستثناء وتحتاج موافقتك.',
-        link: '/exceptions',
-        entityType: 'Exception',
-        entityId: exception.id,
-        dedupeKey: `exception-pending:${exception.id}`,
-      });
-    }
   }
 
   // Only what needs the super admin: a municipality that nobody manages.

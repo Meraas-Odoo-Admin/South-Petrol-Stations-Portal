@@ -15,7 +15,6 @@ import type { DashboardResponse } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { DateField } from '../../components/DateField';
 import { useAuth } from '../auth/AuthProvider';
-import { PageHeader } from '../../components/design/PageHeader';
 import { Card, CardHeader } from '../../components/design/Card';
 import { KpiCard } from '../../components/design/KpiCard';
 import { CodeText } from '../../components/design/CodeText';
@@ -37,9 +36,10 @@ function todayIso(): string {
 // already hidden without it, but this page also checks directly in case
 // someone lands here by URL, rather than firing a query that will 403.
 //
-// Matches 2h (directorate dashboard — "same shell as 2d"): KPI card row +
-// per-station table, worst-offender row danger-tinted, not a plain table.
-export function DashboardPage() {
+// Phase 6: no longer a screen of its own - it is the lower half of «اليوم»
+// (the daily report), for those who see every station. KPI card row +
+// per-station table, the station with the most exceptions marked with a word.
+export function DirectorateOverview() {
   const { hasPermission } = useAuth();
   const canView = hasPermission('reports:view_all_stations');
   const [fromDate, setFromDate] = useState(isoDateDaysAgo(30));
@@ -56,9 +56,7 @@ export function DashboardPage() {
     enabled: canView,
   });
 
-  if (!canView) {
-    return <p className="text-[15px] lg:text-[13px] text-ink-soft">ليس لديك صلاحية عرض هذه اللوحة.</p>;
-  }
+  if (!canView) return null;
 
   const exceptionRate = (s: { totalFillUps: number; exceptionCount: number }) =>
     s.totalFillUps > 0 ? s.exceptionCount / s.totalFillUps : 0;
@@ -68,33 +66,31 @@ export function DashboardPage() {
       : null;
 
   return (
-    <div>
-      <PageHeader
-        title="لوحة المتابعة على مستوى المديرية"
-        actions={
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">
-                من
-                <InfoHint text="بداية النطاق الزمني الذي تُحسب عليه كل الأرقام والرسوم في هذه الصفحة." />
-              </label>
-              <DateField
-                value={fromDate}
-                onChange={setFromDate}
-                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">إلى</label>
-              <DateField
-                value={toDate}
-                onChange={setToDate}
-                inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
+    <section aria-label="على مستوى المديرية" className="mt-8" data-testid="directorate-overview">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <h2 className="text-[20px] font-extrabold text-ink lg:text-[17px]">على مستوى المديرية</h2>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-[13px] lg:text-[12px] font-bold text-ink-soft">
+              من
+              <InfoHint text="بداية النطاق الزمني الذي تُحسب عليه كل الأرقام والرسوم في هذا القسم." />
+            </label>
+            <DateField
+              value={fromDate}
+              onChange={setFromDate}
+              inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+            />
           </div>
-        }
-      />
+          <div>
+            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">إلى</label>
+            <DateField
+              value={toDate}
+              onChange={setToDate}
+              inputClassName="h-9 w-36 rounded-sm bg-surface-alt px-3 pe-9 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+        </div>
+      </div>
 
       {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
       {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل البيانات.</p>}
@@ -113,7 +109,7 @@ export function DashboardPage() {
               hint="مجموع كمية الوقود (باللتر) المصروفة في كل التعبئات ضمن هذا النطاق، لكل أنواع الوقود مجتمعة."
             />
             <KpiCard
-              label="نسبة المخالفات"
+              label="نسبة الاستثناءات"
               value={`${(data.exceptionRate * 100).toFixed(1)}%`}
               variant="danger"
               hint="نسبة التعبئات التي سُجِّلت كاستثناء (خرقت إحدى قواعد التعبئة) إلى إجمالي التعبئات — رقم مرتفع يستحق المتابعة."
@@ -138,7 +134,7 @@ export function DashboardPage() {
               </Card>
 
               <Card>
-                <CardHeader title="نسبة المخالفات عبر الوقت" subtitle="نسبة المخالفات إلى إجمالي التعبئات كل يوم" />
+                <CardHeader title="نسبة الاستثناءات عبر الوقت" subtitle="نسبة الاستثناءات إلى إجمالي التعبئات كل يوم" />
                 <div className="h-56 p-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
@@ -151,7 +147,7 @@ export function DashboardPage() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" fontSize={10} />
                       <YAxis allowDecimals={false} fontSize={11} unit="%" />
-                      <Tooltip formatter={(value) => [`${value}%`, 'نسبة المخالفات']} />
+                      <Tooltip formatter={(value) => [`${value}%`, 'نسبة الاستثناءات']} />
                       <Line type="monotone" dataKey="rate" stroke="#c2410c" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -184,11 +180,11 @@ export function DashboardPage() {
           <Card>
             <CardHeader
               title="حسب المحطة"
-              subtitle="مرتبة بنسبة المخالفات"
+              subtitle="مرتبة بنسبة الاستثناءات"
               action={
                 <InfoHint
                   className="me-1"
-                  text="الصف المظلَّل باللون الأحمر هو المحطة صاحبة أعلى نسبة مخالفات ضمن هذا النطاق الزمني — أول مكان يستحق المراجعة."
+                  text="المحطة صاحبة أعلى نسبة استثناءات ضمن هذا النطاق الزمني مكتوب بجانبها «الأعلى» — أول مكان يستحق المراجعة."
                 />
               }
             />
@@ -199,7 +195,7 @@ export function DashboardPage() {
                   <th className="px-[18px] py-2.5 text-start">المحطة</th>
                   <th className="px-[18px] py-2.5 text-start">إجمالي التعبئات</th>
                   <th className="px-[18px] py-2.5 text-start">إجمالي اللترات</th>
-                  <th className="px-[18px] py-2.5 text-start">المخالفات</th>
+                  <th className="px-[18px] py-2.5 text-start">الاستثناءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,6 +208,9 @@ export function DashboardPage() {
                   >
                     <td className="px-[18px] py-3">
                       <span className="font-bold text-ink">{station.name ?? ''}</span>
+                      {station.stationId === worstStationId && station.exceptionCount > 0 && (
+                        <span className="ms-2 rounded-full bg-danger-100 px-2 py-0.5 text-[12px] font-bold text-danger-dark">الأعلى</span>
+                      )}
                       <br />
                       <CodeText>{station.internalCode ?? station.stationId}</CodeText>
                     </td>
@@ -233,6 +232,6 @@ export function DashboardPage() {
           </Card>
         </>
       )}
-    </div>
+    </section>
   );
 }

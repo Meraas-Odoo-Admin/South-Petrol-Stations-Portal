@@ -462,28 +462,6 @@ export class CardsService {
     return this.renderer.renderCardPreviewPng(this.faceData(card));
   }
 
-  // A test card (desk set-up, a ribbon change) is needed to set the printer up.
-  // Since Phase 6 blank cards are not tracked here, so printing one is neither
-  // counted nor recorded - the PDF is simply produced.
-  async testCard(registrationStationId: string, deskId: string, actorId: string): Promise<Buffer> {
-    const scope = await this.rbac.getRegistrationStationScope(actorId);
-    if (scope !== null && !scope.includes(registrationStationId)) {
-      throw new ForbiddenException('You do not have access to this registration station.');
-    }
-    const station = await this.prisma.registrationStation.findUnique({
-      where: { id: registrationStationId },
-      include: { municipality: { include: { securityAuthority: true } } },
-    });
-    if (!station) {
-      throw new NotFoundException('Registration station not found.');
-    }
-    const desk = await this.prisma.registrationDesk.findUnique({ where: { id: deskId } });
-    if (!desk || desk.registrationStationId !== registrationStationId) {
-      throw new NotFoundException('DESK_NOT_AT_THIS_STATION');
-    }
-    return this.renderer.renderTestCardPdf(station.municipality.securityAuthority?.name ?? station.municipality.name);
-  }
-
   // The one-page printer setup card: printed once on the real printer.
   printerSetupCard(): Promise<Buffer> {
     return this.renderer.renderPrinterSetupPdf();

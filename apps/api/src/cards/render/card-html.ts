@@ -227,31 +227,6 @@ export function buildCardHtml(
   return document(`<div class="page" dir="rtl">${faceBody(data, mode, layout, assets)}</div>`, assets);
 }
 
-// Setup/alignment card for a desk printer (new desk, new ribbon): the real
-// face with a sample, NON-card QR, plus the 2 mm safe margin, centre cross-hairs
-// and corner marks. One page, never counted.
-export function buildTestCardHtml(qrSvg: string, officeName: string, assets: CardAssets): string {
-  const data: CardFaceData = {
-    cardNumber: 'TEST-CARD',
-    plate: '00-0000000',
-    makeModel: 'بطاقة اختبار',
-    color: 'للمعايرة فقط',
-    year: '0000',
-    fuel: '—',
-    chassis: 'TESTCARD0000000000',
-    booklet: '0000000',
-    officeName,
-    issueDate: '0000-00-00',
-    stationCode: 'TEST',
-    qrSvg,
-  };
-  const marks = `
-<div class="abs" style="left:${SAFE_PX}px;top:${SAFE_PX}px;width:${1011 - 2 * SAFE_PX}px;height:${638 - 2 * SAFE_PX}px;border:3px dashed #000;box-sizing:border-box"></div>
-<div class="abs" style="left:505px;top:0;width:3px;height:638px;background:#000"></div>
-<div class="abs" style="left:0;top:318px;width:1011px;height:3px;background:#000"></div>`;
-  return document(`<div class="page" dir="rtl">${faceBody(data, 'full', 'A', assets)}${marks}</div>`, assets);
-}
-
 // The page the client prints ONCE on the real printer and reads back: which of
 // the 1, 2 and 3 mm lines survive, whether the centre cross sits in the middle,
 // which sizes of text stay readable, and which QR sizes scan. Laid out in zones
