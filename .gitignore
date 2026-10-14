@@ -51,3 +51,4 @@ Claude outputs/*.xls
 
 # Phase 5C: real client data (names + phone numbers) — never committed.
 data/private/
+apps/web/e2e/.fake-camera-history.y4m
