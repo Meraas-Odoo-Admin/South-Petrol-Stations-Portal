@@ -53,7 +53,7 @@ A fuel fill-up control system for petrol stations overseen by **مديرية أ�
 
 ## 4. State on 14 Oct 2026
 
-- **`main` = `9589c32`** (Phase 6 Part A, follow-ups and Part B merged). Everything is pushed.
+- **`main`:** Phase 6 Part A, the follow-ups and Part B are merged. Always pull the latest `main` before starting. Everything is pushed.
 - **Phases built:** 1–3 (foundation, roles, card), 4a–4c, 5A–5C, the client-final-decisions round, the UX round (tabs, pagination, bell, nav) and Phase 6 (simplify, print, UX).
 - **The dev DB is a clean demo:**
   - 29 Sabha stations, 6 real companies, 1 registration office with 2 desks;
@@ -94,6 +94,7 @@ A fuel fill-up control system for petrol stations overseen by **مديرية أ�
 **Owners and vehicles:**
 - **Individuals only** (no institutions).
 - **National ID:** 12 digits; first digit 1 or 2; digits 2–5 a valid birth year; owner 18+. **No check-digit validation** (the client's decision).
+- **Administrative number** (changed 14 Oct, built in Phase 7): 10 digits, starting with 5 (male) or 6 (female).
 - **Required vehicle fields:** plate (optional trailing N is part of its identity), chassis, booklet, make, model (free text, as in the booklet), colour (list + أخرى), year 1950 to next year, fuel type (a mismatch warns at the pump).
 - **Chassis:** 17 characters normally. 6–20 only with «رقم هيكل غير قياسي». Dashes are stripped automatically (Japanese frame numbers).
 
@@ -125,6 +126,21 @@ A fuel fill-up control system for petrol stations overseen by **مديرية أ�
 
 ## 6. What's left
 
+0. **Phase 7: Mohamed's review fixes (do this first).** Everything is listed in `Claude outputs/claude-code-phase7-client-review-fixes.md`. Decisions taken on 14 Oct 2026:
+   - administrative number: 10 digits, starting with 5 (male) or 6 (female);
+   - booklet number: digits only;
+   - no N plate suffix;
+   - year as a dropdown;
+   - «رقم المرجع/الإثبات» removed (auto codes only);
+   - desks and printers removed;
+   - the municipality manager may issue cards in their own municipality;
+   - stations and offices in separate lists;
+   - no custom numeric rules;
+   - units on every setting;
+   - «القوائم» moved into settings;
+   - a stronger button and colour system.
+
+   Phase 7 also includes the Part B leftovers (item 2 below).
 1. **Testing tracker for Mohamed.** A published artifact listing every function for every role, with a tick and a notes field each, that saves as he goes. Build it from the current app (after Phase 6).
 2. **Small polish round** (from Part B "not done"):
    - skeleton loaders on all lists;
