@@ -4,19 +4,20 @@
 
 /* Phase 6 (B1): every field has a visible edge (3:1 against what is next to it,
    WCAG 1.4.11); until now most were a pale fill with no border, which vanished on a
-   weak screen. In @layer base so a screen can still set its own border with a
-   utility class. */
+   weak screen. A screen can still set its own border with a utility class.
+   Phase 7 (critique): wrapped in :where() so the rule has NO specificity. Without
+   it, the nine :not() made it (0,9,1), stronger than any Tailwind class: `border-0`
+   could not remove it (the password box inside a box) and `border-danger` could
+   never show a field's error. */
 @layer base {
-  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='image']):not([type='hidden']),
-  select,
-  textarea {
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='button']):not([type='submit']):not([type='image']):not([type='hidden'])),
+  :where(select),
+  :where(textarea) {
     border-width: 1px;
     border-style: solid;
     border-color: #6a7c79;
   }
-  input:disabled,
-  select:disabled,
-  textarea:disabled {
+  :where(input:disabled, select:disabled, textarea:disabled) {
     border-color: #cbd5d2;
   }
 }
@@ -42,4 +43,26 @@ body {
   font-family: 'Cairo', sans-serif;
   background-color: #e4ebe9;
   color: #132524;
+}
+
+/* Phase 7 (4.4): a row that may scroll sideways on a phone (tab bars, chooser
+   strips) shows no scrollbar or arrows; it is swiped. On a desktop those rows
+   wrap instead (lg:flex-wrap) and never scroll. */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Phase 7 (critique): placeholders were the browser's default grey (about 2.3:1
+   on a field). Ink Faint is 5.4:1 on a field and 5.9:1 on white; a placeholder
+   such as «يوم/شهر/سنة» is the only hint of the expected format. */
+@layer base {
+  ::placeholder {
+    color: #566866;
+    opacity: 1;
+  }
 }

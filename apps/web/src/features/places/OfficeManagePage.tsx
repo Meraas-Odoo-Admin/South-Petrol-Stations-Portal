@@ -11,6 +11,8 @@ import { Icon, ICONS } from '../../components/icons';
 import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
 import { OfficeWorkspace } from './Workspaces';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { focusFirstInvalid } from '../../lib/focusField';
 import {
   ActivityCard,
   ArchiveRestoreButton,
@@ -35,7 +37,7 @@ function BackLink({ to, children }: { to: string; children: string }) {
   return (
     <Link
       to={to}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 lg:text-[14px]"
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 lg:text-[14px]"
     >
       <Icon d={ICONS.arrowBack} size={18} />
       {children}
@@ -67,7 +69,8 @@ export function OfficeCreatePage() {
   function submit() {
     const found = validateOffice(values);
     setErrors(found);
-    if (Object.keys(found).length === 0) create.mutate();
+    if (Object.keys(found).length > 0) return focusFirstInvalid();
+    create.mutate();
   }
 
   return (
@@ -92,8 +95,8 @@ export function OfficeCreatePage() {
   );
 }
 
-// One registration office as its manager sees it: details (editable), desks
-// and printers, the office manager and what happened there; archived and
+// One registration office as its manager sees it: details (editable),
+// the office manager and what happened there; archived and
 // restored from here.
 export function OfficeManagePage() {
   const { officeId } = useParams();
@@ -117,7 +120,7 @@ export function OfficeManagePage() {
     },
   });
 
-  if (office.isLoading) return <p className="p-4 text-[15px] text-ink-soft">جارٍ التحميل…</p>;
+  if (office.isLoading) return <SkeletonRows rows={6} />;
   if (office.isError || !office.data) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
@@ -133,7 +136,8 @@ export function OfficeManagePage() {
     setSaved(false);
     const found = validateOffice(values);
     setErrors(found);
-    if (Object.keys(found).length === 0) save.mutate();
+    if (Object.keys(found).length > 0) return focusFirstInvalid();
+    save.mutate();
   }
 
   return (

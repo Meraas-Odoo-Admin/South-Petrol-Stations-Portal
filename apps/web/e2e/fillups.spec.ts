@@ -62,15 +62,12 @@ test('supervisor: scan the card, confirm the vehicle, trip the gap rule and reso
   await expect(page.getByTestId('rule-review-card-mobile')).toContainText('تعذر تسجيل التعبئة');
   await page.getByTestId('fillup-mobile-record-exception').click();
 
-  // Exception step: the type list is dynamic; pick the first and fill the
-  // proof field only when it is asked for.
+  // Exception step: the type list is dynamic; pick the first. Phase 7: there
+  // is no proof-reference field for any type.
   await expect(page.getByTestId('fillup-rejection-mobile')).toBeVisible();
   await page.getByTestId('exception-type-select-mobile').selectOption({ index: 1 });
   await page.getByTestId('exception-reason-mobile').fill('اختبار Playwright — تدفق الاستثناء الكامل');
-  const proofField = page.getByTestId('exception-proof-mobile');
-  if (await proofField.isVisible().catch(() => false)) {
-    await proofField.fill('PW-PROOF-001');
-  }
+  await expect(page.getByTestId('exception-proof-mobile')).toHaveCount(0);
   await page.getByTestId('exception-submit-mobile').click();
 
   await expect(page.getByTestId('fillup-success')).toBeVisible();

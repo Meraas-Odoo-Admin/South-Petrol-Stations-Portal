@@ -7,7 +7,7 @@ import { roleLabel } from '../lib/labels';
 import { APP_NAME } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
-import { NAV_ACCESS, activeNavPath } from '../lib/navAccess';
+import { NAV_ACCESS, activeNavPath, singleDestination } from '../lib/navAccess';
 import { NetworkBanner } from './NetworkBanner';
 import { NotificationBell } from './NotificationBell';
 
@@ -49,7 +49,8 @@ export function Layout() {
           params: { status: 'PENDING', take: 100 },
         })
       ).data.length,
-    enabled: canSeeChangeRequests,
+    // Only while the menu item is shown (hidden after review, 15 Oct 2026).
+    enabled: canSeeChangeRequests && NAV_ACCESS.changeRequests(hasPermission),
     staleTime: 60_000,
   });
 
@@ -59,7 +60,9 @@ export function Layout() {
     // ("/") had no persistent nav entry anywhere (sidebar, mobile sheet, or
     // bottom bar). Always shown. Who sees each destination below comes from
     // lib/navAccess.ts, the same list the home screen's cards read.
-    { to: '/', label: 'الرئيسية', icon: <Icon d={ICONS.home} />, show: NAV_ACCESS.home() },
+    // …except for someone with one job (the station employee: recording), whose
+    // home IS that screen (singleDestination, lib/navAccess.ts).
+    { to: '/', label: 'الرئيسية', icon: <Icon d={ICONS.home} />, show: !singleDestination(hasPermission) },
     {
       to: '/fillups/new',
       label: 'تسجيل تعبئة',
@@ -113,7 +116,6 @@ export function Layout() {
     { to: '/my-station', label: 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
     { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
-    { to: '/lists', label: 'القوائم', icon: <Icon d={ICONS.reports} />, show: NAV_ACCESS.lists(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
   // One current item for the address, the same on the side menu, the phone bar
@@ -137,8 +139,11 @@ export function Layout() {
     mostUsed.length < 3
       ? navItems.filter((i) => i.to === '/registration' || mostUsed.includes(i))
       : mostUsed;
-  const bottomBarItems = bottomBarCandidates.slice(0, hasPermission('vehicles:read') ? 3 : 4);
-  const showSearchTab = hasPermission('vehicles:read');
+  const showSearchTab = NAV_ACCESS.vehicles(hasPermission);
+  const bottomBarItems = bottomBarCandidates.slice(0, showSearchTab ? 3 : 4);
+  // One destination and nothing to search: a bar with one tab is no help.
+  const showBottomBar = bottomBarItems.length + (showSearchTab ? 1 : 0) > 1;
+  const showBell = hasPermission('notifications:read');
 
   // The phone menu sheet: named groups, and anything not in a named group goes
   // into a last one, so a destination can never be missing from the sheet
@@ -148,7 +153,7 @@ export function Layout() {
     { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
     { title: 'محطتي ومكتبي', paths: ['/manage', '/my-station', '/my-office'] },
-    { title: 'الإدارة', paths: ['/lists', '/admin'] },
+    { title: 'الإدارة', paths: ['/admin'] },
   ];
   const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));
   const sheetGroups = [
@@ -171,7 +176,10 @@ export function Layout() {
           to the main-axis end (the physical LEFT) instead — confirmed via
           a Playwright bounding-box measurement in the round-2 verification
           pass, not something a glance at the source would catch. */}
-      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-line-soft bg-surface lg:flex">
+      {/* Phase 7 (Mohamed): the menu stays in place while the page scrolls under
+          it — sticky to the top, the height of the screen. A long menu scrolls
+          inside itself; the account card stays at the bottom. */}
+      <aside className="order-1 hidden w-60 shrink-0 flex-col border-s border-line-soft bg-surface lg:sticky lg:top-0 lg:flex lg:h-screen lg:self-start">
         <div className="flex items-center gap-2.5 px-5 py-6">
           <BrandMark size={34} />
           <div>
@@ -179,7 +187,7 @@ export function Layout() {
             <p className="text-[13px] lg:text-[12px] font-medium text-ink-faint">مديرية أمن سبها</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-0.5 px-3">
+        <nav className="scrollbar-none min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
           {navItems.map((item) => (
             <Link
               key={item.to}
@@ -229,7 +237,7 @@ export function Layout() {
             <button
               type="button"
               onClick={() => logout()}
-              className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2 text-[13px] lg:text-[12px] font-bold text-danger transition hover:bg-danger hover:text-white"
+              className="flex items-center justify-center gap-1.5 rounded-full border border-line bg-surface py-2 text-[13px] lg:text-[12px] font-bold text-ink transition hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark"
             >
               <Icon d={ICONS.logout} />
               خروج
@@ -255,7 +263,7 @@ export function Layout() {
             {user?.fullName ? ` · ${user.fullName}` : ''}
           </p>
         </div>
-        <NotificationBell align="start" />
+        {showBell && <NotificationBell align="start" />}
       </header>
 
       {/* Single shared content outlet — every page mounts exactly once.
@@ -276,10 +284,16 @@ export function Layout() {
           (correctly) refused to click through the nav sitting on top of
           it — a real bug, not a flaky test. lg:p-6 (desktop, no fixed
           nav) is unaffected. */}
-      <main className="order-2 min-h-[calc(100vh-56px-58px)] overflow-x-hidden p-3.5 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:min-h-screen lg:flex-1 lg:p-6">
-        <div className="mb-4 hidden justify-end lg:flex">
-          <NotificationBell align="start" />
-        </div>
+      <main
+        className={`order-2 overflow-x-hidden p-3.5 lg:min-h-screen lg:flex-1 lg:p-6 ${
+          showBottomBar ? 'min-h-[calc(100vh-56px-58px)] pb-[calc(5rem+env(safe-area-inset-bottom))]' : 'min-h-[calc(100vh-56px)] pb-[calc(1rem+env(safe-area-inset-bottom))]'
+        }`}
+      >
+        {showBell && (
+          <div className="mb-4 hidden justify-end lg:flex">
+            <NotificationBell align="start" />
+          </div>
+        )}
         <NetworkBanner />
         <Outlet />
       </main>
@@ -287,43 +301,45 @@ export function Layout() {
       {/* Mobile bottom bar — hidden at lg+. Equal-width items, one-line labels
           that are always visible, and padding for the iPhone home indicator
           (env(safe-area-inset-bottom), which needs viewport-fit=cover). */}
-      <nav
-        aria-label="التنقل السريع"
-        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line-soft bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
-        style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, minmax(0, 1fr))` }}
-      >
-        {bottomBarItems.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            // The bar shows one short word, but the link keeps its full name for
-            // screen readers and voice control (the visible word is part of it).
-            aria-label={item.shortLabel ? item.label : undefined}
-            aria-current={item.to === activeTo ? 'page' : undefined}
-            className={`relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight ${
-              item.to === activeTo ? 'text-primary' : 'text-ink-soft'
-            }`}
-          >
-            {item.icon}
-            <span className="max-w-full whitespace-nowrap">{item.shortLabel ?? item.label}</span>
-            {!!item.badge && (
-              <span className="absolute end-[18%] top-1 rounded-full bg-accent px-1.5 text-[13px] lg:text-[12px] font-extrabold text-ink">
-                {item.badge}
-              </span>
-            )}
-          </Link>
-        ))}
-        {showSearchTab && (
-          <button
-            type="button"
-            onClick={() => navigate('/vehicles')}
-            className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight text-ink-soft"
-          >
-            <Icon d={ICONS.search} />
-            <span className="whitespace-nowrap">بحث</span>
-          </button>
-        )}
-      </nav>
+      {showBottomBar && (
+        <nav
+          aria-label="التنقل السريع"
+          className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line-soft bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(19,37,36,.18)] lg:hidden"
+          style={{ gridTemplateColumns: `repeat(${bottomBarItems.length + (showSearchTab ? 1 : 0)}, minmax(0, 1fr))` }}
+        >
+          {bottomBarItems.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              // The bar shows one short word, but the link keeps its full name for
+              // screen readers and voice control (the visible word is part of it).
+              aria-label={item.shortLabel ? item.label : undefined}
+              aria-current={item.to === activeTo ? 'page' : undefined}
+              className={`relative flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight ${
+                item.to === activeTo ? 'text-primary' : 'text-ink-soft'
+              }`}
+            >
+              {item.icon}
+              <span className="max-w-full whitespace-nowrap">{item.shortLabel ?? item.label}</span>
+              {!!item.badge && (
+                <span className="absolute end-[18%] top-1 rounded-full bg-accent px-1.5 text-[13px] lg:text-[12px] font-extrabold text-ink">
+                  {item.badge}
+                </span>
+              )}
+            </Link>
+          ))}
+          {showSearchTab && (
+            <button
+              type="button"
+              onClick={() => navigate('/vehicles')}
+              className="flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[15px] lg:text-[13px] font-bold leading-tight text-ink-soft"
+            >
+              <Icon d={ICONS.search} />
+              <span className="whitespace-nowrap">بحث</span>
+            </button>
+          )}
+        </nav>
+      )}
 
       {sheetOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -371,7 +387,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={() => closeSheetAnd(() => logout())}
-                className="flex items-center justify-center gap-1.5 rounded-full bg-danger-100 py-2.5 text-[13px] lg:text-[12px] font-bold text-danger"
+                className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-line bg-surface py-2.5 text-[15px] lg:text-[12px] font-bold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark"
               >
                 <Icon d={ICONS.logout} />
                 خروج
@@ -399,7 +415,7 @@ function NavGroup({
   if (items.length === 0) return null;
   return (
     <div className="mb-3">
-      {title && <p className="mb-1 px-3.5 text-[13px] lg:text-[12px] font-extrabold uppercase tracking-wide text-ink-faint">{title}</p>}
+      {title && <p className="mb-1 px-3.5 text-[13px] lg:text-[12px] font-extrabold text-ink-faint">{title}</p>}
       <div className="space-y-0.5">
         {items.map((item) => (
           <Link

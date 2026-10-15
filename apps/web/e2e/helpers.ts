@@ -49,9 +49,11 @@ export async function submitLogin(page: Page, username: string, password: string
   }
 }
 
-export async function loginAs(page: Page, username: string, password: string): Promise<void> {
+// `landing`: where the app opens. The home screen, except for someone with one
+// screen (the station employee, after review 15 Oct 2026: «تسجيل تعبئة»).
+export async function loginAs(page: Page, username: string, password: string, landing = '/'): Promise<void> {
   await submitLogin(page, username, password);
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL(landing);
 }
 
 // Client-side navigation to a route with no link on the current screen.

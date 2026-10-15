@@ -6,6 +6,8 @@ interface StationSelectProps {
   allowAllOption?: boolean;
   className?: string;
   disabled?: boolean;
+  /** Ties the list to its visible label (Phase 7 audit). */
+  id?: string;
 }
 
 // Real dropdown backed by GET /stations, replacing the free-text stationId
@@ -19,21 +21,24 @@ export function StationSelect({
   allowAllOption = false,
   className,
   disabled,
+  id,
 }: StationSelectProps) {
   const { data: stations, isLoading } = useStations();
 
   return (
     <select
+      id={id}
+      aria-label={id ? undefined : 'المحطة'}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled || isLoading}
       className={
-        className ?? 'w-64 rounded border border-slate-300 px-2 py-1 disabled:bg-slate-100 disabled:text-slate-500'
+        className ?? 'w-64 rounded-sm border border-line bg-surface-alt px-2 py-1 disabled:opacity-60'
       }
     >
       {allowAllOption && <option value="">جميع المحطات</option>}
       {!allowAllOption && !value && <option value="">اختر محطة</option>}
-      {isLoading && <option disabled>...جارٍ التحميل</option>}
+      {isLoading && <option disabled>جارٍ التحميل…</option>}
       {stations?.map((station) => (
         <option key={station.id} value={station.id}>
           {station.internalCode} — {station.name}

@@ -8,6 +8,8 @@ import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
 import { Pagination } from '../../components/Pagination';
 import { formatWhen } from '../users/format';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 // ── shapes the places screens read ─────────────────────────────────────
 
@@ -171,7 +173,7 @@ export function useOffice(id: string | undefined) {
   });
 }
 
-export const ACTIVITY_PAGE_SIZE = 25;
+export const ACTIVITY_PAGE_SIZE = LIST_PAGE_SIZE;
 
 export function usePlaceActivity(kind: 'stations' | 'registration-stations', id: string | undefined, skip = 0) {
   return useQuery({
@@ -297,7 +299,7 @@ export function ActivityCard({
 }) {
   return (
     <SectionCard title="النشاط" description="آخر ما جرى هنا، بأسماء من نفّذه.">
-      {loading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+      {loading && <SkeletonRows rows={4} />}
       {summary}
       {activity && activity.items.length === 0 && (
         <p className="text-[15px] text-ink-soft lg:text-[13px]">لا توجد تغييرات مسجّلة بعد.</p>

@@ -25,18 +25,8 @@ export interface VehicleCardRow {
   printedStationCode: string;
   needsReissue: boolean;
   registrationStation: { id: string; internalCode: string; name: string };
-  desk: { id: string; name: string };
   issuedBy: { id: string; fullName: string };
   cancelledBy: { id: string; fullName: string } | null;
-}
-
-export interface RegistrationDeskRow {
-  id: string;
-  registrationStationId: string;
-  name: string;
-  printerModel: string | null;
-  printerSerial: string | null;
-  isActive: boolean;
 }
 
 export const CARD_STATUS_LABELS: Record<CardStatus, string> = {
@@ -57,7 +47,6 @@ export const CARD_REASON_LABELS: Record<CardIssueReason, string> = {
 const CARD_ERRORS: Record<string, string> = {
   FIRST_ISSUE_NOT_ALLOWED: 'لهذه المركبة بطاقة سابقة — اختر سبب الإصدار (بدل فاقد، بدل تالف، أو تغيّر البيانات).',
   NO_CARD_TO_REPLACE: 'لا توجد بطاقة سابقة لهذه المركبة لاستبدالها — أصدر أول بطاقة.',
-  DESK_NOT_AVAILABLE: 'المكتب المختار غير متاح في مكتب التسجيل هذا — اختر مكتبًا آخر.',
   MUNICIPALITY_HAS_NO_CODE: 'لم يُحدَّد رمز البلدية بعد، ولا يمكن إصدار بطاقات فيها — راجع مسؤول المنظومة.',
   MUNICIPALITY_HAS_NO_AUTHORITY: 'لا توجد جهة أمنية لهذه البلدية، ولا يمكن إصدار بطاقات فيها.',
   CARD_NOT_ACTIVE: 'هذه البطاقة لم تعد سارية.',
@@ -70,29 +59,12 @@ export function cardErrorMessage(error: unknown, fallback = 'تعذر إتمام
   if (!isAxiosError<{ message?: unknown }>(error) || !error.response) return describeApiError(error, fallback).message;
   const code = error.response.data?.message;
   if (typeof code === 'string' && CARD_ERRORS[code]) return CARD_ERRORS[code];
-  if (error.response.status === 403) return 'لا تملك صلاحية هذا الإجراء في مكتب التسجيل هذا.';
+  if (error.response.status === 403) return 'لا تملك صلاحية إصدار البطاقات أو طباعتها في مكتب التسجيل هذا.';
   return describeApiError(error, fallback).message;
 }
 
-// The desk this DEVICE prints at, per registration station — picked once and
-// remembered on the device (each desk has its own computer and printer).
-export function rememberedDeskId(registrationStationId: string): string | null {
-  try {
-    return localStorage.getItem(`fuel.desk.${registrationStationId}`);
-  } catch {
-    return null;
-  }
-}
-
-export function rememberDesk(registrationStationId: string, deskId: string): void {
-  try {
-    localStorage.setItem(`fuel.desk.${registrationStationId}`, deskId);
-  } catch {
-    // Private mode / storage blocked — the desk is simply asked again.
-  }
-}
-
-// Print mode, per DEVICE (a desk's printer is loaded with one kind of stock):
+// Print mode, per DEVICE (the printer next to it is loaded with one kind of
+// ribbon) — Phase 7: the one printer setting left now desks are gone:
 // 'full' prints colour + black (YMCKO ribbon); 'black' prints the same card
 // in black only, for a monochrome ribbon.
 export function rememberedPrintMode(): 'full' | 'black' {
@@ -115,12 +87,12 @@ export async function fetchPdf(request: () => Promise<{ data: Blob }>): Promise<
   return (await request()).data;
 }
 
-// `where` is the office and desk the employee prints at. A card first issued
-// at another office is reprinted from here: the print is counted at this office.
+// `where` is the office the employee prints at. A card first issued at another
+// office is reprinted from here: the print is counted at this office.
 export function printCardPdf(
   cardId: string,
   mode: 'full' | 'black' = 'full',
-  where: { registrationStationId?: string; deskId?: string } = {},
+  where: { registrationStationId?: string } = {},
 ): Promise<Blob> {
   return fetchPdf(() => apiClient.post<Blob>(`/cards/${cardId}/print`, { mode, ...where }, { responseType: 'blob' }));
 }

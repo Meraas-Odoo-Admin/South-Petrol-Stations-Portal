@@ -35,7 +35,7 @@ function BackLink({ basePath }: { basePath: string }) {
   return (
     <Link
       to={basePath}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 lg:text-[14px]"
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 lg:text-[14px]"
     >
       <Icon d={ICONS.arrowBack} size={18} />
       العودة

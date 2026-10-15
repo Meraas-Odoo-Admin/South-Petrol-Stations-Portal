@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { LtrText } from '../../components/LtrText';
@@ -8,12 +8,9 @@ import {
   printCardPdf,
   printPdfBlob,
   printerSetupPdf,
-  rememberDesk,
-  rememberedDeskId,
   rememberPrintMode,
   rememberedPrintMode,
   type IssuableReason,
-  type RegistrationDeskRow,
   type VehicleCardRow,
 } from './cardApi';
 
@@ -50,13 +47,14 @@ function CardPreview({ cardId }: { cardId: string }) {
   );
 }
 
-// Registration pivot, phase 3 — issuing and printing at the desk:
-//  1. the desk (picked once per device, remembered on it);
-//  2. «إصدار البطاقة» creates the card and shows a preview;
-//  3. «طباعة» sends the card PDF to the printer;
-//  4. «هل طُبعت البطاقة بشكل سليم؟» — no: that card is cancelled on the spot
+// Registration pivot, phase 3 — issuing and printing at the office:
+//  1. «إصدار البطاقة» creates the card and shows a preview;
+//  2. «طباعة» sends the card PDF to the printer;
+//  3. «هل طُبعت البطاقة بشكل سليم؟» — no: that card is cancelled on the spot
 //     (failed print) and a new card number is issued and printed.
-// Every issue, print and cancellation is audited server-side.
+// Every issue, print and cancellation is audited server-side, against the
+// office and the employee. Phase 7: no desk to pick; the one printer setting
+// (black-only ribbon) is kept per device.
 export function CardIssueFlow({
   vehicleId,
   registrationStationId,
@@ -73,29 +71,18 @@ export function CardIssueFlow({
   onCancel?: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [deskId, setDeskId] = useState<string | null>(() => rememberedDeskId(registrationStationId));
-  const [choosingDesk, setChoosingDesk] = useState(false);
   const [card, setCard] = useState<VehicleCardRow | null>(null);
   const [step, setStep] = useState<Step>('ready');
   const [error, setError] = useState<string | null>(null);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const [printMode, setPrintMode] = useState<'full' | 'black'>(() => rememberedPrintMode());
 
-  const desksQuery = useQuery({
-    queryKey: ['registration-desks', registrationStationId],
-    queryFn: async () =>
-      (await apiClient.get<RegistrationDeskRow[]>(`/registration-stations/${registrationStationId}/desks`)).data,
-  });
-  const activeDesks = (desksQuery.data ?? []).filter((d) => d.isActive);
-  const desk = activeDesks.find((d) => d.id === deskId) ?? null;
-  const needsDeskChoice = !desk || choosingDesk;
-
   const invalidateCards = () => queryClient.invalidateQueries({ queryKey: ['vehicle-cards', vehicleId] });
 
   async function print(target: VehicleCardRow) {
     setError(null);
     try {
-      setFallbackUrl(printPdfBlob(await printCardPdf(target.id, printMode, { registrationStationId, deskId: deskId ?? undefined })));
+      setFallbackUrl(printPdfBlob(await printCardPdf(target.id, printMode, { registrationStationId })));
       setStep('confirm');
     } catch (err) {
       setError(cardErrorMessage(err, 'تعذرت الطباعة. حاول مرة أخرى.'));
@@ -107,7 +94,6 @@ export function CardIssueFlow({
       (
         await apiClient.post<VehicleCardRow>(`/vehicles/${vehicleId}/cards`, {
           registrationStationId,
-          deskId,
           reason,
           reasonNote: reasonNote?.trim() || undefined,
         })
@@ -122,7 +108,7 @@ export function CardIssueFlow({
 
   const failedPrint = useMutation({
     mutationFn: async (target: VehicleCardRow) =>
-      (await apiClient.post<VehicleCardRow>(`/cards/${target.id}/failed-print`, { registrationStationId, deskId })).data,
+      (await apiClient.post<VehicleCardRow>(`/cards/${target.id}/failed-print`, { registrationStationId })).data,
     onSuccess: async (replacement) => {
       setCard(replacement);
       invalidateCards();
@@ -142,70 +128,32 @@ export function CardIssueFlow({
 
   return (
     <div className="space-y-3" data-testid="card-issue-flow">
-      {/* Desk (per device) */}
-      <div className="rounded-sm bg-surface-alt p-3">
-        {desksQuery.isLoading ? (
-          <p className="text-[13px] lg:text-[12px] text-ink-soft">...جارٍ تحميل المكاتب</p>
-        ) : activeDesks.length === 0 ? (
-          <p className="text-[13px] lg:text-[12px] text-danger">لا توجد مكاتب طباعة مفعّلة في مكتب التسجيل هذا — راجع مسؤول المنظومة.</p>
-        ) : needsDeskChoice ? (
-          <div>
-            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المكتب الذي تطبع منه (يُحفظ على هذا الجهاز)</label>
-            <select
-              data-testid="card-desk-select"
-              value={desk?.id ?? ''}
-              onChange={(e) => {
-                setDeskId(e.target.value);
-                rememberDesk(registrationStationId, e.target.value);
-                setChoosingDesk(false);
-              }}
-              className="h-9 w-full rounded-sm bg-surface px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent sm:w-72"
-            >
-              <option value="">اختر المكتب</option>
-              {activeDesks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                  {d.printerModel ? ` — ${d.printerModel}` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] lg:text-[12px]">
-            <span>
-              المكتب: <span className="font-bold text-ink" data-testid="card-desk-current">{desk.name}</span>
-              {desk.printerModel && <span className="text-ink-faint"> — {desk.printerModel}</span>}
-            </span>
-            <span className="flex gap-3">
-              <button type="button" className="font-bold text-accent-ink" onClick={() => setChoosingDesk(true)}>
-                تغيير المكتب
-              </button>
-              <button type="button" className="font-bold text-ink-soft" onClick={printSetupCard} data-testid="card-print-setup">
-                بطاقة إعداد الطابعة
-              </button>
-            </span>
-            <label className="flex w-full items-center gap-1.5 text-[13px] lg:text-[12px] text-ink-soft">
-              <input
-                type="checkbox"
-                checked={printMode === 'black'}
-                data-testid="card-print-black-only"
-                onChange={(e) => {
-                  const mode = e.target.checked ? 'black' : 'full';
-                  setPrintMode(mode);
-                  rememberPrintMode(mode);
-                }}
-              />
-              شريط أحادي اللون — اطبع بالأسود فقط (يُحفظ على هذا الجهاز)
-            </label>
-          </div>
-        )}
+      {/* The printer next to this device: one setting, remembered on it. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm bg-surface-alt p-3" data-testid="card-printer-settings">
+        <label className="flex min-h-[44px] items-center gap-2 text-[15px] text-ink lg:text-[13px]">
+          <input
+            type="checkbox"
+            className="h-5 w-5"
+            checked={printMode === 'black'}
+            data-testid="card-print-black-only"
+            onChange={(e) => {
+              const mode = e.target.checked ? 'black' : 'full';
+              setPrintMode(mode);
+              rememberPrintMode(mode);
+            }}
+          />
+          شريط أحادي اللون — اطبع بالأسود فقط (يُحفظ على هذا الجهاز)
+        </label>
+        <PillButton size="sm" variant="secondary" onClick={printSetupCard} data-testid="card-print-setup">
+          بطاقة إعداد الطابعة
+        </PillButton>
       </div>
 
       {step === 'ready' && (
         <div className="flex flex-wrap gap-2">
           <PillButton
             data-testid="card-issue"
-            disabled={!desk || needsDeskChoice || issue.isPending}
+            disabled={issue.isPending}
             onClick={() => {
               setError(null);
               issue.mutate();

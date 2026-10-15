@@ -29,10 +29,12 @@ import { VehicleEditForm } from './VehicleEditForm';
 import { OwnerEditForm } from './OwnerEditForm';
 import { OwnerIdentityChangeRequestForm } from './OwnerIdentityChangeRequestForm';
 import type { VehicleBasicInfo } from './types';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 type ChangeFormType = 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | 'OWNER_CHANGE' | 'PLATE_CHANGE' | 'VEHICLE_TYPE_CHANGE';
 
-const TAKE = 20;
+const TAKE = LIST_PAGE_SIZE;
 
 type MobileTab = 'identity' | 'plates' | 'card' | 'history';
 
@@ -91,7 +93,7 @@ export function VehicleDetailPage() {
   });
 
   if (vehicleQuery.isLoading) {
-    return <p className="text-slate-500">...جارٍ التحميل</p>;
+    return <SkeletonRows rows={6} />;
   }
   if (vehicleQuery.isError || !vehicleQuery.data) {
     return <p className="text-danger">تعذر العثور على المركبة.</p>;
@@ -103,7 +105,7 @@ export function VehicleDetailPage() {
     <div>
       <PageHeader title={vehicle.internalCode} subtitle={formatLicensePlate(vehicle.currentPlate)} />
 
-      <div className="mb-4 flex gap-1.5 overflow-x-auto sm:hidden">
+      <div className="mb-4 scrollbar-none flex gap-1.5 overflow-x-auto sm:hidden">
         {MOBILE_TABS.filter((tab) => tab.id !== 'card' || canReadCards).map((tab) => (
           <button
             key={tab.id}
@@ -196,7 +198,7 @@ export function VehicleDetailPage() {
                         <button
                           type="button"
                           onClick={() => setEditingOwner(true)}
-                          className="mt-1 block text-[13px] lg:text-[12px] font-bold text-accent hover:underline"
+                          className="mt-1 block text-[13px] lg:text-[12px] font-bold text-primary-dark underline-offset-2 hover:underline"
                         >
                           تعديل
                         </button>
@@ -378,7 +380,7 @@ export function VehicleDetailPage() {
 
         <Card className={mobileTab === 'history' ? '' : 'hidden sm:!block'}>
           <CardHeader title="سجل التعبئات" />
-          {historyQuery.isLoading && <p className="p-4 text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+          {historyQuery.isLoading && <SkeletonRows rows={6} />}
           {historyQuery.isError && <p className="p-4 text-[15px] lg:text-[13px] text-danger">تعذر تحميل السجل.</p>}
           {historyQuery.data && (
             <>

@@ -14,15 +14,17 @@ import { Pagination } from '../../components/Pagination';
 import { OpsReportPanel } from '../reports/OpsReportPanel';
 import { Notice } from '../users/parts';
 import { placeActionLabel } from '../places/placesShared';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 // The tabs of a municipality's page that list things. Each one is mounted only
 // while its tab is open, so a tab's data is asked for when it is opened, one
 // page (25 rows) at a time, with search, filters and sort done by the server.
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = LIST_PAGE_SIZE;
 
 const FIELD =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 function useDebounced<T>(value: T, ms = 300): T {
   const [debounced, setDebounced] = useState(value);
@@ -151,7 +153,7 @@ export function PeopleTab({
           <Notice kind="error">تعذّر تحميل الأشخاص. تأكد من الاتصال ثم أعد المحاولة.</Notice>
         </div>
       )}
-      {query.isLoading && <p className="p-4 text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+      {query.isLoading && <SkeletonRows rows={4} />}
       {query.data && rows.length === 0 && (
         <div className="px-4 py-10 text-center">
           <p className="text-[18px] font-extrabold text-ink lg:text-[15px]">لا يوجد أشخاص يطابقون بحثك</p>
@@ -176,7 +178,7 @@ export function PeopleTab({
                 {rows.map((p) => (
                   <tr key={p.id} className="border-b border-line-soft last:border-0 hover:bg-surface-alt/60">
                     <td className="px-[18px] py-3">
-                      <Link to={personLink(p.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                      <Link to={personLink(p.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark">
                         {p.fullName}
                       </Link>
                       <div><LtrText><span className="font-mono text-[13px] text-ink-soft lg:text-[12px]">{p.username}</span></LtrText></div>
@@ -192,7 +194,7 @@ export function PeopleTab({
           <ul className="divide-y divide-line-soft lg:hidden">
             {rows.map((p) => (
               <li key={p.id}>
-                <Link to={personLink(p.id)} className="block min-h-[72px] px-4 py-3.5 hover:bg-surface-alt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
+                <Link to={personLink(p.id)} className="block min-h-[72px] px-4 py-3.5 hover:bg-surface-alt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-dark">
                   <p className="break-words text-[18px] font-extrabold leading-snug text-ink">{p.fullName}</p>
                   <p className="text-[16px] text-ink-soft">{p.job ? roleLabel(p.job.name) : '—'}</p>
                   <div className="mt-1.5"><PersonStatus person={p} /></div>
@@ -249,7 +251,7 @@ export function ActivityTab({ municipalityId }: { municipalityId: string }) {
           <Notice kind="error">تعذّر تحميل النشاط. تأكد من الاتصال ثم أعد المحاولة.</Notice>
         </div>
       )}
-      {query.isLoading && <p className="px-4 pb-4 text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+      {query.isLoading && <SkeletonRows rows={4} />}
       {query.data && rows.length === 0 && (
         <p className="px-4 pb-6 text-[15px] text-ink-soft lg:text-[13px]">لا توجد تغييرات مسجّلة بعد.</p>
       )}

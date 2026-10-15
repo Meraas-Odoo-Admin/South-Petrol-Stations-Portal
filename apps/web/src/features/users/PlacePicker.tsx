@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { Icon, ICONS } from '../../components/icons';
 import { CodeText } from '../../components/design/CodeText';
 import { placesChosenLabel } from './format';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 export interface PlaceOption {
   id: string;
@@ -119,12 +120,12 @@ export function PlacePicker({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="ابحث بالاسم أو الرمز"
-                className="h-[52px] w-full rounded-sm border border-line bg-surface-alt ps-11 pe-3.5 text-[16px] text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:text-[14px]"
+                className="h-[52px] w-full rounded-sm border border-line bg-surface-alt ps-11 pe-3.5 text-[16px] text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:text-[14px]"
               />
             </div>
           </div>
 
-          {loading && <p className="text-[14px] text-ink-soft lg:text-[12px]">جارٍ تحميل القائمة…</p>}
+          {loading && <SkeletonRows rows={4} label="جارٍ تحميل القائمة" />}
 
           {!loading && matches.length === 0 && (
             <p className="rounded-md bg-surface-alt p-4 text-[15px] text-ink-soft lg:text-[13px]">

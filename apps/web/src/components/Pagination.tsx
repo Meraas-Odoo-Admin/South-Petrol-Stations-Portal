@@ -1,9 +1,12 @@
 import { Icon, ICONS } from './icons';
+import { PillButton } from './design/PillButton';
 
-// The one pager for every list (UX round): «1–20 من 340», the page number, and
+// The one pager for every list (UX round): «1–10 من 340», the page number, and
 // two 44px buttons. A list asks the server for one page and is given the total;
 // nothing here ever holds more rows than a page. It renders nothing when the
-// whole list fits on one page and there is nothing to say.
+// whole list fits on one page and there is nothing to say. Phase 7: 10 rows a
+// page everywhere (lib/pageSize.ts); a short list already loaded whole is paged
+// on the screen with useClientPage, through this same pager.
 interface PaginationProps {
   skip: number;
   take: number;
@@ -44,26 +47,29 @@ export function Pagination({ skip, take, total, onSkipChange, alwaysShow = false
       </p>
       {pages > 1 && (
         <div className="flex gap-2">
-          <button
-            type="button"
+          {/* Phase 7: the one button system (a teal-outlined secondary). */}
+          <PillButton
+            variant="secondary"
+            size="field"
             data-testid={`${testId}-prev`}
             disabled={skip === 0}
             onClick={() => onSkipChange(Math.max(0, skip - take))}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-surface-alt px-4 text-[15px] font-bold text-ink-soft hover:bg-primary-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40 disabled:hover:bg-surface-alt disabled:hover:text-ink-soft lg:min-h-[36px] lg:text-[13px]"
+            className="gap-1.5"
           >
             <Icon d={ICONS.arrowBack} size={16} />
             السابق
-          </button>
-          <button
-            type="button"
+          </PillButton>
+          <PillButton
+            variant="secondary"
+            size="field"
             data-testid={`${testId}-next`}
             disabled={skip + take >= total}
             onClick={() => onSkipChange(skip + take)}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-surface-alt px-4 text-[15px] font-bold text-ink-soft hover:bg-primary-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40 disabled:hover:bg-surface-alt disabled:hover:text-ink-soft lg:min-h-[36px] lg:text-[13px]"
+            className="gap-1.5"
           >
             التالي
             <Icon d={ICONS.arrowNext} size={16} />
-          </button>
+          </PillButton>
         </div>
       )}
     </nav>

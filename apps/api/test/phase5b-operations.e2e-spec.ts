@@ -37,7 +37,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     | 'station_employee'
     | 'registration_supervisor'
     | 'registration_employee';
-  type UserKey = 'top' | 'mm1' | 'mm2' | 'sup' | 'supS1b' | 'supM2' | 'emp' | 'om' | 'regEmp' | 'regEmpR2';
+  type UserKey = 'top' | 'mm1' | 'mm2' | 'sup' | 'supS1b' | 'supM2' | 'emp' | 'viewer' | 'om' | 'regEmp' | 'regEmpR2';
 
   const roleIds: string[] = [];
   const roleId = {} as Record<CatalogRole, string>;
@@ -80,16 +80,30 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     }
   }
 
+  // After review (15 Oct 2026) the catalog's station employee only records
+  // fill-ups: no stock, no notifications. The «إظهار المخزون للموظفين» switch
+  // still governs whoever IS given fuel_stock:read_visible — this station
+  // account, the employee's grants plus the stock and the bell.
+  async function makeStockViewerRole() {
+    const role = await prisma.role.create({ data: { name: `${prefix}_stock_viewer`, kind: 'PETROL_STATION' } });
+    roleIds.push(role.id);
+    for (const permissionKey of [...ROLE_PERMISSIONS.station_employee!, 'fuel_stock:read_visible', 'notifications:read']) {
+      const permission = await prisma.permission.upsert({ where: { key: permissionKey }, create: { key: permissionKey }, update: {} });
+      await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } });
+    }
+    return role.id;
+  }
+
   async function makeUser(
     key: UserKey,
-    roleKey: CatalogRole,
+    roleKey: CatalogRole | { id: string },
     scope: { municipalities?: string[]; stations?: string[]; offices?: string[] } = {},
   ) {
     const created = await prisma.user.create({
       data: { username: `${prefix}_${key}`, passwordHash: await argon2.hash(password), fullName: `P5B ${key}` },
     });
     userId[key] = created.id;
-    await prisma.userRole.create({ data: { userId: created.id, roleId: roleId[roleKey] } });
+    await prisma.userRole.create({ data: { userId: created.id, roleId: typeof roleKey === 'string' ? roleId[roleKey] : roleKey.id } });
     for (const municipalityId of scope.municipalities ?? []) {
       await prisma.userMunicipalityScope.create({ data: { userId: created.id, municipalityId } });
     }
@@ -165,6 +179,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     await makeUser('supS1b', 'station_supervisor', { stations: [station.s1b] });
     await makeUser('supM2', 'station_supervisor', { stations: [station.s2] });
     await makeUser('emp', 'station_employee', { stations: [station.s1a] });
+    await makeUser('viewer', { id: await makeStockViewerRole() }, { stations: [station.s1a] });
     await makeUser('om', 'registration_supervisor', { offices: [office.r1] });
     await makeUser('regEmp', 'registration_employee', { offices: [office.r1] });
     await makeUser('regEmpR2', 'registration_employee', { offices: [office.r2] });
@@ -347,19 +362,24 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
   // ── the switch that hides stock from employees ──────────────────────────
 
   describe('«إظهار المخزون للموظفين»', () => {
-    it('shows levels to employees while on, with no figures behind them', async () => {
-      const res = await get('emp', `/stations/${station.s1a}/fuel-stock`).expect(200);
+    it('the station employee sees no stock and has no bell (after review: recording only)', async () => {
+      await get('emp', `/stations/${station.s1a}/fuel-stock`).expect(403);
+      await get('emp', '/notifications?limit=10').expect(403);
+    });
+
+    it('shows levels to a station account given stock while on, with no figures behind them', async () => {
+      const res = await get('viewer', `/stations/${station.s1a}/fuel-stock`).expect(200);
       expect(res.body.visible).toBe(true);
       expect(res.body.levels[0].level).not.toBeNull();
       expect(res.body.levels[0].detail).toBeUndefined();
-      await get('emp', `/stations/${station.s1a}/fuel-stock/entries`).expect(403);
+      await get('viewer', `/stations/${station.s1a}/fuel-stock/entries`).expect(403);
     });
 
     it('is enforced by the API when switched off, not only hidden by the screen', async () => {
-      await patch('emp', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(403);
+      await patch('viewer', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(403);
       await patch('sup', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(200);
 
-      const hidden = await get('emp', `/stations/${station.s1a}/fuel-stock`).expect(200);
+      const hidden = await get('viewer', `/stations/${station.s1a}/fuel-stock`).expect(200);
       expect(hidden.body.visible).toBe(false);
       expect(hidden.body.levels).toEqual([]);
       expect(JSON.stringify(hidden.body)).not.toMatch(/capacityLiters|openingLevel/);
@@ -374,7 +394,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     });
 
     it('stock of another station is out of reach for every scoped caller', async () => {
-      await get('emp', `/stations/${station.s1b}/fuel-stock`).expect(403);
+      await get('viewer', `/stations/${station.s1b}/fuel-stock`).expect(403);
       await get('mm2', `/stations/${station.s1a}/fuel-stock`).expect(403);
       await get('supM2', `/stations/${station.s1a}/fuel-stock/entries`).expect(403);
     });
@@ -397,7 +417,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       await fill('emp', station.s1a, 300, 'DIESEL').expect(201); // 900: crossed
       expect(await lowFor('sup')).toBe(1);
       expect(await lowFor('mm1')).toBe(1);
-      expect(await lowFor('emp')).toBe(1); // stock is visible to employees
+      expect(await lowFor('viewer')).toBe(1); // stock is visible to the station account given it
 
       await fill('emp', station.s1a, 100, 'DIESEL').expect(201); // 800: no new alert
       await fill('emp', station.s1a, 100, 'DIESEL').expect(201); // 700
@@ -545,11 +565,8 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     const tableOf = (body: { tables: Array<{ id: string; rows: Array<Record<string, unknown>> }> }, id: string) =>
       body.tables.find((t) => t.id === id)!;
 
-    it('a station employee has the shift report and nothing else', async () => {
-      const shift = await get('emp', '/ops-reports/my-shift').expect(200);
-      const rows = tableOf(shift.body, 'fillups').rows;
-      expect(rows.length).toBeGreaterThan(0);
-      for (const r of rows) expect(r.station).toBe('P5B station s1a');
+    it('a station employee has no report at all (after review: recording only)', async () => {
+      await get('emp', '/ops-reports/my-shift').expect(403);
       await get('emp', '/ops-reports/station').expect(403);
       await get('emp', '/ops-reports/municipality').expect(403);
       await get('emp', '/ops-reports/office').expect(403);

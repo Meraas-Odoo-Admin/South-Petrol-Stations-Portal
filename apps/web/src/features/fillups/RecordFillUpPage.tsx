@@ -44,6 +44,8 @@ import { QrScanPanel, type ScannedCard } from '../../components/QrScanPanel';
 import { RULE_VIOLATION_MESSAGES, RULE_CHECK_LABELS, describeRuleCheck } from './ruleViolationMessages';
 import { useFuelPrices } from './useFuelPrice';
 import type { VehicleBasicInfo } from '../vehicles/types';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 // Item 8: name the specific prior fill-up that tripped an owner-level rule
 // (it can be on a different vehicle than the one being submitted, which
@@ -163,7 +165,7 @@ function RuleReviewChecks({
   );
 }
 
-// Also shared — the exception-type/reason/proof fields are identical
+// Also shared — the exception-type/reason fields are identical
 // regardless of which screen hosts them (an inline card on desktop, a
 // dedicated full screen on mobile per screenshot 02's third panel).
 function ExceptionFormFields({
@@ -190,7 +192,7 @@ function ExceptionFormFields({
   const fieldLabelClass = 'mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft';
   const fieldErrorClass = 'mt-1 text-[13px] lg:text-[12px] text-danger';
   const textInputClass =
-    'h-11 w-full rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+    'h-11 w-full rounded-sm bg-surface-alt px-3 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark disabled:opacity-60';
 
   return (
     <form onSubmit={exceptionForm.handleSubmit(onSubmit)} className="space-y-3">
@@ -237,24 +239,6 @@ function ExceptionFormFields({
         )}
       </div>
 
-      {selectedExceptionType?.requiresProof && (
-        <div>
-          <label className={fieldLabelClass}>
-            رقم/مرجع الإثبات <span className="text-danger">*</span>
-          </label>
-          <input
-            data-testid={`exception-proof${idSuffix}`}
-            {...exceptionForm.register('proofReference', {
-              validate: (value) => !!value?.trim() || 'الإثبات مطلوب لهذا النوع من الاستثناءات',
-            })}
-            className={textInputClass}
-          />
-          {exceptionForm.formState.errors.proofReference && (
-            <p className={fieldErrorClass}>{exceptionForm.formState.errors.proofReference.message}</p>
-          )}
-        </div>
-      )}
-
       {submitError && <p className="text-[15px] lg:text-[13px] text-danger">{submitError}</p>}
 
       <div className="flex gap-2 pt-1">
@@ -262,8 +246,9 @@ function ExceptionFormFields({
           type="submit"
           data-testid={`exception-submit${idSuffix}`}
           variant="danger"
+          size="field"
           disabled={exceptionForm.formState.isSubmitting || Boolean(limitState?.strict)}
-          className="!bg-danger !text-white !border-0 flex-1"
+          className="flex-1"
         >
           {exceptionForm.formState.isSubmitting ? '...جارٍ الإرسال' : 'تسجيل كاستثناء'}
         </PillButton>
@@ -306,7 +291,7 @@ function DayListRail({
           </a>
         </div>
 
-        {isLoading && <p className="text-[13px] lg:text-[12px] text-ink-soft">...جارٍ التحميل</p>}
+        {isLoading && <SkeletonRows rows={2} />}
 
         {data && (
           <ul className="space-y-2">
@@ -369,7 +354,6 @@ type FillUpFormValues = z.infer<typeof fillUpSchema>;
 const exceptionSchema = z.object({
   exceptionTypeId: z.string().min(1, 'اختر نوع الاستثناء'),
   reason: z.string().min(1, 'السبب مطلوب'),
-  proofReference: z.string().optional(),
 });
 type ExceptionFormValues = z.infer<typeof exceptionSchema>;
 
@@ -465,7 +449,7 @@ export function RecordFillUpPage() {
   });
   const exceptionForm = useForm<ExceptionFormValues>({
     resolver: zodResolver(exceptionSchema),
-    defaultValues: { exceptionTypeId: '', reason: '', proofReference: '' },
+    defaultValues: { exceptionTypeId: '', reason: '' },
   });
 
   const stationId = fillUpForm.watch('stationId');
@@ -543,7 +527,7 @@ export function RecordFillUpPage() {
     queryFn: async () =>
       (
         await apiClient.get<DailyReportResponse>('/reports/daily', {
-          params: { stationId: success?.stationId ?? stationId, date: todayIso, take: 25 },
+          params: { stationId: success?.stationId ?? stationId, date: todayIso, take: LIST_PAGE_SIZE },
         })
       ).data,
     enabled: canViewReports && !!(success?.stationId ?? stationId),
@@ -559,7 +543,7 @@ export function RecordFillUpPage() {
       fuelType: 'PETROL_95',
       quantityLiters: '',
     });
-    exceptionForm.reset({ exceptionTypeId: '', reason: '', proofReference: '' });
+    exceptionForm.reset({ exceptionTypeId: '', reason: '' });
     setRejection(null);
     setSuccess(null);
     setVehicleLabel('');
@@ -680,7 +664,7 @@ export function RecordFillUpPage() {
   const fieldLabelClass = 'mb-1 block text-[14px] font-bold text-ink-soft lg:text-[12px]';
   const fieldErrorClass = 'mt-1 text-[14px] text-danger-dark lg:text-[12px]';
   const textInputClass =
-    'h-12 w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 lg:h-11 lg:text-[14px]';
+    'h-12 w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark disabled:opacity-60 lg:h-11 lg:text-[14px]';
 
   if (success) {
     return (
@@ -990,22 +974,24 @@ export function RecordFillUpPage() {
 
         {step === 'fuel' && (
           <Card className="p-4">
-            <label className={fieldLabelClass}>نوع الوقود</label>
-            <div className="flex gap-2">
+            <p id="fillup-fuel-label" className={fieldLabelClass}>نوع الوقود</p>
+            <div className="flex gap-2" role="group" aria-labelledby="fillup-fuel-label">
               {availableFuelTypes.map((ft) => {
                 const selected = chosenFuel === ft.value;
                 return (
                   <button
                     key={ft.value}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => {
                       fillUpForm.setValue('fuelType', ft.value, { shouldValidate: true });
                       applyAmount(amountLyd, ft.value);
                     }}
-                    className={`h-12 flex-1 rounded-sm text-[16px] font-bold transition lg:h-11 lg:text-[14px] ${
-                      selected ? 'bg-accent text-ink shadow-[0_6px_16px_-6px_rgba(232,165,61,.6)]' : 'bg-surface-alt text-ink-soft'
+                    className={`h-12 flex-1 rounded-sm border-2 text-[16px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 lg:h-11 lg:text-[14px] ${
+                      selected ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink'
                     }`}
                   >
+                    {selected && <span aria-hidden="true">✓ </span>}
                     {ft.label}
                   </button>
                 );
@@ -1020,13 +1006,14 @@ export function RecordFillUpPage() {
               </div>
             )}
 
-            <label className={`${fieldLabelClass} mt-4`}>المبلغ المدفوع (د.ل)</label>
+            <label htmlFor="fillup-amount" className={`${fieldLabelClass} mt-4`}>المبلغ المدفوع (د.ل)</label>
             {(() => {
               const price = fuelPrices?.[chosenFuel];
               return (
                 <>
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
                     <input
+                      id="fillup-amount"
                       type="number"
                       step="0.01"
                       data-testid="fillup-amount-input-mobile"
@@ -1035,7 +1022,7 @@ export function RecordFillUpPage() {
                       onChange={(e) => applyAmount(e.target.value, chosenFuel)}
                       dir="ltr"
                       disabled={!price}
-                      className="w-full rounded-sm bg-transparent text-center font-mono text-[48px] font-extrabold leading-tight text-primary-dark focus:outline-none disabled:opacity-50 lg:w-28 lg:text-start lg:text-[30px]"
+                      className="w-full rounded-sm bg-transparent text-center font-mono text-[48px] font-extrabold leading-tight text-primary-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark disabled:opacity-50 lg:w-28 lg:text-start lg:text-[30px]"
                     />
                     <div className="flex flex-1 justify-center gap-2 lg:justify-end lg:gap-1.5">
                       {AMOUNT_QUICK_PICKS.map((amount) => (
@@ -1043,8 +1030,10 @@ export function RecordFillUpPage() {
                           key={amount}
                           type="button"
                           onClick={() => applyAmount(amount, chosenFuel)}
-                          className={`h-12 w-14 rounded-sm font-mono text-[18px] font-bold lg:h-10 lg:w-12 lg:text-[14px] ${
-                            amountLyd === amount ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft'
+                          aria-pressed={amountLyd === amount}
+                          aria-label={`${amount} دينار`}
+                          className={`h-12 w-14 rounded-sm border-2 font-mono text-[18px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark lg:h-10 lg:w-12 lg:text-[14px] ${
+                            amountLyd === amount ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink'
                           }`}
                         >
                           {amount}
@@ -1084,7 +1073,7 @@ export function RecordFillUpPage() {
         {step === 'review' && (
           <>
             <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp, onInvalidFillUp)} className="space-y-3">
-              <Card data-testid="rule-review-card-mobile" className={`p-3.5 ${effectiveRejection ? 'border-t-4 border-danger' : ''}`}>
+              <Card data-testid="rule-review-card-mobile" className={`p-3.5 ${effectiveRejection ? 'ring-2 ring-inset ring-danger' : ''}`}>
                 <div className="mb-3 border-b border-line-soft pb-3" data-testid="fillup-review-summary">
                   {vehicleLabel && <PlateFigure plate={vehicleLabel} />}
                   <p className="mt-2 text-center text-[24px] font-extrabold text-ink lg:text-[18px]">
@@ -1141,7 +1130,8 @@ export function RecordFillUpPage() {
               <PillButton
                 data-testid="fillup-mobile-record-exception"
                 variant="danger"
-                className="mt-3 h-12 w-full !border-0 !bg-danger !text-white"
+                size="field"
+                className="mt-3 w-full"
                 onClick={() => setStep('exception')}
               >
                 تسجيلها كاستثناء

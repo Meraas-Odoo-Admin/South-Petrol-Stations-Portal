@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { StatusPill } from '../../components/design/StatusPill';
 import { TabPanel, Tabs, useTab, type TabDef } from '../../components/design/Tabs';
-import { RegistrationDesksEditor } from '../admin/RegistrationDesksEditor';
 import { tripoliToday, addDays, stamp } from '../regreports/common';
 import { OpsReportPanel } from '../reports/OpsReportPanel';
 import type { OpsReport } from '../reports/OpsReportView';
@@ -150,12 +149,12 @@ export function OfficeWorkspace({
   createParams: Record<string, string>;
 }) {
   const { hasPermission } = useAuth();
-  const canDesks = hasPermission('registration_desks:manage');
   const canReports = hasPermission('registration_reports:view');
+  // Phase 7: «المكاتب والطابعات» is gone - a card is recorded against the
+  // office and the employee only.
   const tabs: TabDef[] = [
     { key: 'overview', label: 'نظرة عامة' },
     { key: 'staff', label: 'الموظفون' },
-    ...(canDesks ? [{ key: 'desks', label: 'المكاتب والطابعات' }] : []),
   ];
   const [tab, setTab] = useTab(tabs);
   const today = useToday('office', { officeId });
@@ -227,13 +226,6 @@ export function OfficeWorkspace({
         />
       </TabPanel>
 
-      {canDesks && (
-        <TabPanel tab="desks" value={tab}>
-          <SectionCard title="المكاتب والطابعات" description="مكتب الموظف والطابعة المتصلة به؛ كل بطاقة تسجّل المكتب الذي طُبعت عليه.">
-            <RegistrationDesksEditor registrationStationId={officeId} />
-          </SectionCard>
-        </TabPanel>
-      )}
     </div>
   );
 }

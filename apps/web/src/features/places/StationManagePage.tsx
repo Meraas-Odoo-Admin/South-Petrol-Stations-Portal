@@ -12,6 +12,8 @@ import { STATION_STATUS_LABELS, STATION_STATUS_VARIANT } from '../../lib/labels'
 import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
 import { StationWorkspace } from './Workspaces';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { focusFirstInvalid } from '../../lib/focusField';
 import {
   ActivityCard,
   ArchiveRestoreButton,
@@ -34,7 +36,7 @@ function BackLink({ to, children }: { to: string; children: string }) {
   return (
     <Link
       to={to}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 lg:text-[14px]"
+      className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 lg:text-[14px]"
     >
       <Icon d={ICONS.arrowBack} size={18} />
       {children}
@@ -67,7 +69,8 @@ export function StationCreatePage() {
   function submit() {
     const found = validateStation(values);
     setErrors(found);
-    if (Object.keys(found).length === 0) create.mutate();
+    if (Object.keys(found).length > 0) return focusFirstInvalid();
+    create.mutate();
   }
 
   return (
@@ -120,7 +123,7 @@ export function StationManagePage() {
     },
   });
 
-  if (station.isLoading) return <p className="p-4 text-[15px] text-ink-soft">جارٍ التحميل…</p>;
+  if (station.isLoading) return <SkeletonRows rows={6} />;
   if (station.isError || !station.data) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
@@ -136,7 +139,8 @@ export function StationManagePage() {
     setSaved(false);
     const found = validateStation(values);
     setErrors(found);
-    if (Object.keys(found).length === 0) save.mutate();
+    if (Object.keys(found).length > 0) return focusFirstInvalid();
+    save.mutate();
   }
 
   return (

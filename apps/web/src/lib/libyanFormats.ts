@@ -1,7 +1,7 @@
 import { toWesternDigits } from '@fuel-tracking/shared-types';
 
 // Input helpers for identity / vehicle document fields: they shape what a
-// person TYPES (digits only, upper case, a trailing N, …) and how a plate is
+// person TYPES (digits only, upper case, …) and how a plate is
 // DISPLAYED. They hold no validation rules.
 //
 // Phase 5A: every rule (national ID structure and age, administrative number,
@@ -17,16 +17,16 @@ export function restrictToPhoneNumber(raw: string): string {
   return plus + converted.replace(/[^\d]/g, '').slice(0, 14 - plus.length);
 }
 
-// Digits only (Arabic-Indic converted), 12 at most - a national or
-// administrative number.
-export function restrictToIdentityNumber(raw: string): string {
-  return toWesternDigits(raw).replace(/\D/g, '').slice(0, 12);
+// Digits only (Arabic-Indic converted), capped at the number's length: 12 for
+// a national ID (the default), 10 for an administrative number (Phase 7).
+export function restrictToIdentityNumber(raw: string, maxLength = 12): string {
+  return toWesternDigits(raw).replace(/\D/g, '').slice(0, maxLength);
 }
 
-// A plate as typed: digits, one separator between the parts, and an optional
-// trailing N (part of the plate's identity).
+// A plate as typed: digits and the separator between the parts. Phase 7: no
+// letters (the trailing N is gone).
 export function restrictToLicensePlate(raw: string): string {
-  return toWesternDigits(raw).replace(/[^\d\s\-nN]/g, '').replace(/n/g, 'N');
+  return toWesternDigits(raw).replace(/[^\d\s-]/g, '');
 }
 
 // Letters and digits, upper-cased, up to 20 (the longest allowed with the
@@ -38,12 +38,9 @@ export function restrictToChassisNumber(raw: string): string {
     .slice(0, 20);
 }
 
-// Letters and digits, upper-cased, 12 at most.
+// Digits only (Phase 7), 12 at most.
 export function restrictToRegistrationBooklet(raw: string): string {
-  return toWesternDigits(raw)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 12);
+  return toWesternDigits(raw).replace(/\D/g, '').slice(0, 12);
 }
 
 export const LICENSE_PLATE_DISPLAY_EXAMPLE = '5 - 1658968';
@@ -57,11 +54,11 @@ export function normalizePlateSearchTerm(raw: string): string {
 // Live "as you type" formatting for a plate search/entry field. Real plates
 // have a 1- or 2-digit city code, which cannot be told from the digits alone,
 // so until a separator is typed the digits are shown as typed; the person
-// types the dash to mark where the code ends. An N after the number is kept.
+// types the dash to mark where the code ends.
 export function formatPlateAsTyped(raw: string): string {
   const converted = toWesternDigits(raw);
   if (/[-\s]/.test(converted)) {
-    return converted.replace(/[^\d\s\-nN]/g, '').replace(/n/g, 'N');
+    return converted.replace(/[^\d\s-]/g, '');
   }
   return converted.replace(/\D/g, '').slice(0, 9);
 }
@@ -79,8 +76,9 @@ export function formatPlateOnBlur(raw: string): string {
   return `${digits.slice(0, 1)} - ${digits.slice(1, 8)}`;
 }
 
-// A stored plate shown the way it reads on the vehicle: "5 - 1658968", with a
-// trailing N kept as "5 - 1658968N". Falls back to the raw text.
+// A stored plate shown the way it reads on the vehicle: "5 - 1658968". A plate
+// stored with a trailing N before Phase 7 still shows it ("5 - 1658968N"): the
+// data is kept, only typing an N is gone. Falls back to the raw text.
 export function formatLicensePlate(raw: string): string {
   const match = /^(\d{1,2})[-\s]?(\d{1,7})\s*[-\s]?([nN])?$/.exec(raw.trim());
   if (!match) {

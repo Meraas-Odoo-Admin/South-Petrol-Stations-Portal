@@ -858,25 +858,22 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
     const register = (over: Record<string, unknown>) =>
       post('regEmp', '/vehicles', vehicleBody({ registrationStationId: office.r1a, ownerId, ...over }));
 
-    it('keeps 5-123456N and 5-123456 as two different plates, and refuses the N plate twice', async () => {
+    // Phase 7: a plate is digits only - the trailing N of Phase 5A is gone.
+    it('refuses a plate typed with an N, and still catches the same plate typed differently', async () => {
       const serial = randomDigits(6).replace(/^0/, '1');
       const plain = await register({ currentPlate: `5-${serial}` });
       expect(plain.status).toBe(201);
       vehicleIds.push(plain.body.id);
-      const withN = await register({ currentPlate: `5-${serial}N` });
-      expect(withN.status).toBe(201);
-      vehicleIds.push(withN.body.id);
       expect(plain.body.normalizedPlate).toBe(`5-${serial}`);
-      expect(withN.body.normalizedPlate).toBe(`5-${serial}N`);
 
-      const again = await register({ currentPlate: `5 ${serial} n` });
+      for (const typed of [`5-${serial}N`, `5 ${serial} n`]) {
+        expect((await register({ currentPlate: typed })).status).toBe(400);
+      }
+
+      const again = await register({ currentPlate: `5 ${serial}` });
       expect(again.status).toBe(409);
       expect(again.body.message).toBe('VEHICLE_DUPLICATE');
-      expect(again.body.details.conflicts[0].vehicle.id).toBe(withN.body.id);
-
-      // The duplicate lookup tells them apart too.
-      const lookup = await get('regEmp', `/vehicles/duplicate-check?currentPlate=5-${serial}N`).expect(200);
-      expect(lookup.body.conflicts[0].vehicle.id).toBe(withN.body.id);
+      expect(again.body.details.conflicts[0].vehicle.id).toBe(plain.body.id);
     });
 
     it('accepts a non-standard chassis only with the tick, and records the tick', async () => {

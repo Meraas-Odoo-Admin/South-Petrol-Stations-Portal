@@ -1,10 +1,18 @@
 import { StatusPill } from '../../components/design/StatusPill';
+import { useAuth } from '../auth/AuthProvider';
 import { litersText, STOCK_STATUS_TEXT, STOCK_STATUS_VARIANT, useFuelStock, type FuelLevel } from './fuelStock';
 
 // The current level per fuel type, compact, for the home screen and the
 // fill-up screen (phase 5B). The server decides whether this caller may see it
 // (the supervisor's «إظهار المخزون للموظفين» switch): when it says no, this
 // renders nothing at all.
+
+// Only someone who may see stock asks for it (the station employee no longer
+// does, after review 15 Oct 2026): no refused request every minute.
+function useVisibleStock(stationId: string | undefined) {
+  const { hasPermission } = useAuth();
+  return useFuelStock(stationId, hasPermission('fuel_stock:read') || hasPermission('fuel_stock:read_visible'));
+}
 
 function LevelRow({ level }: { level: FuelLevel }) {
   const warning = level.status === 'DATA_WARNING';
@@ -24,7 +32,7 @@ function LevelRow({ level }: { level: FuelLevel }) {
 }
 
 export function StockStrip({ stationId, title = 'مخزون الوقود في المحطة' }: { stationId: string | undefined; title?: string }) {
-  const stock = useFuelStock(stationId);
+  const stock = useVisibleStock(stationId);
   const data = stock.data;
   if (!data || !data.visible || data.levels.length === 0) return null;
   const configured = data.levels.filter((l) => l.configured);
@@ -44,7 +52,7 @@ export function StockStrip({ stationId, title = 'مخزون الوقود في ا
 // The warning on the fill-up screen: stock at or below zero for the fuel being
 // poured. Never blocks - records can lag behind reality - it only says so.
 export function StockWarning({ stationId, fuelType }: { stationId: string | undefined; fuelType: string | undefined }) {
-  const stock = useFuelStock(stationId);
+  const stock = useVisibleStock(stationId);
   const level = stock.data?.levels.find((l) => l.fuelType === fuelType);
   if (!stock.data?.visible || !level || !level.configured) return null;
   const empty = level.status === 'EMPTY' || level.status === 'DATA_WARNING';

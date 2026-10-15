@@ -16,6 +16,7 @@ import { Notice, SectionCard } from '../users/parts';
 import { useAuth } from '../auth/AuthProvider';
 import { stamp, tripoliToday, addDays, shortDay } from '../regreports/common';
 import type { OpsReport } from '../reports/OpsReportView';
+import { SkeletonRows } from '../../components/design/Skeleton';
 import {
   litersText,
   STOCK_STATUS_TEXT,
@@ -296,7 +297,7 @@ function DeliveryDialog({ stationId, level, onClose }: { stationId: string; leve
               setWhen(e.target.value);
               setWhenChosen(true);
             }}
-            className="h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:text-[14px]"
+            className="h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:text-[14px]"
           />
         </div>
         <TextField label="الكمية (لتر)" data-testid="delivery-liters" inputMode="decimal" ltr value={liters} onChange={(e) => setLiters(e.target.value)} />
@@ -518,7 +519,7 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
     if (!chartFuel && configured[0]) setChartFuel(configured[0].fuelType);
   }, [chartFuel, configured]);
 
-  if (stock.isLoading) return <p className="p-4 text-[15px] text-ink-soft">جارٍ التحميل…</p>;
+  if (stock.isLoading) return <SkeletonRows rows={4} />;
   if (stock.isError || !stock.data) {
     return <Notice kind="error">تعذّر تحميل مخزون الوقود. تأكد من الاتصال ثم أعد المحاولة.</Notice>;
   }
@@ -597,7 +598,7 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
 
       {canRead && (
         <SectionCard title="سجل التوريد والتصفير" description="لا يُحذف ولا يُعدَّل أي سجل: التصحيح يُضاف إليه.">
-          {entries.isLoading && <p className="text-[15px] text-ink-soft">جارٍ التحميل…</p>}
+          {entries.isLoading && <SkeletonRows rows={4} />}
           {entries.data && deliveries.length === 0 && (
             <p className="text-[16px] text-ink-soft lg:text-[14px]">لم يُسجَّل أي توريد بعد.</p>
           )}

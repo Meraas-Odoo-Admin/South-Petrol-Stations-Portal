@@ -36,8 +36,6 @@ describe('Vehicle cards (e2e)', () => {
   let authorityId: string;
   let stationId: string;
   let otherStationId: string;
-  let deskId: string;
-  let otherDeskId: string;
   const vehicleIds: string[] = [];
 
   beforeAll(async () => {
@@ -61,10 +59,6 @@ describe('Vehicle cards (e2e)', () => {
       });
     stationId = (await station('IN')).id;
     otherStationId = (await station('OUT')).id;
-    deskId = (await prisma.registrationDesk.create({ data: { registrationStationId: stationId, name: 'Desk A' } })).id;
-    otherDeskId = (
-      await prisma.registrationDesk.create({ data: { registrationStationId: otherStationId, name: 'Desk B' } })
-    ).id;
 
     for (let i = 0; i < 4; i++) {
       const v = await prisma.vehicle.create({
@@ -94,7 +88,7 @@ describe('Vehicle cards (e2e)', () => {
     const registrarRole = await role('e2e_vc_registrar', 'REGISTRATION', ['cards:read', 'cards:issue', 'registration_stations:read']);
     const supervisorRole = await role('e2e_vc_supervisor', 'REGISTRATION', ['cards:read', 'cards:issue', 'cards:cancel', 'registration_stations:read']);
     const pumpRole = await role('e2e_vc_pump', 'PETROL_STATION', ['cards:scan', 'fillups:create']);
-    const adminRole = await role('e2e_vc_admin', null, ['registration_stations:read', 'registration_stations:manage', 'registration_desks:manage'], true);
+    const adminRole = await role('e2e_vc_admin', null, ['registration_stations:read', 'registration_stations:manage'], true);
 
     const user = async (key: keyof typeof usernames, roleId: string) => {
       const u = await prisma.user.create({
@@ -124,7 +118,6 @@ describe('Vehicle cards (e2e)', () => {
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: roleIds } } });
     await prisma.role.deleteMany({ where: { id: { in: roleIds } } });
-    await prisma.registrationDesk.deleteMany({ where: { registrationStationId: { in: [stationId, otherStationId] } } });
     await prisma.registrationStation.deleteMany({ where: { id: { in: [stationId, otherStationId] } } });
     await prisma.securityAuthority.deleteMany({ where: { id: authorityId } });
     await deleteMunicipalities(prisma, [municipalityId]);
@@ -153,9 +146,9 @@ describe('Vehicle cards (e2e)', () => {
     stream.on('end', () => cb(null, Buffer.concat(chunks)));
   };
   const pageCount = (pdf: Buffer) => (pdf.toString('latin1').match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
-  const issueBody = (reason = 'FIRST_ISSUE', desk = deskId, station = stationId) => ({
+  // Phase 7: a card is issued at an office, with no desk.
+  const issueBody = (reason = 'FIRST_ISSUE', station = stationId) => ({
     registrationStationId: station,
-    deskId: desk,
     reason,
   });
   const audits = (entityId: string) => prisma.auditLog.findMany({ where: { entityType: 'VehicleCard', entityId } });
@@ -163,21 +156,14 @@ describe('Vehicle cards (e2e)', () => {
   let firstCard: { id: string; cardNumber: string };
   let replacementCard: { id: string; cardNumber: string };
 
-  // ── Desks ──────────────────────────────────────────────────────────
+  // ── Desks (Phase 7: gone) ──────────────────────────────────────────
 
-  it("lets admins add desks and registration staff list only their own station's", async () => {
+  it('has no desk endpoints, and refuses a deskId on a card', async () => {
     const admin = await as('admin');
-    const created = await admin
-      .post(`/registration-stations/${stationId}/desks`, { name: 'Desk C', printerModel: 'Evolis Primacy 2' })
-      .expect(201);
-    expect(created.body.printerModel).toBe('Evolis Primacy 2');
-    await admin.post(`/registration-stations/${stationId}/desks`, { name: 'Desk C' }).expect(409);
-
+    await admin.post(`/registration-stations/${stationId}/desks`, { name: 'Desk C' }).expect(404);
+    await admin.get(`/registration-stations/${stationId}/desks`).expect(404);
     const registrar = await as('registrar');
-    const own = await registrar.get(`/registration-stations/${stationId}/desks`).expect(200);
-    expect(own.body.map((d: { name: string }) => d.name)).toEqual(expect.arrayContaining(['Desk A', 'Desk C']));
-    await registrar.get(`/registration-stations/${otherStationId}/desks`).expect(403);
-    await registrar.post(`/registration-stations/${stationId}/desks`, { name: 'Nope' }).expect(403);
+    await registrar.post(`/vehicles/${vehicleIds[3]!}/cards`, { ...issueBody(), deskId: 'x' }).expect(400);
   });
 
   // ── Issuing ────────────────────────────────────────────────────────
@@ -195,13 +181,13 @@ describe('Vehicle cards (e2e)', () => {
     expect(res.body.printedStationCode).toBe(`E2E-VC-IN-${runId}`);
     expect(res.body.printedIssueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(res.body.registrationStation.id).toBe(stationId);
-    expect(res.body.desk.id).toBe(deskId);
+    expect(res.body.deskId).toBeNull();
     expect(res.body.issuedBy.id).toBe(userIds.registrar);
     expect(res.body.needsReissue).toBe(false);
     expect((await audits(firstCard.id)).map((a) => a.action)).toEqual(['ISSUE_CARD']);
   });
 
-  it('refuses a second FIRST_ISSUE, a replacement with nothing to replace, an out-of-scope station and a desk of another station', async () => {
+  it('refuses a second FIRST_ISSUE, a replacement with nothing to replace and an out-of-scope station', async () => {
     const registrar = await as('registrar');
     expect((await registrar.post(`/vehicles/${vehicleIds[0]!}/cards`, issueBody()).expect(409)).body.message).toBe(
       'FIRST_ISSUE_NOT_ALLOWED',
@@ -209,11 +195,7 @@ describe('Vehicle cards (e2e)', () => {
     expect((await registrar.post(`/vehicles/${vehicleIds[1]!}/cards`, issueBody('LOST')).expect(409)).body.message).toBe(
       'NO_CARD_TO_REPLACE',
     );
-    await registrar.post(`/vehicles/${vehicleIds[1]!}/cards`, issueBody('FIRST_ISSUE', otherDeskId, otherStationId)).expect(403);
-    expect(
-      (await registrar.post(`/vehicles/${vehicleIds[1]!}/cards`, issueBody('FIRST_ISSUE', otherDeskId)).expect(409)).body
-        .message,
-    ).toBe('DESK_NOT_AVAILABLE');
+    await registrar.post(`/vehicles/${vehicleIds[1]!}/cards`, issueBody('FIRST_ISSUE', otherStationId)).expect(403);
     // FAILED_PRINT only ever comes from the failed-print path.
     await registrar.post(`/vehicles/${vehicleIds[1]!}/cards`, issueBody('FAILED_PRINT')).expect(400);
   });
@@ -235,7 +217,6 @@ describe('Vehicle cards (e2e)', () => {
     const base = {
       vehicleId: vehicleIds[0]!,
       registrationStationId: stationId,
-      deskId,
       issuedById: userIds.registrar,
       reason: 'LOST' as const,
       printedPlate: 'x',
@@ -299,7 +280,7 @@ describe('Vehicle cards (e2e)', () => {
     const recorded = await prisma.cardPrint.findMany({ where: { cardId: replacementCard.id } });
     expect(recorded).toHaveLength(2);
     for (const row of recorded) {
-      expect(row).toMatchObject({ kind: 'CARD', registrationStationId: stationId, deskId, printedById: userIds.registrar });
+      expect(row).toMatchObject({ kind: 'CARD', registrationStationId: stationId, deskId: null, printedById: userIds.registrar });
     }
   });
 
@@ -320,7 +301,7 @@ describe('Vehicle cards (e2e)', () => {
   // Phase 6: the separate test card was merged into the printer setup card.
   it('has no separate test card any more', async () => {
     const registrar = await as('registrar');
-    await registrar.get(`/cards/test-card?registrationStationId=${stationId}&deskId=${deskId}`).expect(404);
+    await registrar.get(`/cards/test-card?registrationStationId=${stationId}`).expect(404);
   });
 
   it('serves the printer setup card as one landscape page, recording nothing', async () => {
@@ -344,7 +325,7 @@ describe('Vehicle cards (e2e)', () => {
     expect(res.body.cardNumber).not.toBe(first.cardNumber);
     expect(res.body.reason).toBe('FAILED_PRINT');
     expect(res.body.status).toBe('ACTIVE');
-    expect(res.body.desk.id).toBe(deskId);
+    expect(res.body.deskId).toBeNull();
     const old = await prisma.vehicleCard.findUniqueOrThrow({ where: { id: first.id } });
     expect(old.status).toBe('CANCELLED');
     expect(old.cancelReason).toBe('FAILED_PRINT');

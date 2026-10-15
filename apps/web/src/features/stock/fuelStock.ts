@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 // What the fuel-stock endpoints return (apps/api/src/fuel-stock).
 
@@ -78,7 +79,7 @@ export function useFuelStock(stationId: string | undefined, enabled = true) {
   });
 }
 
-export const FUEL_ENTRIES_PAGE_SIZE = 25;
+export const FUEL_ENTRIES_PAGE_SIZE = LIST_PAGE_SIZE;
 
 // One page of the delivery / reset log (newest first) and the total.
 export function useFuelEntries(stationId: string | undefined, enabled: boolean, skip = 0) {

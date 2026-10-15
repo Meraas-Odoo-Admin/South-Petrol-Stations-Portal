@@ -23,11 +23,13 @@ export function CardHeader({
   subtitle?: string;
   action?: ReactNode;
 }) {
+  // Phase 7 (7): a card's title sits on a teal-tinted band (teal is
+  // structure), so a page reads as named sections, not grey on grey.
   return (
-    <div className="flex items-center justify-between border-b border-line-soft px-[18px] py-3.5">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/15 bg-primary-100 px-[18px] py-3">
       <div>
-        <span className="text-[15px] lg:text-[13px] font-bold text-ink">{title}</span>
-        {subtitle && <span className="ms-2 text-[13px] lg:text-[12px] text-ink-faint">{subtitle}</span>}
+        <h2 className="inline text-[16px] font-extrabold text-primary-dark lg:text-[14px]">{title}</h2>
+        {subtitle && <span className="ms-2 text-[14px] text-ink-soft lg:text-[12px]">{subtitle}</span>}
       </div>
       {action}
     </div>

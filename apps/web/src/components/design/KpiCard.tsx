@@ -6,11 +6,17 @@ import { InfoHint } from '../InfoHint';
 // table rows"), big tabular-mono number end-aligned. variant="accent"
 // marks the one that needs a decision (2d's "بانتظار اعتمادك"); "danger"
 // for a rate that's actually a problem (2h's exception-rate card).
+// Phase 7 (7): a neutral figure sits on a light teal panel with a teal edge
+// (structure), so a row of figures reads as a set and not as grey on grey.
 const VARIANTS = {
-  neutral: { card: 'bg-surface', label: 'text-ink-soft', value: 'text-ink' },
+  neutral: { card: 'bg-primary-100 ring-1 ring-inset ring-primary/15', label: 'text-primary-dark', value: 'text-ink' },
   accent: { card: 'bg-accent-100', label: 'text-accent-ink', value: 'text-accent-ink' },
   danger: { card: 'bg-danger-100', label: 'text-danger-dark', value: 'text-danger-dark' },
 } as const;
+
+// Phase 7 (critique): a sum of decimals arrives as 3865.040000000001; a figure is
+// shown with thousands separators and one decimal at most.
+const KPI_NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 
 export function KpiCard({
   label,
@@ -31,7 +37,7 @@ export function KpiCard({
         {hint && <InfoHint text={hint} />}
       </div>
       <div className={`mt-2 text-end font-mono text-[28px] font-extrabold leading-none ${v.value}`}>
-        <LtrText>{value}</LtrText>
+        <LtrText>{typeof value === 'number' ? KPI_NUMBER.format(value) : value}</LtrText>
       </div>
     </div>
   );

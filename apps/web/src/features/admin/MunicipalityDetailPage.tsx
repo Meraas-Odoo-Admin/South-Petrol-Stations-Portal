@@ -17,6 +17,7 @@ import { MunicipalitySettingsCard } from '../reports/ExceptionsPage';
 import { ArchiveRestoreButton, ArchivedBanner, type MunicipalityLite } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
 import { ActivityTab, PeopleTab, ReportsTab } from './MunicipalityTabs';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 interface Overview {
   // activatedByName: who switched the municipality on (the date is municipality.activatedOn).
@@ -27,7 +28,10 @@ interface Overview {
 
 const TABS: TabDef[] = [
   { key: 'overview', label: 'نظرة عامة' },
-  { key: 'places', label: 'المحطات والمكاتب' },
+  // After review (15 Oct 2026): stations and offices are two tabs of their own,
+  // not one tab with two more inside it.
+  { key: 'stations', label: 'محطات الوقود' },
+  { key: 'offices', label: 'مكاتب التسجيل' },
   { key: 'people', label: 'الأشخاص' },
   { key: 'reports', label: 'التقارير' },
   { key: 'activity', label: 'سجل النشاط' },
@@ -36,7 +40,8 @@ const TABS: TabDef[] = [
 
 // One municipality, split into tabs so no tab is a wall of rows (UX round):
 //   نظرة عامة            the summary figures
-//   المحطات والمكاتب      one paged list with search, filters and sort
+//   محطات الوقود          the stations: one paged list with search, filters and sort
+//   مكاتب التسجيل         the offices, the same way
 //   الأشخاص              paged, by job, with search and status
 //   التقارير              one report at a time
 //   سجل النشاط            the activity log, paged
@@ -50,7 +55,9 @@ export function MunicipalityDetailPage() {
   const [urlTab, setTab] = useTab(TABS);
   // A municipality that was just created opens on its people, where its
   // manager is added.
-  const tab = justCreated && !searchParams.get('tab') ? 'people' : urlTab;
+  // An old address (?tab=places, from before the split) opens the matching list.
+  const oldPlaces = searchParams.get('tab') === 'places' ? (searchParams.get('kind') === 'offices' ? 'offices' : 'stations') : null;
+  const tab = justCreated && !searchParams.get('tab') ? 'people' : (oldPlaces ?? urlTab);
 
   const overview = useQuery({
     queryKey: ['municipalities', 'overview', municipalityId],
@@ -59,7 +66,7 @@ export function MunicipalityDetailPage() {
     queryFn: async () => (await apiClient.get<Overview>(`/municipalities/${municipalityId}/overview`)).data,
   });
 
-  if (overview.isLoading) return <p className="text-[15px] text-ink-soft">جارٍ التحميل…</p>;
+  if (overview.isLoading) return <SkeletonRows rows={6} />;
   if (overview.isError || !overview.data) {
     return (
       <div className="space-y-4">
@@ -130,8 +137,22 @@ export function MunicipalityDetailPage() {
         )}
       </TabPanel>
 
-      <TabPanel tab="places" value={tab}>
-        <PlacesList municipalityId={m.id} emptyHint="لا توجد محطات بعد. يضيفها مدير البلدية من «إدارة المحطات»." />
+      <TabPanel tab="stations" value={tab}>
+        <PlacesList
+          key={`${m.id}-STATION`}
+          municipalityId={m.id}
+          kind="STATION"
+          emptyHint="لا توجد محطات وقود بعد. يضيفها مدير البلدية من «إدارة المحطات»."
+        />
+      </TabPanel>
+
+      <TabPanel tab="offices" value={tab}>
+        <PlacesList
+          key={`${m.id}-OFFICE`}
+          municipalityId={m.id}
+          kind="OFFICE"
+          emptyHint="لا توجد مكاتب تسجيل بعد. يضيفها مدير البلدية من «إدارة المحطات»."
+        />
       </TabPanel>
 
       <TabPanel tab="people" value={tab}>

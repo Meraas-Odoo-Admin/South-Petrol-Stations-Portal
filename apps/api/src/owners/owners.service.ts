@@ -197,7 +197,6 @@ export class OwnersService {
           requestedIdentityType: dto.identityType,
           requestedIdentityNumber: dto.identityNumber,
           reason: dto.reason,
-          proofReference: dto.proofReference,
           requestedById: actorId,
         },
       });

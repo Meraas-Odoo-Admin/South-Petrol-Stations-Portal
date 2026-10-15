@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './features/auth/AuthProvider';
 import { RequireAuth } from './components/RequireAuth';
 import { Layout } from './components/Layout';
@@ -28,7 +28,7 @@ import { MyOfficePage, MyStationPage } from './features/places/MyPlacePages';
 import { EmployeeActivityPage } from './features/regreports/EmployeeActivityPage';
 import { RolesReportsPage } from './features/reports/RolesReportsPage';
 import { useAuth } from './features/auth/AuthProvider';
-import { NAV_ACCESS } from './lib/navAccess';
+import { NAV_ACCESS, singleDestination } from './lib/navAccess';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
 // §9. /fillups/new is the recording screen (create only — the exceptions
@@ -58,6 +58,13 @@ function Gate({ allow, children }: { allow: (has: (p: string) => boolean) => boo
   return allow(hasPermission) ? children : <Navigate to="/" replace />;
 }
 
+// One job, no home screen: the station employee opens straight on «تسجيل تعبئة».
+function Home() {
+  const { hasPermission } = useAuth();
+  const only = singleDestination(hasPermission);
+  return only ? <Navigate to={only} replace /> : <HomePage />;
+}
+
 function PeopleHomeRedirect() {
   const { hasPermission } = useAuth();
   if (hasPermission('municipalities:manage')) return <Navigate to="/admin/municipalities" replace />;
@@ -65,6 +72,23 @@ function PeopleHomeRedirect() {
   if (NAV_ACCESS.myStation(hasPermission)) return <Navigate to="/my-station" replace />;
   if (NAV_ACCESS.myOffice(hasPermission)) return <Navigate to="/my-office" replace />;
   return <Navigate to="/" replace />;
+}
+
+// «الإدارة» opens on the first of its tabs the person may use: the super
+// admin's municipalities, or «القوائم» for a municipality manager.
+function AdminHomeRedirect() {
+  const { hasPermission } = useAuth();
+  if (hasPermission('municipalities:manage')) return <Navigate to="/admin/municipalities" replace />;
+  if (hasPermission('settings:manage')) return <Navigate to="/admin/settings" replace />;
+  if (NAV_ACCESS.lists(hasPermission)) return <Navigate to="/admin/lists" replace />;
+  if (hasPermission('audit:view')) return <Navigate to="/admin/audit-log" replace />;
+  return <Navigate to="/" replace />;
+}
+
+// The old «القوائم» address keeps its tab.
+function ListsRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/admin/lists${search}`} replace />;
 }
 
 // Phase 5B: «متابعة مكاتب التسجيل», «مخزون البطاقات» and «الجاهزية للموعد
@@ -104,19 +128,19 @@ function App() {
                 the matching UI treatment. */}
             <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route element={<Layout />}>
-              <Route path="/" element={<HomePage />} />
+              <Route path="/" element={<Home />} />
               <Route path="/reports/dashboard" element={<Navigate to="/reports/daily" replace />} />
               <Route path="/reports/daily" element={<DailyReportPage />} />
               <Route path="/reports/violations" element={<ExceptionsPage />} />
-              <Route path="/reports" element={<RolesReportsPage />} />
+              <Route path="/reports" element={<Gate allow={NAV_ACCESS.reports}><RolesReportsPage /></Gate>} />
               <Route path="/reports/registration" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/offices/:officeId" element={<FoldedReportRedirect tab="overview" />} />
               <Route path="/reports/registration/employees/:userId" element={<EmployeeActivityPage />} />
               <Route path="/fillups/new" element={<RecordFillUpPage />} />
               <Route path="/registration" element={<RegistrationPage />} />
-              <Route path="/stations" element={<StationsListPage />} />
-              <Route path="/vehicles" element={<VehiclesListPage />} />
-              <Route path="/vehicles/:vehicleId" element={<VehicleDetailPage />} />
+              <Route path="/stations" element={<Gate allow={NAV_ACCESS.stations}><StationsListPage /></Gate>} />
+              <Route path="/vehicles" element={<Gate allow={NAV_ACCESS.vehicles}><VehiclesListPage /></Gate>} />
+              <Route path="/vehicles/:vehicleId" element={<Gate allow={NAV_ACCESS.vehicles}><VehicleDetailPage /></Gate>} />
               <Route path="/vehicles/change-requests" element={<ChangeRequestsQueuePage />} />
               {/* People, from inside their place. */}
               <Route path="/people" element={<PeopleHomeRedirect />} />
@@ -136,16 +160,18 @@ function App() {
               <Route path="/my-station" element={<Gate allow={NAV_ACCESS.myStation}><MyStationPage /></Gate>} />
               <Route path="/my-office" element={<Gate allow={NAV_ACCESS.myOffice}><MyOfficePage /></Gate>} />
 
-              <Route path="/lists" element={<Gate allow={NAV_ACCESS.lists}><ListsPage /></Gate>} />
+              {/* Phase 7: «القوائم» is a tab of «الإدارة». */}
+              <Route path="/lists" element={<ListsRedirect />} />
 
               <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<PeopleHomeRedirect />} />
+                <Route index element={<AdminHomeRedirect />} />
                 <Route path="users" element={<PeopleHomeRedirect />} />
                 <Route path="users/new" element={<Navigate to="/people/new" replace />} />
                 <Route path="users/:userId" element={<StaffRedirect />} />
                 <Route path="settings" element={<SettingsAdminPage />} />
-                <Route path="exception-types" element={<Navigate to="/lists" replace />} />
-                <Route path="vehicle-types" element={<Navigate to="/lists?tab=vehicles" replace />} />
+                <Route path="lists" element={<Gate allow={NAV_ACCESS.lists}><ListsPage /></Gate>} />
+                <Route path="exception-types" element={<Navigate to="/admin/lists" replace />} />
+                <Route path="vehicle-types" element={<Navigate to="/admin/lists?tab=vehicles" replace />} />
                 <Route path="municipalities" element={<MunicipalitiesAdminPage />} />
                 <Route path="municipalities/:municipalityId" element={<MunicipalityDetailPage />} />
                 {/* The security-authorities section is gone: each municipality's

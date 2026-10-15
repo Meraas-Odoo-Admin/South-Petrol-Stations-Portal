@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { NAV_ACCESS } from '../../lib/navAccess';
 
 function tabClass({ isActive }: { isActive: boolean }): string {
   return `flex h-[34px] items-center rounded-full px-3.5 text-[13px] lg:text-[12px] font-bold transition ${
@@ -22,6 +23,7 @@ export function AdminLayout() {
   const tabs = [
     { to: '/admin/municipalities', label: 'البلديات', show: hasPermission('municipalities:manage') },
     { to: '/admin/settings', label: 'الإعدادات وقواعد التعبئة', show: hasPermission('settings:manage') },
+    { to: '/admin/lists', label: 'القوائم', show: NAV_ACCESS.lists(hasPermission) },
     { to: '/admin/audit-log', label: 'سجل التغييرات', show: hasPermission('audit:view') },
   ].filter((tab) => tab.show);
 
@@ -29,7 +31,7 @@ export function AdminLayout() {
     <div className="-m-4 min-h-[calc(100vh-56px)] bg-paper">
       <div className="flex flex-wrap items-end justify-between gap-3 bg-surface px-6 py-5 shadow-sm">
         <div>
-          <h1 className="text-xl font-extrabold text-ink">الإدارة</h1>
+          <h1 className="text-xl font-extrabold text-primary-dark">الإدارة</h1>
           <div className="text-[13px] lg:text-[12px] text-ink-soft">{tabs.map((tab) => tab.label).join(' · ')}</div>
         </div>
         <nav aria-label="أقسام الإدارة" className="flex flex-wrap gap-1.5">

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { arabicCount } from '@fuel-tracking/shared-types';
 import { apiClient } from '../lib/apiClient';
 import { Icon, ICONS } from './icons';
+import { SkeletonRows } from './design/Skeleton';
 
 // The bell (phase 5B, section 2): every signed-in user has one in the header.
 // In-app only, polled every 60 seconds. The list is newest first, each row a
@@ -144,7 +145,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="relative flex h-11 w-11 items-center justify-center rounded-full text-ink hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark"
       >
         <Icon d={ICONS.bell} size={22} />
         {unread > 0 && (
@@ -191,7 +192,7 @@ export function NotificationBell({ align = 'end' }: { align?: 'start' | 'end' })
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {query.isLoading && <p className="p-5 text-center text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+            {query.isLoading && <SkeletonRows rows={3} />}
             {query.isError && (
               <p role="alert" className="p-5 text-center text-[15px] font-bold text-danger-dark lg:text-[13px]">
                 تعذّر تحميل الإشعارات. سنحاول مرة أخرى بعد قليل.

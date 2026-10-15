@@ -117,6 +117,18 @@ typography:
     fontFamily: "Cairo, sans-serif"
     fontSize: "19px"
     fontWeight: 800
+  pump-plate-phone:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "44px"
+    fontWeight: 900
+  pump-plate-desktop:
+    fontFamily: "Cairo, sans-serif"
+    fontSize: "36px"
+    fontWeight: 900
+  pump-amount-phone:
+    fontFamily: "JetBrains Mono, monospace"
+    fontSize: "48px"
+    fontWeight: 800
 rounded:
   sm: "10px"
   md: "16px"
@@ -130,9 +142,15 @@ components:
     rounded: "{rounded.full}"
     height: "36px"
     padding: "0 16px"
+  button-brand:
+    backgroundColor: "{colors.petrol-teal}"
+    textColor: "{colors.surface-white}"
+    rounded: "{rounded.full}"
+    height: "36px"
+    padding: "0 16px"
   button-secondary:
-    backgroundColor: "{colors.mist-green}"
-    textColor: "{colors.ink-soft}"
+    backgroundColor: "{colors.surface-white}"
+    textColor: "{colors.petrol-teal-deep}"
     rounded: "{rounded.full}"
     height: "36px"
     padding: "0 16px"
@@ -144,18 +162,27 @@ components:
   button-ghost-hover:
     backgroundColor: "{colors.mist-green}"
   button-danger:
-    textColor: "{colors.violation-red}"
+    backgroundColor: "{colors.surface-white}"
+    textColor: "{colors.violation-red-deep}"
     rounded: "{rounded.full}"
     height: "36px"
     padding: "0 16px"
   button-danger-hover:
     backgroundColor: "{colors.violation-red-tint}"
+  button-disabled:
+    backgroundColor: "{colors.mist-green}"
+    textColor: "{colors.ink-faint}"
+    rounded: "{rounded.full}"
   card:
     backgroundColor: "{colors.surface-white}"
     rounded: "{rounded.md}"
     padding: "16px"
+  card-header:
+    backgroundColor: "{colors.petrol-teal-tint}"
+    textColor: "{colors.petrol-teal-deep}"
+    padding: "12px 18px"
   kpi-card-neutral:
-    backgroundColor: "{colors.surface-white}"
+    backgroundColor: "{colors.petrol-teal-tint}"
     textColor: "{colors.ink}"
     rounded: "{rounded.md}"
     padding: "16px"
@@ -240,7 +267,7 @@ A warm, low-saturation field with one deep teal and one amber, plus a status set
 ### Secondary
 - **Gauge Amber Ink** (#7A4F0B): amber-family TEXT, on white or on Gauge Amber Tint (6.2:1 on the tint). Gauge Amber Deep is no longer used as text colour (3.1:1 on the tint, 3.9:1 on white); it stays a fill and a border colour.
 - **Gauge Amber Mid** (#C98A22): the far end of the amber button gradient, so Ink text keeps its contrast across the whole button.
-- **Gauge Amber** (#E8A53D): The call to action. The primary pill button (as an amber gradient with a soft amber glow), navigation badges, the focus ring. **Gauge Amber Deep** (#B97A1A) is a fill and border colour (chart series, outlines); text uses Gauge Amber Ink. **Gauge Amber Tint** (#FBEDD4) fills pending and needs-your-decision states.
+- **Gauge Amber** (#E8A53D): The call to action. The primary pill button (solid, with a 2px Amber Deep edge; Phase 7), navigation badges. Phase 7: no longer the focus ring (2.1:1 on white fails WCAG 1.4.11). **Gauge Amber Deep** (#B97A1A) is a fill and border colour (chart series, outlines); text uses Gauge Amber Ink. **Gauge Amber Tint** (#FBEDD4) fills pending and needs-your-decision states.
 
 ### Status
 - **Violation Red** (#C1462D): A rule that was actually broken, and irreversible actions such as cancelling a card or deactivating an account. Deep variant **Violation Red Deep** (#8F3120) for text on tint; **Violation Red Tint** (#FBE6E0) for hover and alert fills. Routine states (inactive, empty, optional) never use red.
@@ -298,6 +325,8 @@ Phone and desktop have their own sizes, set per role. Phase 5C brought every old
 | Field label, small heading | 14px / 700 | 12px / 700 |
 | Smallest allowed (captions, codes) | 13px | 12px |
 | Key numbers (plate, liters, amount) | 24px or more | a step above body |
+| The pump's plate figure (scan confirm, review) | 44px / 900 | 36px / 900 |
+| The pump's amount field | 48px mono / 800 | 30px mono |
 
 ### Named Rules
 **The Readable-in-Sun Rule.** On a phone nothing is set below 13px, body is 16px, and the figures a person must read at a glance (plate, liters, amount) are visibly larger than everything around them.
@@ -332,22 +361,25 @@ Soft and rounded, never sharp. Three corner sizes: 10px for fields and chips, 16
 ## Components
 
 ### Buttons
-- **Shape:** Full pill (9999px). Medium is 36px tall, small is 32px.
-- **Primary:** Amber gradient fill (Gauge Amber to Gauge Amber Mid) with **Ink** (#132524) bold text and the Action Glow shadow. One per region. Phase 5C: the label is never white (white on amber is about 2:1); Ink on the whole gradient is 5.4:1 or better, which is why the gradient ends at Amber Mid (#C98A22) and not at Amber Deep (Ink on Amber Deep is 4.4:1).
-- **Secondary:** Mist Green fill, Ink Soft text.
-- **Ghost:** No fill, Ink Soft text; Mist Green wash on hover.
-- **Danger:** Outlined Violation Red pill with red text; Violation Red Tint on hover. Never solid red as a default state. Reserved for broken-rule responses and irreversible actions.
-- **Disabled:** 40% opacity.
+**Phase 7: one button system** (`components/design/PillButton.tsx`; the only button component). Mohamed's review found the buttons too weak: a pale secondary pill and a pale disabled «حفظ» that read as a faded primary. Every variant is now solid or clearly outlined, with a 2px edge.
+- **Shape:** Full pill (9999px). Small is 40px tall on a phone and 32px on a desktop; medium 40px / 36px; field 48px / 40px.
+- **Primary:** solid Gauge Amber with **Ink** bold text (7.5:1), a 2px Amber Deep edge and a short amber shadow. The next action; one per region. Never white on amber (about 2:1).
+- **Brand:** solid Petrol Teal with white text (7.9:1). A confirming action that repeats down a page (the «حفظ» of each settings card, «اعتماد التصحيح»), where a column of amber buttons would leave no single needle.
+- **Secondary:** a 2px Petrol Teal outline with Teal Deep text on white; Teal Tint on hover. A real button, never a pale fill.
+- **Ghost:** no fill, Ink Soft text; Mist Green wash on hover. «إلغاء» / «تراجع» beside a stronger action.
+- **Danger:** a 2px Violation Red outline with Red Deep text on white; Red Tint on hover. Irreversible actions only. Never solid red as a default state.
+- **Disabled (every variant):** a dashed Hairline edge on Mist Green, Ink Faint text, no shadow, a not-allowed cursor. It never looks like a faded primary, and a sentence beside it says why (for example «غيّر القيمة أولًا ليُفعَّل الحفظ.»).
+- **Focus:** a 2px Petrol Teal Deep ring (10.4:1 on white, 8.6:1 on the page). Phase 7: it was amber, which is 2.1:1 on white and fails WCAG 1.4.11.
 
 ### Cards / Containers
 - **Corner Style:** 16px.
 - **Background:** Surface White on Warm Paper.
 - **Shadow Strategy:** Rest shadow, no border.
-- **Header:** Optional header row with a bold 13px title, faint subtitle and an action at the far side, separated by a Mist Green rule.
-- **Internal Padding:** 16px; headers 18px by 14px.
+- **Header (Phase 7):** a Petrol Teal Tint band with the title in Teal Deep (16px / 14px, 800), an Ink Soft subtitle and the action at the far side, on a faint teal rule. Teal is structure: a page reads as named sections, not grey on grey. `CardHeader` and `SectionCard` draw it; a card does not draw its own.
+- **Internal Padding:** 16px; headers 18px by 12px.
 
 ### KPI Cards
-Individual rounded cards: an 11px label on top and a 28px mono figure end-aligned below. Neutral on white; accent on Gauge Amber Tint for the figure that needs a decision; danger on Violation Red Tint for a rate that is actually a problem.
+Individual rounded cards: an 11px label on top and a 28px mono figure end-aligned below. Neutral on Petrol Teal Tint with a faint teal edge and a Teal Deep label (Phase 7: a row of figures reads as a set); accent on Gauge Amber Tint for the figure that needs a decision; danger on Violation Red Tint for a rate that is actually a problem.
 
 ### Status Pills
 - **Shape:** Full pill, 11px bold text, 2px by 10px padding.
@@ -356,7 +388,7 @@ Individual rounded cards: an 11px label on top and a 28px mono figure end-aligne
 
 ### Inputs / Fields
 - **Style:** Mist Green fill, 1px Hairline border, 10px radius, 52px tall, 14px Ink text.
-- **Focus:** A 2px Gauge Amber ring with no default outline.
+- **Focus:** A 2px Petrol Teal Deep ring with no default outline.
 - **Label and hint:** the label sits above the field and is tied to it (never placeholder-only). A hint is one plain sentence under the field.
 - **Error:** a refusal or a broken rule shows as a Violation Red border, plus a warning icon and a sentence under the field that says what to do, announced to screen readers. Never the border alone. Nothing is wiped; the person's typing stays.
 - **Disabled:** a faded Mist Green field with Ink Faint text and a not-allowed cursor, and always a lock icon with one sentence under it saying why (for example, the username cannot change after creation). A disabled field is never a silent dead end.
@@ -377,7 +409,7 @@ One switch for the whole app: `components/design/Switch.tsx`. An iOS-style track
 A 44px bell in the header (the end of the desktop content strip, the end of the phone top bar). The unread count is a small amber-deep numeral badge. The panel is a card: a title, «تعليم الكل كمقروء», then the list newest first; each row has a short title, one line of detail, the time and «فتح». An unread row carries the word «جديد», so unread is never told by weight or tint alone. Polled every 60 seconds. **Placement (UX round):** the panel is placed from the bell's own rectangle and clamped to 12px inside the viewport, opening toward the page interior (the bell sits at the far start of the strip in RTL), with a max height and its own scroll; below 1024px it is a full-width bottom sheet over a dimmed page. A notification is one plain Arabic sentence, never a key, a boolean or an arrow; repeated setting events show once with «تكرّر 3 مرات».
 
 ### Tabs (phase 5B)
-The place pages (a station, an office) use `components/design/Tabs.tsx`: a row of 48px tabs with a 3px teal underline on the chosen one (teal is structure), a small amber count when something is waiting, the chosen tab kept in the address (`?tab=`). Station: نظرة عامة · الموظفون · الوقود والمخزون · التقارير. Office: نظرة عامة · الموظفون · البطاقات والمخزون · المكاتب والطابعات. **Municipality (UX round):** نظرة عامة · المحطات والمكاتب · الأشخاص · التقارير · سجل النشاط · الإعدادات. Changing tab drops `?page=` and `?table=`; the row scrolls sideways on a phone. A tab's content is mounted (and its data asked for) only while it is open.
+The place pages (a station, an office) use `components/design/Tabs.tsx`: a row of 48px tabs with a 3px teal underline on the chosen one (teal is structure), a small amber count when something is waiting, the chosen tab kept in the address (`?tab=`). Station: نظرة عامة · الموظفون · الوقود والمخزون · التقارير. Office: نظرة عامة · الموظفون (Phase 7: «المكاتب والطابعات» is gone with the desks). **Municipality (UX round):** نظرة عامة · المحطات والمكاتب · الأشخاص · التقارير · سجل النشاط · الإعدادات. Changing tab drops `?page=` and `?table=`. **Phase 7 (4.4):** on a desktop the row wraps and never shows a scrollbar or arrows; on a phone it is swiped sideways with the scrollbar hidden (`scrollbar-none`). **Places (Phase 7, 5):** «إدارة المحطات» and a municipality's «المحطات والمكاتب» hold two tabs, «محطات الوقود» and «مكاتب التسجيل» (`?kind=`), each with its own columns, filters and «إضافة» button; never one mixed list. A tab's content is mounted (and its data asked for) only while it is open.
 
 ### Paged Lists (UX round)
 Every list of rows is one page of 25 with the total («1–25 من 340» and «صفحة 2 من 14»), two 44px pill buttons «السابق» / «التالي» (`components/Pagination.tsx`), and the page number kept in the address (`?page=`). The pager says nothing when the whole list fits one page. Search is debounced, a change of filter or sort goes back to page 1, and a list keeps showing its previous page while the next loads. Sortable columns are buttons with ▲ ▼ ↕ and `aria-sort`; below 1024px a table becomes stacked rows. Search, filters and sort are always the server's.
@@ -421,7 +453,7 @@ Short, quiet entrance and feedback animations only: fade-in-up (380ms, 6px rise)
 - **Do** use Cairo for all text and JetBrains Mono only for literal codes, plates, timestamps and big numbers.
 - **Do** put a code next to its Arabic meaning, and wrap numerals as left-to-right isolated runs.
 - **Do** use Tailwind logical properties (`ps-*`, `pe-*`, `ms-*`, `me-*`) so a bilingual UI needs no parallel stylesheet.
-- **Do** use the 2px Gauge Amber focus ring with a 2px offset on every interactive element.
+- **Do** use the 2px Petrol Teal Deep focus ring (Phase 7; amber failed 3:1) on every interactive element.
 - **Do** style irreversible actions (cancel a card, deactivate an account) as outlined Violation Red pills so they look as serious as they are.
 - **Do** say why a control is disabled and what to do after a refusal, in a sentence beside it; never leave a faded field or a bare error colour unexplained.
 - **Do** set the one-time password in large left-to-right type with a copy button and a plain warning that it is shown once.

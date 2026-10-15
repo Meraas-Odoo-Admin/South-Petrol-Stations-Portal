@@ -6,6 +6,7 @@ import { downloadBlob } from '../../lib/download';
 import { downloadCsv, type CsvCell } from '../../lib/csv';
 import { DateField } from '../../components/DateField';
 import { PillButton } from '../../components/design/PillButton';
+import { SkeletonRows } from '../../components/design/Skeleton';
 import { FieldLabel } from '../../components/design/TextField';
 
 // Pieces shared by the three monitoring reports (phase 4c).
@@ -71,7 +72,7 @@ export function useRange(defaultDays: number): [Range, (next: Range) => void] {
 }
 
 const DATE_INPUT =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:h-10 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:h-10 lg:text-[14px]';
 
 const PRESETS = [
   { label: 'اليوم', days: 1 },
@@ -148,11 +149,7 @@ export function ErrorNote({ error }: { error: unknown }) {
 }
 
 export function Loading() {
-  return (
-    <p role="status" className="py-10 text-center text-[16px] text-ink-soft lg:text-[14px]">
-      جارٍ التحميل…
-    </p>
-  );
+  return <SkeletonRows rows={5} />;
 }
 
 // ── headline numbers ──

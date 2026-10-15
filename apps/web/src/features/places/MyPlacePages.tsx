@@ -10,6 +10,7 @@ import { CodeText } from '../../components/design/CodeText';
 import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
 import { OfficeWorkspace, StationWorkspace } from './Workspaces';
+import { SkeletonRows } from '../../components/design/Skeleton';
 import {
   ActivityCard,
   OFFICE_STATUS_LABELS,
@@ -23,7 +24,7 @@ import {
 } from './placesShared';
 
 const SELECT_CLASS =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface sm:w-96 lg:h-11 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface sm:w-96 lg:h-11 lg:text-[14px]';
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -43,7 +44,7 @@ export function MyStationPage() {
   const list = stations.data ?? [];
   const station: StationRow | undefined = list.length === 1 ? list[0] : list.find((s) => s.id === chosen);
 
-  if (stations.isLoading) return <p className="p-4 text-[15px] text-ink-soft">جارٍ التحميل…</p>;
+  if (stations.isLoading) return <SkeletonRows rows={6} />;
   if (stations.isError) return <Notice kind="error">تعذّر تحميل محطتك. تأكد من الاتصال ثم أعد المحاولة.</Notice>;
   if (list.length === 0) {
     return (
@@ -177,8 +178,8 @@ function MyStation({ station }: { station: StationRow }) {
   );
 }
 
-// «مكتبي» — the office manager's own office: its details, desks and printers,
-// card stock, its employees, and what happened there.
+// «مكتبي» — the office manager's own office: its details,
+// its employees, and what happened there.
 export function MyOfficePage() {
   const offices = useOfficeList({});
   const [chosen, setChosen] = useState('');
@@ -187,7 +188,7 @@ export function MyOfficePage() {
   const activityPage = usePageParam(ACTIVITY_PAGE_SIZE);
   const activity = usePlaceActivity('registration-stations', office?.id, activityPage.skip);
 
-  if (offices.isLoading) return <p className="p-4 text-[15px] text-ink-soft">جارٍ التحميل…</p>;
+  if (offices.isLoading) return <SkeletonRows rows={6} />;
   if (offices.isError) return <Notice kind="error">تعذّر تحميل مكتبك. تأكد من الاتصال ثم أعد المحاولة.</Notice>;
   if (list.length === 0) {
     return (
@@ -200,7 +201,7 @@ export function MyOfficePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title="مكتبي" subtitle="موظفو المكتب وأجهزة الطباعة" />
+      <PageHeader title="مكتبي" subtitle="موظفو المكتب وما جرى فيه اليوم" />
       {list.length > 1 && (
         <div>
           <label htmlFor="my-office" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">المكتب</label>

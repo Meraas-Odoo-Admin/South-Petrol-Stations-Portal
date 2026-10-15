@@ -7,10 +7,8 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { LtrText } from '../../components/LtrText';
 import { useAuth } from '../auth/AuthProvider';
 import { CardIssueFlow } from './CardIssueFlow';
+import { SkeletonRows } from '../../components/design/Skeleton';
 import {
-  rememberDesk,
-  rememberedDeskId,
-  type RegistrationDeskRow,
   CARD_REASON_LABELS,
   CARD_STATUS_LABELS,
   cardErrorMessage,
@@ -33,8 +31,9 @@ const REPLACEMENT_REASONS: IssuableReason[] = ['LOST', 'DAMAGED', 'DETAILS_CHANG
 
 // Registration pivot, phase 3 — replaces the old on-screen QR panel (which
 // encoded the vehicle's internalCode; that QR is gone). Everyone who can
-// read cards sees the current card, its status and history; only
-// registration roles (cards:issue) get the desk actions, and cancelling
+// read cards sees the current card, its status and history; only those who
+// issue cards (cards:issue: registration staff and, since Phase 7, the
+// municipality manager) get the issue and print actions, and cancelling
 // without a replacement needs cards:cancel (registration supervisor/admin).
 export function VehicleCardPanel({
   vehicleId,
@@ -89,22 +88,22 @@ export function VehicleCardPanel({
   const active = cards.find((c) => c.status === 'ACTIVE') ?? null;
   const hasHistory = cards.length > 0;
 
-  // A reprint is made at the office and desk the employee works at, which may
-  // not be the office that issued the card: the print is counted here.
+  // A reprint is made at the office the employee works at, which may not be the
+  // office that issued the card: the print is counted here. With more than one
+  // office in reach, the employee says which one first.
   async function reprint(card: VehicleCardRow) {
     setError(null);
-    const deskId = rememberedDeskId(stationId);
-    if (!stationId || !deskId) {
+    if (!stationId) {
       setReprinting(true);
       return;
     }
-    await sendReprint(card, stationId, deskId);
+    await sendReprint(card, stationId);
   }
 
-  async function sendReprint(card: VehicleCardRow, registrationStationId: string, deskId: string) {
+  async function sendReprint(card: VehicleCardRow, registrationStationId: string) {
     setError(null);
     try {
-      printPdfBlob(await printCardPdf(card.id, rememberedPrintMode(), { registrationStationId, deskId }));
+      printPdfBlob(await printCardPdf(card.id, rememberedPrintMode(), { registrationStationId }));
       setReprinting(false);
       setMessage('أُرسلت البطاقة الحالية للطباعة مرة أخرى (بنفس الرقم والبيانات).');
       queryClient.invalidateQueries({ queryKey: ['vehicle-cards', vehicleId] });
@@ -117,7 +116,7 @@ export function VehicleCardPanel({
     <Card className={className} style={style} data-testid="vehicle-card-panel">
       <CardHeader title="بطاقة المركبة" />
       <div className="space-y-4 p-4">
-        {cardsQuery.isLoading && <p className="text-[13px] lg:text-[12px] text-ink-soft">...جارٍ التحميل</p>}
+        {cardsQuery.isLoading && <SkeletonRows rows={2} label="جارٍ تحميل البطاقة" />}
 
         {!cardsQuery.isLoading && !active && (
           <p className="text-[13px] lg:text-[12.5px] text-ink-soft" data-testid="vehicle-card-none">
@@ -139,7 +138,7 @@ export function VehicleCardPanel({
               )}
             </div>
             <p className="mt-1.5 text-[13px] lg:text-[12px] text-ink-soft">
-              صدرت <LtrText>{active.printedIssueDate}</LtrText> — {active.registrationStation.name} ({active.desk.name})
+              صدرت <LtrText>{active.printedIssueDate}</LtrText> — {active.registrationStation.name}
             </p>
             {active.needsReissue && (
               <p className="mt-1.5 text-[13px] lg:text-[12px] text-accent-ink">
@@ -152,7 +151,7 @@ export function VehicleCardPanel({
         {message && <p className="text-[13px] lg:text-[12px] font-bold text-ok">{message}</p>}
         {error && <p className="text-[13px] lg:text-[12px] text-danger">{error}</p>}
 
-        {/* Desk actions — registration roles only */}
+        {/* Issue and print — whoever issues cards (cards:issue) */}
         {canIssue && !issuing && (
           <div className="flex flex-wrap gap-2">
             <PillButton
@@ -195,7 +194,7 @@ export function VehicleCardPanel({
             stationId={stationId}
             onStationChange={setChosenStationId}
             onCancel={() => setReprinting(false)}
-            onPrint={(deskId) => sendReprint(active, stationId, deskId)}
+            onPrint={() => sendReprint(active, stationId)}
           />
         )}
 
@@ -206,7 +205,7 @@ export function VehicleCardPanel({
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               placeholder="سبب الإلغاء"
-              className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] focus:outline-none focus:ring-2 focus:ring-accent"
+              className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary-dark"
               data-testid="vehicle-card-cancel-reason"
             />
             <div className="flex gap-2">
@@ -321,9 +320,8 @@ export function VehicleCardPanel({
   );
 }
 
-// Which office and desk this reprint is made at (the desk is remembered per
-// device). Shown the first time on a device, or when the employee works at
-// more than one office.
+// Which office this reprint is made at, when the employee works at more than
+// one (Phase 7: no desk).
 function ReprintChooser({
   stations,
   stationId,
@@ -334,30 +332,22 @@ function ReprintChooser({
   stations: RegistrationStationOption[];
   stationId: string;
   onStationChange: (id: string) => void;
-  onPrint: (deskId: string) => void;
+  onPrint: () => void;
   onCancel: () => void;
 }) {
-  const [deskId, setDeskId] = useState('');
-  const desksQuery = useQuery({
-    queryKey: ['registration-desks', stationId],
-    queryFn: async () => (await apiClient.get<RegistrationDeskRow[]>(`/registration-stations/${stationId}/desks`)).data,
-    enabled: Boolean(stationId),
-  });
-  const desks = (desksQuery.data ?? []).filter((d) => d.isActive);
   return (
     <div className="space-y-2 rounded-sm border border-line p-3" data-testid="vehicle-card-reprint-chooser">
-      <p className="text-[13px] lg:text-[12.5px] font-bold text-ink">اختر المكتب الذي تطبع منه</p>
+      <p className="text-[15px] font-bold text-ink lg:text-[13px]">اختر مكتب التسجيل الذي تطبع منه</p>
       {stations.length === 0 && (
-        <p className="text-[13px] lg:text-[12px] text-danger">لا يوجد مكتب تسجيل مفتوح في نطاق حسابك للطباعة منه.</p>
+        <p className="text-[14px] text-danger-dark lg:text-[12px]">لا يوجد مكتب تسجيل مفتوح في نطاق حسابك للطباعة منه.</p>
       )}
       {stations.length > 1 && (
         <select
           value={stationId}
-          onChange={(e) => {
-            onStationChange(e.target.value);
-            setDeskId('');
-          }}
-          className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] sm:w-80"
+          onChange={(e) => onStationChange(e.target.value)}
+          aria-label="مكتب التسجيل"
+          className="h-11 w-full rounded-sm bg-surface-alt px-3 text-[16px] lg:h-9 lg:text-[13px] sm:w-80"
+          data-testid="vehicle-card-reprint-office"
         >
           <option value="">اختر مكتب التسجيل الذي تعمل فيه</option>
           {stations.map((s) => (
@@ -367,32 +357,8 @@ function ReprintChooser({
           ))}
         </select>
       )}
-      {stationId && (
-        <select
-          value={deskId}
-          onChange={(e) => setDeskId(e.target.value)}
-          className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] sm:w-80"
-          data-testid="vehicle-card-reprint-desk"
-        >
-          <option value="">اختر مكتب الطباعة</option>
-          {desks.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-              {d.printerModel ? ` — ${d.printerModel}` : ''}
-            </option>
-          ))}
-        </select>
-      )}
       <div className="flex gap-2">
-        <PillButton
-          size="sm"
-          disabled={!stationId || !deskId}
-          data-testid="vehicle-card-reprint-confirm"
-          onClick={() => {
-            rememberDesk(stationId, deskId);
-            onPrint(deskId);
-          }}
-        >
+        <PillButton size="sm" disabled={!stationId} data-testid="vehicle-card-reprint-confirm" onClick={onPrint}>
           طباعة
         </PillButton>
         <PillButton size="sm" variant="ghost" onClick={onCancel}>

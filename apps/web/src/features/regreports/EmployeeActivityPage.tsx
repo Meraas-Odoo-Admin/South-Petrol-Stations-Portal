@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
@@ -6,15 +5,17 @@ import { ACCOUNT_ACTION_LABELS } from '../../lib/labels';
 import { PageHeader } from '../../components/design/PageHeader';
 import { Card } from '../../components/design/Card';
 import { StatusPill } from '../../components/design/StatusPill';
-import { PillButton } from '../../components/design/PillButton';
 import { CsvButton, ErrorNote, Loading, RangeBar, dayLabel, num, stamp, useRange } from './common';
 import type { ActivityResponse } from './types';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
+import { Pagination } from '../../components/Pagination';
+import { usePageParam } from '../../lib/usePageParam';
 
 // The full audit timeline of one registration employee over a range: what
 // they did and when, newest first, paged. Detail shows only the safe keys the
 // server passes through (no names, no ID numbers, no phone numbers).
 
-const PAGE = 50;
+const PAGE = LIST_PAGE_SIZE;
 
 const ACTION_LABELS: Record<string, string> = {
   ...ACCOUNT_ACTION_LABELS,
@@ -58,15 +59,15 @@ function detailText(detail: Record<string, unknown> | null): string {
 export function EmployeeActivityPage() {
   const { userId } = useParams();
   const [range, setRange] = useRange(7);
-  const [page, setPage] = useState(0);
+  // The page lives in the address, like every other list (?page=).
+  const { skip, setSkip } = usePageParam(PAGE);
   const query = useQuery({
-    queryKey: ['reg-report', 'activity', userId, range, page],
+    queryKey: ['reg-report', 'activity', userId, range, skip],
     queryFn: async () =>
-      (await apiClient.get<ActivityResponse>(`/reports/registration/employees/${userId}/activity`, { params: { ...range, skip: page * PAGE, take: PAGE } })).data,
+      (await apiClient.get<ActivityResponse>(`/reports/registration/employees/${userId}/activity`, { params: { ...range, skip, take: PAGE } })).data,
     placeholderData: (prev) => prev,
   });
   const data = query.data;
-  const pages = data ? Math.max(1, Math.ceil(data.total / PAGE)) : 1;
   const csvRows = (data?.rows ?? []).map((r) => [stamp(r.createdAt), actionLabel(r.action), ENTITY_LABELS[r.entityType] ?? r.entityType, detailText(r.detail)]);
   const backOffice = data?.employee.offices[0]?.id;
 
@@ -86,7 +87,7 @@ export function EmployeeActivityPage() {
       <RangeBar
         range={range}
         onChange={(r) => {
-          setPage(0);
+          setSkip(0);
           setRange(r);
         }}
       />
@@ -124,13 +125,7 @@ export function EmployeeActivityPage() {
               </ol>
             </Card>
           )}
-          {pages > 1 && (
-            <nav aria-label="الصفحات" className="mt-4 flex items-center justify-between gap-3">
-              <PillButton size="field" variant="secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>السابق</PillButton>
-              <span className="text-[16px] text-ink-soft lg:text-[14px]">صفحة {num(page + 1)} من {num(pages)}</span>
-              <PillButton size="field" variant="secondary" disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>التالي</PillButton>
-            </nav>
-          )}
+          {data && <Pagination skip={skip} take={PAGE} total={data.total} onSkipChange={setSkip} testId="activity-list-pager" />}
         </>
       )}
     </div>

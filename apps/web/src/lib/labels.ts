@@ -1,3 +1,5 @@
+import { COUNT_UNITS, arabicCount, type CountUnitKey } from '@fuel-tracking/shared-types';
+
 // Arabic-label dictionary for every internal code/enum value the app
 // stores. Source of truth: design/"Fuel Control System - Round 2
 // Screens.dc.html" artboard 1b ("قاموس المسمّيات") — its hard rule:
@@ -60,6 +62,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'owners:approve_change': 'اعتماد طلبات تصحيح هوية المالك',
   'vehicles:manage': 'إضافة/تعديل المركبات',
   'vehicles:read': 'عرض سجل المركبات',
+  'records:browse': 'فتح شاشات السجلات: المركبات والمحطات',
   'vehicles:request_change': 'طلب تعديل بيانات مركبة (يتطلب اعتمادًا)',
   'vehicles:approve_change': 'اعتماد طلبات تعديل بيانات المركبات',
   'vehicle_types:read': 'عرض أنواع المركبات',
@@ -184,31 +187,46 @@ export function vehicleChangeTypeLabel(changeType: string | null | undefined): s
   return VEHICLE_CHANGE_TYPE_LABELS[changeType] ?? changeType;
 }
 
-// SystemSetting rows (apps/api/prisma/seed.ts's SYSTEM_SETTINGS) — the
-// naming-dictionary rule (1b) applies here too: SettingsAdminPage used to
-// render setting.description and setting.key directly, which are literal
-// English developer text and literal snake_case-ish DB keys
-// ("PLACEHOLDER — max fill-ups per owner per week...",
-// "fillup.max_per_week_per_owner"). Four of these settings are
-// placeholder values pending client confirmation (docs/OPEN_ITEMS.md
-// #19/#20) — the Arabic description says so explicitly rather than
-// presenting them as settled, same as the English placeholder text did.
-export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description: string }> = {
+// SystemSetting rows (apps/api/prisma/rbac-catalog.ts's SYSTEM_SETTINGS) — the
+// naming-dictionary rule (1b) applies here too: the page never shows a raw
+// key or the English developer description stored with it.
+//
+// Phase 7: every number carries its unit (`unit`, written with Arabic number
+// agreement by arabicCount, plus `per` for a rate: «3 تعبئات في الأسبوع»), and
+// the «رقم مبدئي بانتظار تأكيد العميل» notes are gone from the cards. The
+// values that carried one are listed in OPEN_ITEMS #66 for Mohamed to confirm
+// with the client: the four per-owner numbers, the week start day and the
+// diesel and kerosene prices.
+export interface SettingLabel {
+  label: string;
+  description: string;
+  unit?: CountUnitKey;
+  /** What the number is counted against, after the unit: «في الأسبوع», «للتر». */
+  per?: string;
+}
+
+export const SYSTEM_SETTING_LABELS: Record<string, SettingLabel> = {
   'fillup.max_per_week': {
     label: 'الحد الأسبوعي لعدد التعبئات',
     description: 'أقصى عدد تعبئات مسموح به لكل مركبة خلال الأسبوع.',
+    unit: 'fillup',
+    per: 'في الأسبوع',
   },
   'fillup.min_gap_days': {
     label: 'أقل فاصل زمني بين تعبئتين',
     description: 'عدد الأيام التي يجب أن تمضي قبل السماح بتعبئة جديدة للمركبة نفسها.',
+    unit: 'day',
   },
   'fillup.max_per_week_per_owner': {
     label: 'الحد الأسبوعي لعدد تعبئات مالك المركبة',
-    description: 'أقصى عدد تعبئات مسموح به لمالك المركبة أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+    description: 'أقصى عدد تعبئات مسموح به لمالك المركبة أسبوعيًا على جميع مركباته.',
+    unit: 'fillup',
+    per: 'في الأسبوع',
   },
   'fillup.min_gap_days_per_owner': {
     label: 'أقل فاصل زمني بين تعبئتين لنفس مالك المركبة',
-    description: 'عدد الأيام بين تعبئتين لنفس مالك المركبة، على أي من مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+    description: 'عدد الأيام بين تعبئتين لنفس مالك المركبة، على أي من مركباته.',
+    unit: 'day',
   },
   'fillup.week_window_mode': {
     label: 'طريقة حساب الأسبوع',
@@ -216,33 +234,65 @@ export const SYSTEM_SETTING_LABELS: Record<string, { label: string; description:
   },
   'fillup.week_start_day': {
     label: 'يوم بداية الأسبوع',
-    description: 'يُستخدم فقط عند اختيار طريقة الحساب "ثابت" — رقم مبدئي بانتظار تأكيد العميل.',
+    description: 'اليوم الذي يبدأ منه الأسبوع عند الحساب "الثابت".',
   },
   'stock.low_threshold_liters': {
     label: 'حدّ تنبيه انخفاض الوقود',
     description:
       'عندما ينزل أي نوع وقود في محطة تحت هذا العدد من اللترات يُنبَّه مشرف المحطة ومدير البلدية، مرة عند الانخفاض ومرة أخرى بعد إعادة التعبئة وانخفاضه من جديد.',
+    unit: 'liter',
   },
   'fillup.max_liters_per_week_per_owner': {
     label: 'الحد الأسبوعي للترات مالك المركبة',
-    description: 'أقصى مجموع لترات مسموح به لمالك المركبة أسبوعيًا على جميع مركباته — رقم مبدئي بانتظار تأكيد العميل.',
+    description: 'أقصى مجموع لترات مسموح به لمالك المركبة أسبوعيًا على جميع مركباته.',
+    unit: 'liter',
+    per: 'في الأسبوع',
   },
   'fillup.price_per_liter.PETROL_95': {
     label: 'سعر لتر بنزين 95',
-    description: 'يُستخدم لحساب تكلفة التعبئة تلقائيًا — مؤكَّد من العميل.',
+    description: 'يُستخدم لحساب كمية التعبئة من المبلغ المدفوع.',
+    unit: 'dinar',
+    per: 'للتر',
   },
   'fillup.price_per_liter.DIESEL': {
     label: 'سعر لتر الديزل',
-    description: 'رقم مبدئي بانتظار تأكيد العميل — لا يُعتمد كسعر حقيقي.',
+    description: 'يُستخدم لحساب كمية التعبئة من المبلغ المدفوع.',
+    unit: 'dinar',
+    per: 'للتر',
   },
   'fillup.price_per_liter.KEROSENE': {
     label: 'سعر لتر الكاز',
-    description: 'رقم مبدئي بانتظار تأكيد العميل — لا يُعتمد كسعر حقيقي.',
+    description: 'يُستخدم لحساب كمية التعبئة من المبلغ المدفوع.',
+    unit: 'dinar',
+    per: 'للتر',
+  },
+  'exceptions.station_daily_threshold': {
+    label: 'حدّ تنبيه استثناءات المحطة في اليوم',
+    description: 'إذا تجاوز عدد استثناءات محطة واحدة هذا الرقم في يوم واحد، تُعلَّم المحطة للمراجعة.',
+    unit: 'exception',
+    per: 'في اليوم',
   },
 };
 
-export function systemSettingLabel(key: string): { label: string; description: string } {
+export function systemSettingLabel(key: string): SettingLabel {
   return SYSTEM_SETTING_LABELS[key] ?? { label: key, description: '' };
+}
+
+// A setting's value as a person reads it: «3 تعبئات في الأسبوع», «يومان»,
+// «1000 لتر», «0.15 دينار للتر». A value with no unit is shown as it is.
+export function settingValueText(key: string, value: string | number): string {
+  const { unit, per } = systemSettingLabel(key);
+  const n = Number(value);
+  if (!unit || !Number.isFinite(n)) return String(value);
+  return [arabicCount(n, unit), per].filter(Boolean).join(' ');
+}
+
+// The unit word alone, for the space next to a stepper's figure: «تعبئة»,
+// «يوم», «لتر», «دينار للتر».
+export function settingUnitWord(key: string): string {
+  const { unit, per } = systemSettingLabel(key);
+  if (!unit) return '';
+  return [COUNT_UNITS[unit].one, per].filter(Boolean).join(' ');
 }
 
 // One plain sentence per job, shown on the job picker (phase 4b). Display

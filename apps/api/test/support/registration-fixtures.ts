@@ -12,8 +12,9 @@ export function randomChassis(length = 17): string {
   return Array.from({ length }, () => CHASSIS_ALPHABET[Math.floor(Math.random() * CHASSIS_ALPHABET.length)]).join('');
 }
 
+// Phase 7: a booklet number is digits only.
 export function randomBooklet(length = 8): string {
-  return randomChassis(length);
+  return randomDigits(length);
 }
 
 // The 11 digits that follow a national ID's first digit: a birth year in the

@@ -17,6 +17,7 @@ import { PlacePicker } from './PlacePicker';
 import { formatWhen } from './format';
 import { USERS_PAGE_SIZE, usePlaceOptions, useUserList, useUserOptions } from './useUsers';
 import type { UserListItem } from './types';
+import { Pagination } from '../../components/Pagination';
 
 const SIDE_OPTIONS = [
   { value: '', label: 'كل الجهات' },
@@ -35,7 +36,7 @@ const STATUS_OPTIONS = [
 
 
 const SELECT_CLASS =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 function whereText(item: UserListItem): string {
   if (item.sees === 'ALL') return 'كل البلديات والمحطات والمكاتب';
@@ -220,7 +221,7 @@ export function UsersListPage({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-[52px] w-full rounded-sm border border-line bg-surface-alt ps-11 pe-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]"
+              className="h-[52px] w-full rounded-sm border border-line bg-surface-alt ps-11 pe-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]"
             />
           </div>
           <button
@@ -331,7 +332,7 @@ export function UsersListPage({
                     className="cursor-pointer border-b border-line-soft align-middle last:border-0 hover:bg-surface-alt/60"
                   >
                     <td className="px-[18px] py-3">
-                      <Link to={personLink(u.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                      <Link to={personLink(u.id)} className="font-bold text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark">
                         {u.fullName}
                       </Link>
                       <div>
@@ -378,7 +379,7 @@ export function UsersListPage({
               <li key={u.id}>
                 <Link
                   to={personLink(u.id)}
-                  className="block min-h-[88px] px-4 py-4 hover:bg-surface-alt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                  className="block min-h-[88px] px-4 py-4 hover:bg-surface-alt/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-dark"
                 >
                   <p className="break-words text-[18px] font-extrabold leading-snug text-ink">{u.fullName}</p>
                   <CodeText size="md">{u.username}</CodeText>
@@ -395,31 +396,13 @@ export function UsersListPage({
             ))}
           </ul>
 
-          {total > USERS_PAGE_SIZE && (
-            <nav aria-label="التنقل بين الصفحات" className="flex items-center justify-between gap-3 border-t border-line-soft p-4 lg:px-[18px]">
-              <span className="text-[14px] text-ink-soft lg:text-[12px]">
-                {filters.skip + 1}–{Math.min(filters.skip + USERS_PAGE_SIZE, total)} من {total}
-              </span>
-              <div className="flex gap-2">
-                <PillButton
-                  size="field"
-                  variant="secondary"
-                  disabled={filters.skip === 0}
-                  onClick={() => update({ skip: String(Math.max(0, filters.skip - USERS_PAGE_SIZE)) })}
-                >
-                  السابق
-                </PillButton>
-                <PillButton
-                  size="field"
-                  variant="secondary"
-                  disabled={filters.skip + USERS_PAGE_SIZE >= total}
-                  onClick={() => update({ skip: String(filters.skip + USERS_PAGE_SIZE) })}
-                >
-                  التالي
-                </PillButton>
-              </div>
-            </nav>
-          )}
+          <Pagination
+            skip={filters.skip}
+            take={USERS_PAGE_SIZE}
+            total={total}
+            onSkipChange={(next) => update({ skip: String(next) })}
+            testId="people-list-pager"
+          />
         </>
       )}
     </>

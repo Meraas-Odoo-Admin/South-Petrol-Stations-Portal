@@ -33,7 +33,7 @@ export class CreateVehicleDto {
 
   @ApiProperty({
     description:
-      'City code (1-2 digits) + a separator + serial number (1-7 digits), with an optional trailing N that is part of the plate. A plate with no separator is refused.',
+      'City code (1-2 digits) + a separator + serial number (1-7 digits), digits only. A plate with no separator is refused.',
   })
   @IsString()
   @IsLibyanPlate()
@@ -57,7 +57,7 @@ export class CreateVehicleDto {
   // displace — so no VehicleChangeRequest approval is needed here. Only
   // changing an ALREADY-SET registrationBooklet on an existing vehicle
   // goes through POST /vehicles/:id/change-requests.
-  @ApiProperty({ description: '6-12 letters and digits.' })
+  @ApiProperty({ description: '6-12 digits.' })
   @Transform(({ value }) => (typeof value === 'string' ? normalizeBooklet(value) : value))
   @IsString()
   @IsBookletNumber()

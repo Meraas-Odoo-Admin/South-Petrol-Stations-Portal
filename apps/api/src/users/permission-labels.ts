@@ -37,13 +37,13 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
   'routes:manage': { area: 'stations', label: 'إدارة خطوط النقل' },
   'registration_stations:read': { area: 'stations', label: 'عرض مكاتب التسجيل' },
   'registration_stations:manage': { area: 'stations', label: 'إنشاء مكاتب التسجيل وتعديلها' },
-  'registration_desks:manage': { area: 'stations', label: 'إدارة مكاتب الطباعة والطابعات في المكتب' },
 
   'cards:read': { area: 'registration', label: 'عرض بطاقات المركبة وتاريخها' },
   'cards:issue': { area: 'registration', label: 'إصدار البطاقات وطباعتها' },
   'cards:cancel': { area: 'registration', label: 'إلغاء بطاقة بدون بدل' },
 
   'vehicles:read': { area: 'vehicles', label: 'البحث في المركبات' },
+  'records:browse': { area: 'vehicles', label: 'فتح شاشات السجلات: المركبات والمحطات' },
   'vehicles:manage': { area: 'vehicles', label: 'تسجيل المركبات وتعديلها' },
   'vehicles:request_change': { area: 'vehicles', label: 'طلب تصحيح رقم الهيكل أو الدفتر' },
   'vehicles:approve_change': { area: 'vehicles', label: 'الموافقة على طلبات تصحيح المركبات' },

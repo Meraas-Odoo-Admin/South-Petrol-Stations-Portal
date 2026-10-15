@@ -70,13 +70,9 @@ export const PERMISSIONS = [
     key: 'stations:create',
     description: 'Create, archive and restore petrol stations inside your own municipality (municipality managers)',
   },
-  // Phase 5A: the office manager's tool - desks and printers of their own
-  // office. Creating/editing/archiving the office itself stays
-  // registration_stations:manage.
-  {
-    key: 'registration_desks:manage',
-    description: "Manage the desks and printers of your own registration office (subject to registration-station scope)",
-  },
+  // Phase 7: 'registration_desks:manage' (desks and printers of an office) is
+  // gone with the desks themselves. rbac-sync.ts takes it off every role; the
+  // Permission row is left alone (see there).
   // Phase 5A: the municipality manager's people tool. Creates, edits and
   // archives the supervisor and office-manager accounts of their own
   // municipality - never an account on their own level or above - and may
@@ -122,6 +118,13 @@ export const PERMISSIONS = [
   { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
   { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes' },
   { key: 'vehicles:read', description: 'Look up the vehicle registry (read-only)' },
+  // After review (15 Oct 2026): vehicles:read and stations:read are also what
+  // the fill-up screen calls (the plate lookup, the fuels a station sells), so
+  // they no longer decide who gets the record screens («السجلات»: «المركبات»
+  // with its search tab, and «المحطات»). That is this permission: every role
+  // that reads vehicles holds it, except the station employee, whose only job
+  // is recording.
+  { key: 'records:browse', description: 'Open the record screens: the vehicles list and a vehicle record, and the stations list' },
   { key: 'fillups:create', description: 'Record a fill-up, including one submitted with an exception' },
   // Seeded for role-table completeness (docs/IMPLEMENTATION_PLAN.md §5 lists
   // it against station_supervisor) — no endpoint uses it in M3.
@@ -203,17 +206,16 @@ export const PERMISSIONS = [
 // EXACTLY this list — a permission removed here is removed from existing
 // databases too, not just left behind.
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
+  // After review (Khalil, 15 Oct 2026): a station employee records fill-ups
+  // and nothing else — no vehicles or stations screens, reports, stock or
+  // notifications. What is left is exactly what the fill-up screen calls.
   station_employee: [
-    'stations:read',
-    // The fill-up screen's plate lookup — read-only, no registration.
-    'vehicles:read',
-    'vehicle_types:read',
+    'stations:read', // the fuels their station sells
+    'vehicles:read', // the plate lookup and the vehicle preview
     'cards:scan',
     'fillups:create',
+    // A blocked fill-up recorded as an exception, on the same screen.
     'fillups:record_exception',
-    'fuel_stock:read_visible',
-    'notifications:read',
-    'reports:own_shift',
   ],
   station_supervisor: [
     'companies:read',
@@ -224,6 +226,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:read',
     'stations:manage',
     'vehicles:read',
+    'records:browse',
     'cards:scan',
     'fillups:create',
     'fillups:update',
@@ -244,6 +247,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'registration_stations:read',
     'vehicle_types:read',
     'vehicles:read',
+    'records:browse',
     'vehicles:manage',
     'owners:read',
     'owners:manage',
@@ -260,6 +264,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'registration_stations:read',
     'vehicle_types:read',
     'vehicles:read',
+    'records:browse',
     'vehicles:manage',
     'owners:read',
     'owners:manage',
@@ -271,7 +276,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'cards:read',
     'cards:issue',
     'cards:cancel',
-    'registration_desks:manage',
     'users:manage_staff',
     'registration_reports:view',
     'notifications:read',
@@ -296,9 +300,12 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'stations:create',
     'registration_stations:read',
     'registration_stations:manage',
-    'registration_desks:manage',
     'users:manage_municipality_staff',
     'cards:read',
+    // Phase 7: the municipality manager issues and prints cards too, in any
+    // registration office of their own municipality (the registration-station
+    // scope of a municipality-scoped role is its municipality's offices).
+    'cards:issue',
     'cards:cancel',
     'cards:scan',
     'reports:view_all_stations',
@@ -307,6 +314,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'owners:manage',
     'vehicles:manage',
     'vehicles:read',
+    'records:browse',
     'vehicles:request_change',
     'vehicles:approve_change',
     'owners:request_change',

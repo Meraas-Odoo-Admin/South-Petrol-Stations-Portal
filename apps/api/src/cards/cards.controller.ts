@@ -67,7 +67,7 @@ export class CardsController {
     const { pdf, cardNumber } = await this.cards.print(
       id,
       dto.mode ?? 'full',
-      { registrationStationId: dto.registrationStationId, deskId: dto.deskId },
+      { registrationStationId: dto.registrationStationId },
       actor.id,
     );
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="card-${cardNumber}.pdf"` });

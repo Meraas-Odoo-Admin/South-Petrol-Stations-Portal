@@ -43,7 +43,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
   const randomDigits = (n: number) => Math.floor(Math.random() * 10 ** n).toString().padStart(n, '0');
   const plate = `7-${randomDigits(7)}`;
   const chassis = `1HGBH41JXMN${randomDigits(6)}`;
-  const booklet = `BK${randomDigits(8)}`;
+  const booklet = randomDigits(8); // Phase 7: digits only
   let ownerId: string;
   let vehicleId: string;
   let vehicleInternalCode: string;

@@ -14,6 +14,9 @@ interface DateFieldProps {
   // this component now also fixes for every filter row, not just the
   // standing-exceptions form it was originally built for.
   inputClassName?: string;
+  /** Ties the field to its visible label (Phase 7 audit); without one it is named «التاريخ». */
+  id?: string;
+  ariaLabel?: string;
 }
 
 // Round 19: "the date fields should be date picker format, not like they
@@ -74,7 +77,7 @@ const MONTH_NAMES_AR = [
 const WEEKDAY_NAMES_AR = ['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'];
 
 const DEFAULT_INPUT_CLASS =
-  'h-11 w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50';
+  'h-11 w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[15px] lg:text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark disabled:opacity-50';
 
 // Round 11 item 3 / round 14 fix, both still relevant to the input's own
 // padding even though the trigger behind it changed — see the file's
@@ -84,7 +87,7 @@ const DEFAULT_INPUT_CLASS =
 // properties resolve against an element's OWN direction, not the page's.
 const ICON_SAFE_END_PADDING = '!pl-9';
 
-export function DateField({ value, onChange, disabled, className = '', inputClassName }: DateFieldProps) {
+export function DateField({ value, onChange, disabled, className = '', inputClassName, id, ariaLabel }: DateFieldProps) {
   const [text, setText] = useState(isoToDisplay(value));
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -192,6 +195,8 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
     <div ref={anchorRef} className={`relative flex items-center ${className}`}>
       <input
         ref={inputRef}
+        id={id}
+        aria-label={id ? undefined : (ariaLabel ?? 'التاريخ')}
         type="text"
         inputMode="numeric"
         dir="ltr"
@@ -217,10 +222,10 @@ export function DateField({ value, onChange, disabled, className = '', inputClas
         </svg>
       </button>
 
-      <PortalDropdown anchorRef={anchorRef} open={open}>
+      <PortalDropdown anchorRef={anchorRef} open={open} minWidth={288}>
         <div
           data-testid="date-field-calendar"
-          className="w-72 animate-scale-in rounded-md border border-line bg-surface p-3 shadow-lg"
+          className="w-full animate-scale-in rounded-md border border-line bg-surface p-3 shadow-lg"
           onMouseDown={(e) => e.preventDefault()}
         >
           <div className="flex items-center justify-between">

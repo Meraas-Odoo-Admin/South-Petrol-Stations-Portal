@@ -333,7 +333,7 @@ export class FillUpsService {
     const ruleSubject = this.toRuleSubject(subject);
     const vehicle = subject.vehicle;
     const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
-    const exceptionModeFieldsPresent = Boolean(dto.exceptionTypeId ?? dto.reason ?? dto.proofReference);
+    const exceptionModeFieldsPresent = Boolean(dto.exceptionTypeId ?? dto.reason);
 
     const baseData = {
       vehicleId: vehicle.id,
@@ -414,9 +414,6 @@ export class FillUpsService {
     if (!exceptionType || !exceptionType.isActive) {
       throw new NotFoundException('Exception type not found or inactive.');
     }
-    if (exceptionType.requiresProof && !dto.proofReference?.trim()) {
-      throw new BadRequestException(`proofReference is required for exception type "${exceptionType.key}".`);
-    }
     const triggerReason: RuleFailureReason | null = verdict.allowed ? null : verdict.reason;
     const triggerDetail = verdict.allowed ? null : await this.describeTrigger(verdict.trigger);
     const use = await this.exceptions.assessUse({
@@ -434,7 +431,6 @@ export class FillUpsService {
           fillUpTransactionId: row.id,
           exceptionTypeId: exceptionType.id,
           reason: dto.reason!.trim(),
-          proofReference: dto.proofReference,
           // No approval step: the person who used it is recorded as approver
           // so every exception row reads as settled.
           approvedById: actorId,
@@ -534,7 +530,6 @@ export class FillUpsService {
         data: {
           key: dto.key,
           name: dto.name,
-          requiresProof: dto.requiresProof ?? false,
           overridableRules: dto.overridableRules ?? [],
           dailyLimitPerStation: dto.dailyLimitPerStation ?? null,
           municipalityId,
@@ -549,7 +544,6 @@ export class FillUpsService {
           newValue: {
             key: created.key,
             name: created.name,
-            requiresProof: created.requiresProof,
             overridableRules: created.overridableRules,
             dailyLimitPerStation: created.dailyLimitPerStation,
             municipalityId: created.municipalityId,
@@ -581,14 +575,12 @@ export class FillUpsService {
           entityId: id,
           oldValue: {
             name: before.name,
-            requiresProof: before.requiresProof,
             isActive: before.isActive,
             overridableRules: before.overridableRules,
             dailyLimitPerStation: before.dailyLimitPerStation,
           },
           newValue: {
             name: updated.name,
-            requiresProof: updated.requiresProof,
             isActive: updated.isActive,
             overridableRules: updated.overridableRules,
             dailyLimitPerStation: updated.dailyLimitPerStation,

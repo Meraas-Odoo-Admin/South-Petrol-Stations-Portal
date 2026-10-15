@@ -37,30 +37,37 @@ test('municipality page: six tabs, a paged list, one report at a time, a danger 
   await expect(page.getByTestId('municipality-counts')).toBeVisible();
   await shots(page, '01-municipality-overview');
 
-  // المحطات والمكاتب: a paged list with the total.
-  await page.getByTestId('tab-places').click();
-  await expect(page).toHaveURL(/tab=places/);
-  await expect(page.getByTestId('places-list')).toBeVisible();
-  const range = page.getByTestId('places-pager-range');
+  // المحطات والمكاتب: Phase 7 - two tabs, each a paged list with the total.
+  await page.getByTestId('tab-stations').click();
+  await expect(page).toHaveURL(/tab=stations/);
+  await expect(page.getByTestId('stations-list')).toBeVisible();
+  const range = page.getByTestId('stations-list-pager-range');
   await expect(range).toContainText('من');
-  const rows = page.locator('[data-testid="places-list"] tbody tr');
-  expect(await rows.count()).toBeLessThanOrEqual(25);
+  const rows = page.locator('[data-testid="stations-list"] tbody tr');
+  expect(await rows.count()).toBeLessThanOrEqual(10);
   await shots(page, '02-municipality-places');
 
   // Page 2 (when there is one) is in the address and survives a refresh.
-  const next = page.getByTestId('places-pager-next');
+  const next = page.getByTestId('stations-list-pager-next');
   if (await next.count()) {
     await next.click();
     await expect(page).toHaveURL(/page=2/);
     await page.reload();
     await expect(page).toHaveURL(/page=2/);
-    await expect(page.getByTestId('places-list')).toBeVisible();
+    await expect(page.getByTestId('stations-list')).toBeVisible();
     await shots(page, '03-municipality-places-page-2');
   }
 
   // Search narrows on the server.
-  await page.getByLabel('بحث بالاسم أو الرمز أو الرقم أو العنوان').fill(fixtures.stationName);
+  await page.getByLabel('بحث باسم المحطة أو رمزها أو رقمها').fill(fixtures.stationName);
   await expect(page.getByRole('link', { name: fixtures.stationName }).first()).toBeVisible();
+
+  // The offices tab: its own list, with only offices in it.
+  await page.getByTestId('tab-offices').click();
+  await expect(page).toHaveURL(/kind=offices/);
+  await expect(page).toHaveURL(/tab=stations/);
+  await expect(page.getByTestId('offices-list')).toBeVisible();
+  await expect(page.getByTestId('stations-list')).toHaveCount(0);
 
   await page.getByTestId('tab-people').click();
   await expect(page.getByTestId('people-list')).toBeVisible();
@@ -84,15 +91,19 @@ test('municipality page: six tabs, a paged list, one report at a time, a danger 
   await context.close();
 });
 
-test('«إدارة المحطات»: one paged list of stations and offices', async ({ browser }) => {
+test('«إدارة المحطات»: stations and offices in two paged lists', async ({ browser }) => {
   test.setTimeout(180_000);
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
   await navigateInApp(page, '/manage');
-  await expect(page.getByTestId('places-list')).toBeVisible();
-  await expect(page.getByTestId('places-pager-range')).toContainText('من');
+  await expect(page.getByTestId('stations-list')).toBeVisible();
+  await expect(page.getByTestId('stations-list-pager-range')).toContainText('من');
+  await expect(page.getByTestId('stations-list-add')).toBeVisible();
   await shots(page, '10-manage-places');
+  await page.getByTestId('tab-offices').click();
+  await expect(page.getByTestId('offices-list')).toBeVisible();
+  await expect(page.getByTestId('offices-list-add')).toBeVisible();
   await context.close();
 });
 
@@ -161,7 +172,7 @@ test('a registration employee reprints a card from the vehicle page', async ({ b
   const reprint = page.getByTestId('vehicle-card-reprint');
   if (await reprint.count()) {
     await reprint.click();
-    // Either it prints at the remembered desk, or it asks which office and desk.
+    // It prints at the employee's office (Phase 7: no desk to pick).
     await page.waitForTimeout(600);
   }
   await shots(page, '50-card-reprint');

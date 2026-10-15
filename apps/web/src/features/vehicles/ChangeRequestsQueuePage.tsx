@@ -11,7 +11,11 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { vehicleChangeTypeLabel, identityTypeLabel } from '../../lib/labels';
 import { diffValues } from '../../lib/textDiff';
+import { REFERENCE_CODE_LABEL, referenceCode } from '@fuel-tracking/shared-types';
 import type { VehicleChangeRequestEntry, OwnerChangeRequestEntry } from './types-change-requests';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { Pagination } from '../../components/Pagination';
+import { useClientPage } from '../../lib/pageSize';
 
 // Round 4 feedback item 7: consequences of approving are spelled out
 // (which reports are affected, that the old value is kept in the record),
@@ -43,7 +47,7 @@ const STATUS_LABELS: Record<VehicleChangeRequestEntry['status'], string> = {
 //
 // Card-per-request matches 2e's identity-change review pattern (pending
 // badge as an amber pill, old/new value comparison) rather than a bare
-// table row — each request carries a reason + proof reference that reads
+// table row — each request carries a reason and its reference code that reads
 // poorly squeezed into table cells.
 export function ChangeRequestsQueuePage() {
   const queryClient = useQueryClient();
@@ -58,7 +62,7 @@ export function ChangeRequestsQueuePage() {
     queryFn: async () =>
       (
         await apiClient.get<VehicleChangeRequestEntry[]>('/vehicles/change-requests', {
-          params: { status: statusFilter || undefined, take: 50 },
+          params: { status: statusFilter || undefined, take: 100 },
         })
       ).data,
   });
@@ -87,11 +91,14 @@ export function ChangeRequestsQueuePage() {
     queryFn: async () =>
       (
         await apiClient.get<OwnerChangeRequestEntry[]>('/owners/change-requests', {
-          params: { status: statusFilter || undefined, take: 50 },
+          params: { status: statusFilter || undefined, take: 100 },
         })
       ).data,
     enabled: canReviewOwnerChanges,
   });
+  // 10 a page each; the two lists keep their own page in the address.
+  const vehiclePage = useClientPage(data ?? []);
+  const ownerPage = useClientPage(ownerData ?? [], 'opage');
 
   const approveOwnerMutation = useMutation({
     mutationFn: (id: string) => apiClient.post(`/owners/change-requests/${id}/approve`),
@@ -116,7 +123,7 @@ export function ChangeRequestsQueuePage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+            className="h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark"
           >
             <option value="">الكل</option>
             <option value="PENDING">قيد الانتظار</option>
@@ -127,12 +134,12 @@ export function ChangeRequestsQueuePage() {
       />
 
       <p className="mb-3 mt-2 text-[15px] lg:text-[13px] font-extrabold text-ink">طلبات تعديل بيانات المركبة</p>
-      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isLoading && <SkeletonRows rows={4} />}
       {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل الطلبات.</p>}
 
       {data && (
         <div className="space-y-4">
-          {data.map((r) => {
+          {vehiclePage.pageItems.map((r) => {
             const diff = diffValues(r.currentValue, r.requestedValue);
             return (
             <Card key={r.id} className="p-5">
@@ -180,11 +187,9 @@ export function ChangeRequestsQueuePage() {
               </div>
 
               <p className="mt-3 text-[13px] lg:text-[12.5px] leading-[1.7] text-ink">{r.reason}</p>
-              {r.proofReference && (
-                <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
-                  مرجع الإثبات: <CodeText>{r.proofReference}</CodeText>
-                </p>
-              )}
+              <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint" data-testid="change-request-code">
+                {REFERENCE_CODE_LABEL}: <CodeText>{referenceCode('VEHICLE_CHANGE', r.id)}</CodeText>
+              </p>
 
               {r.status === 'REJECTED' && r.rejectionReason && (
                 <p className="mt-2 text-[13px] lg:text-[12px] text-danger">سبب الرفض: {r.rejectionReason}</p>
@@ -209,7 +214,7 @@ export function ChangeRequestsQueuePage() {
                       size="sm"
                       onClick={() => approveMutation.mutate(r.id)}
                       disabled={approveMutation.isPending}
-                      className="!bg-primary !text-white !border-0 !shadow-none"
+                      variant="brand"
                     >
                       اعتماد التصحيح
                     </PillButton>
@@ -219,7 +224,7 @@ export function ChangeRequestsQueuePage() {
                           value={rejectReason}
                           onChange={(e) => setRejectReason(e.target.value)}
                           placeholder="سبب الرفض"
-                          className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                          className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark"
                         />
                         <PillButton
                           size="sm"
@@ -244,18 +249,19 @@ export function ChangeRequestsQueuePage() {
           {data.length === 0 && (
             <Card className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
           )}
+          <Pagination skip={vehiclePage.skip} take={vehiclePage.take} total={vehiclePage.total} onSkipChange={vehiclePage.setSkip} testId="vehicle-requests-pager" />
         </div>
       )}
 
       {canReviewOwnerChanges && (
         <>
           <p className="mb-3 mt-6 text-[15px] lg:text-[13px] font-extrabold text-ink">طلبات تصحيح هوية المالك</p>
-          {ownerIsLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+          {ownerIsLoading && <SkeletonRows rows={4} />}
           {ownerIsError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل الطلبات.</p>}
 
           {ownerData && (
             <div className="space-y-4">
-              {ownerData.map((r) => (
+              {ownerPage.pageItems.map((r) => (
                 <Card key={r.id} className="p-5">
                   <div className="flex items-start justify-between">
                     <div>
@@ -288,11 +294,9 @@ export function ChangeRequestsQueuePage() {
                   </div>
 
                   <p className="mt-3 text-[13px] lg:text-[12.5px] leading-[1.7] text-ink">{r.reason}</p>
-                  {r.proofReference && (
-                    <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint">
-                      مرجع الإثبات: <CodeText>{r.proofReference}</CodeText>
-                    </p>
-                  )}
+                  <p className="mt-1 text-[13px] lg:text-[12px] text-ink-faint" data-testid="change-request-code">
+                    {REFERENCE_CODE_LABEL}: <CodeText>{referenceCode('OWNER_CHANGE', r.id)}</CodeText>
+                  </p>
 
                   {r.status === 'REJECTED' && r.rejectionReason && (
                     <p className="mt-2 text-[13px] lg:text-[12px] text-danger">سبب الرفض: {r.rejectionReason}</p>
@@ -304,7 +308,7 @@ export function ChangeRequestsQueuePage() {
                         size="sm"
                         onClick={() => approveOwnerMutation.mutate(r.id)}
                         disabled={approveOwnerMutation.isPending}
-                        className="!bg-primary !text-white !border-0 !shadow-none"
+                        variant="brand"
                       >
                         اعتماد التصحيح
                       </PillButton>
@@ -314,7 +318,7 @@ export function ChangeRequestsQueuePage() {
                             value={rejectReason}
                             onChange={(e) => setRejectReason(e.target.value)}
                             placeholder="سبب الرفض"
-                            className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                            className="h-9 flex-1 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark"
                           />
                           <PillButton
                             size="sm"
@@ -339,6 +343,7 @@ export function ChangeRequestsQueuePage() {
               {ownerData.length === 0 && (
                 <Card className="p-6 text-center text-[15px] lg:text-[13px] text-ink-soft">لا توجد طلبات مطابقة</Card>
               )}
+              <Pagination skip={ownerPage.skip} take={ownerPage.take} total={ownerPage.total} onSkipChange={ownerPage.setSkip} testId="owner-requests-pager" />
             </div>
           )}
         </>

@@ -14,7 +14,7 @@ export class CreateVehicleChangeRequestDto {
   // left as typed.
   @ApiProperty({
     description:
-      'New chassis number (17 chars, CHASSIS_CHANGE) or new registration booklet number (6-12 alphanumeric, BOOKLET_CHANGE).',
+      'New chassis number (17 chars, CHASSIS_CHANGE) or new registration booklet number (6-12 digits, BOOKLET_CHANGE).',
   })
   @Transform(({ value, obj }) =>
     obj.changeType === VehicleChangeType.CHASSIS_CHANGE && typeof value === 'string'
@@ -36,9 +36,4 @@ export class CreateVehicleChangeRequestDto {
   @IsString()
   @MinLength(1)
   reason!: string;
-
-  @ApiProperty({ description: 'Mandatory for both change types — not optional per category like fill-up exceptions.' })
-  @IsString()
-  @MinLength(1)
-  proofReference!: string;
 }

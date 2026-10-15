@@ -73,6 +73,5 @@ export interface ExceptionTypeRow {
   id: string;
   key: string;
   name: string;
-  requiresProof: boolean;
   isActive: boolean;
 }

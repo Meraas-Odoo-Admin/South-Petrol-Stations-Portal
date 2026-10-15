@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
-import { Card } from '../../components/design/Card';
+import { Card, CardHeader } from '../../components/design/Card';
 import { Switch } from '../../components/design/Switch';
 import { adminErrorMessage } from './adminErrors';
 import type { SystemSettingRow } from './types';
@@ -60,39 +60,41 @@ export function RuleSwitchesCard({ settings }: { settings: SystemSettingRow[] })
   });
 
   return (
-    <Card className="p-4 lg:p-5" data-testid="rule-switches">
-      <h2 className="text-[18px] font-extrabold text-ink lg:text-[15px]">قواعد التعبئة</h2>
-      <p className="mt-1 text-[15px] leading-[1.7] text-ink-soft lg:text-[13px]">
-        شغّل كل قاعدة أو أوقفها. القاعدة الموقوفة لا تُطبَّق إطلاقًا على التعبئات القادمة، ويُسجَّل كل تغيير باسمك. الأرقام (الحدود والفواصل) تُضبط أدناه.
-      </p>
-      {error && (
-        <p role="alert" className="mt-3 text-[15px] font-medium text-danger-dark lg:text-[13px]">
-          {error}
+    <Card data-testid="rule-switches">
+      <CardHeader title="قواعد التعبئة" />
+      <div className="p-4 lg:p-5">
+        <p className="text-[15px] leading-[1.7] text-ink-soft lg:text-[13px]">
+          شغّل كل قاعدة أو أوقفها. القاعدة الموقوفة لا تُطبَّق إطلاقًا على التعبئات القادمة، ويُسجَّل كل تغيير باسمك. الأرقام (الحدود والفواصل) تُضبط أدناه.
         </p>
-      )}
-      <ul className="mt-3 divide-y divide-line-soft">
-        {RULES.map((rule) => {
-          const raw = byKey.get(rule.key);
-          const on = raw === undefined ? rule.defaultOn : raw === 'true';
-          return (
-            <li key={rule.key} className="flex items-start justify-between gap-4 py-3.5">
-              <div className="min-w-0">
-                <p className="text-[17px] font-bold text-ink lg:text-[14px]">{rule.title}</p>
-                <p className="mt-0.5 text-[15px] leading-[1.7] text-ink-soft lg:text-[12px]">{rule.text}</p>
-              </div>
-              <Switch
-                checked={on}
-                label={rule.title}
-                onLabel="مفعّلة"
-                offLabel="موقوفة"
-                testId={`rule-switch-${rule.key}`}
-                busy={toggle.isPending}
-                onChange={(next) => toggle.mutate({ key: rule.key, on: next })}
-              />
-            </li>
-          );
-        })}
-      </ul>
+        {error && (
+          <p role="alert" className="mt-3 text-[15px] font-medium text-danger-dark lg:text-[13px]">
+            {error}
+          </p>
+        )}
+        <ul className="mt-3 divide-y divide-line-soft">
+          {RULES.map((rule) => {
+            const raw = byKey.get(rule.key);
+            const on = raw === undefined ? rule.defaultOn : raw === 'true';
+            return (
+              <li key={rule.key} className="flex items-start justify-between gap-4 py-3.5">
+                <div className="min-w-0">
+                  <p className="text-[17px] font-bold text-ink lg:text-[14px]">{rule.title}</p>
+                  <p className="mt-0.5 text-[15px] leading-[1.7] text-ink-soft lg:text-[12px]">{rule.text}</p>
+                </div>
+                <Switch
+                  checked={on}
+                  label={rule.title}
+                  onLabel="مفعّلة"
+                  offLabel="موقوفة"
+                  testId={`rule-switch-${rule.key}`}
+                  busy={toggle.isPending}
+                  onChange={(next) => toggle.mutate({ key: rule.key, on: next })}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </Card>
   );
 }

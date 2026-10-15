@@ -29,9 +29,8 @@ const QUICK_LINKS: QuickLink[] = [
   { to: '/stations', label: 'المحطات', hint: 'قائمة محطات المديرية', show: NAV_ACCESS.stations, icon: 'stations' },
   { to: '/manage', label: 'إدارة المحطات', hint: 'محطات الوقود ومكاتب التسجيل في بلديتك وأشخاصها', show: NAV_ACCESS.manage, icon: 'stations' },
   { to: '/my-station', label: 'محطتي', hint: 'موظفو محطتك والوقود الذي تبيعه والنشاط', show: NAV_ACCESS.myStation, icon: 'stations' },
-  { to: '/my-office', label: 'مكتبي', hint: 'موظفو مكتبك والمكاتب والطابعات والمخزون', show: NAV_ACCESS.myOffice, icon: 'register' },
-  { to: '/lists', label: 'القوائم', hint: 'أنواع الاستثناءات وحدودها اليومية، وأنواع المركبات', show: NAV_ACCESS.lists, icon: 'reports' },
-  { to: '/admin', label: 'الإدارة', hint: 'البلديات والإعدادات وقواعد التعبئة وسجل التغييرات', show: NAV_ACCESS.admin, icon: 'admin' },
+  { to: '/my-office', label: 'مكتبي', hint: 'موظفو مكتبك وتقاريره اليومية', show: NAV_ACCESS.myOffice, icon: 'register' },
+  { to: '/admin', label: 'الإدارة', hint: 'البلديات والإعدادات وقواعد التعبئة والقوائم وسجل التغييرات', show: NAV_ACCESS.admin, icon: 'admin' },
 ];
 
 // Round 16: a first-name-only, time-of-day greeting reads as a system that

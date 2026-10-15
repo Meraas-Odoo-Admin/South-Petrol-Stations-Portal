@@ -21,8 +21,10 @@ import {
 } from '../../lib/labels';
 import { VEHICLE_BRANDS } from '../../lib/vehicleBrands';
 import type { VehicleBasicInfo } from './types';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
-const TAKE = 20;
+const TAKE = LIST_PAGE_SIZE;
 
 interface PendingChangeSummary {
   vehicleId: string;
@@ -146,7 +148,7 @@ export function VehiclesListPage() {
   const filtered = data;
 
   const selectClass =
-    'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-accent';
+    'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark';
 
   return (
     <div>
@@ -203,7 +205,7 @@ export function VehiclesListPage() {
             }}
             placeholder="ابحث برقم اللوحة أو الرمز الداخلي أو الشاسيه أو اسم/رقم هوية المالك"
             dir="ltr"
-            className="h-9 w-full rounded-sm bg-surface pl-3 pr-9 text-end text-[13px] lg:text-[12.5px] text-ink shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-accent"
+            className="h-9 w-full rounded-sm bg-surface pl-3 pr-9 text-end text-[13px] lg:text-[12.5px] text-ink shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-primary-dark"
           />
         </div>
         {/* Round 14: the "usage type" filter was removed alongside the
@@ -278,7 +280,7 @@ export function VehiclesListPage() {
         </select>
       </div>
 
-      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isLoading && <SkeletonRows rows={6} />}
       {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل قائمة المركبات.</p>}
 
       {filtered && (
@@ -364,7 +366,7 @@ export function VehiclesListPage() {
                   style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
                 >
                   <Card
-                    className={`p-4 transition-transform active:scale-[0.98] ${pending ? 'border-s-4 border-accent' : ''}`}
+                    className={`p-4 transition-transform active:scale-[0.98] ${pending ? 'bg-accent-100 ring-2 ring-inset ring-accent' : ''}`}
                   >
                     <div className="flex items-center gap-2.5">
                       <VehicleBrandLogo model={vehicle.make} size={36} />

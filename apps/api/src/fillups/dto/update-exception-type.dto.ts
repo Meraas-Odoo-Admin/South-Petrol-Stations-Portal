@@ -11,11 +11,6 @@ export class UpdateExceptionTypeDto {
   @MinLength(1)
   name?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsBoolean()
-  requiresProof?: boolean;
-
   @ApiProperty({ required: false, description: 'Deactivate instead of deleting — no DELETE endpoints exist anywhere in this system.' })
   @IsOptional()
   @IsBoolean()

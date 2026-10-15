@@ -65,7 +65,7 @@ test('municipality manager: home, manage, exceptions by station, the day, lists'
   await visit(page, '/reports/violations?tab=stations', 'manager-03-exceptions-by-station');
   await weakScreen(page, 'manager-exceptions-by-station');
   await visit(page, '/reports/daily', 'manager-04-day');
-  await visit(page, '/lists', 'manager-05-lists', () => expect(page.getByTestId('exception-types-panel')).toBeVisible());
+  await visit(page, '/admin/lists', 'manager-05-lists', () => expect(page.getByTestId('exception-types-panel')).toBeVisible());
   await context.close();
 });
 
@@ -97,7 +97,7 @@ test('super admin: home, municipalities, settings, lists', async ({ browser }) =
   await visit(page, '/admin/municipalities', 'admin-02-municipalities');
   await visit(page, '/admin/settings', 'admin-03-settings', () => expect(page.getByTestId('global-exception-settings')).toBeVisible());
   await weakScreen(page, 'admin-settings');
-  await visit(page, '/lists', 'admin-04-lists');
+  await visit(page, '/admin/lists', 'admin-04-lists');
   await context.close();
 });
 

@@ -23,9 +23,4 @@ export class CreateOwnerChangeRequestDto {
   @IsString()
   @MinLength(1)
   reason!: string;
-
-  @ApiProperty({ description: 'Mandatory, same as a vehicle change request.' })
-  @IsString()
-  @MinLength(1)
-  proofReference!: string;
 }

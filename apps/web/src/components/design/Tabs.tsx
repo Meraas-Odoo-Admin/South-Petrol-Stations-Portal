@@ -11,9 +11,12 @@ export interface TabDef {
   count?: number;
 }
 
-export function useTab(tabs: TabDef[]): [string, (key: string) => void] {
+// `param` names the address key: a row of tabs inside another tab (the
+// stations / offices tabs inside a municipality's «المحطات والمكاتب») uses its
+// own, so the two never overwrite each other.
+export function useTab(tabs: TabDef[], param = 'tab'): [string, (key: string) => void] {
   const [params, setParams] = useSearchParams();
-  const requested = params.get('tab');
+  const requested = params.get(param);
   const current = tabs.find((t) => t.key === requested)?.key ?? tabs[0]!.key;
   return [
     current,
@@ -21,7 +24,7 @@ export function useTab(tabs: TabDef[]): [string, (key: string) => void] {
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set('tab', key);
+          next.set(param, key);
           // A new tab starts on its first page, without the old tab's page or
           // report-table choice.
           next.delete('page');
@@ -45,7 +48,7 @@ export function Tabs({
   label: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto border-b-2 border-line">
+    <div role="tablist" aria-label={label} className="scrollbar-none flex gap-1 overflow-x-auto border-b-2 border-line lg:flex-wrap lg:overflow-visible">
       {tabs.map((tab) => {
         const active = tab.key === value;
         return (
@@ -58,7 +61,7 @@ export function Tabs({
             aria-controls={`panel-${tab.key}`}
             data-testid={`tab-${tab.key}`}
             onClick={() => onChange(tab.key)}
-            className={`-mb-0.5 flex min-h-[48px] shrink-0 items-center gap-2 border-b-[3px] px-4 text-[16px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:text-[14px] ${
+            className={`-mb-0.5 flex min-h-[48px] shrink-0 items-center gap-2 border-b-[3px] px-4 text-[16px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark lg:text-[14px] ${
               active ? 'border-primary text-primary-dark' : 'border-transparent text-ink-soft hover:text-ink'
             }`}
           >

@@ -13,7 +13,7 @@ import { Icon, ICONS } from '../icons';
 // Sizes follow the phase 4b minimums: 16px text on a phone, 14px on a
 // desktop; the label never drops below 13px / 12px.
 const FIELD_BASE =
-  'w-full rounded-sm border bg-surface-alt px-3.5 text-[16px] text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:text-[14px]';
+  'w-full rounded-sm border bg-surface-alt px-3.5 text-[16px] text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:text-[14px]';
 
 function stateClasses(error: boolean, disabled: boolean): string {
   if (disabled) return 'cursor-not-allowed border-line bg-surface-alt/60 text-ink-soft';

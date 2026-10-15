@@ -8,16 +8,16 @@ const PROFILES: Array<{ key: string; matches: (has: Has) => boolean; order: stri
   {
     key: 'super-admin',
     matches: (has) => has('municipalities:manage'),
-    order: ['/admin', '/reports/violations', '/reports/daily', '/lists', '/reports'],
+    order: ['/admin', '/reports/violations', '/reports/daily', '/reports'],
   },
   {
     key: 'municipality-manager',
     matches: (has) => has('stations:create'),
-    order: ['/manage', '/reports/violations', '/reports/daily', '/lists', '/reports', '/vehicles/change-requests', '/vehicles'],
+    order: ['/manage', '/reports/violations', '/reports/daily', '/admin', '/reports', '/vehicles/change-requests', '/vehicles'],
   },
   {
     key: 'office-manager',
-    matches: (has) => has('users:manage_staff') && has('registration_desks:manage'),
+    matches: (has) => has('users:manage_staff') && has('registration_reports:view'),
     order: ['/my-office', '/registration', '/vehicles', '/reports', '/vehicles/change-requests'],
   },
   {

@@ -79,12 +79,13 @@ test('municipality manager: station, its supervisor, an office manager, archive 
 
   await page.getByRole('link', { name: 'إدارة المحطات' }).first().click();
   await expect(page).toHaveURL('/manage');
-  // No people-management list, no admin area, no security-authorities section.
-  await expect(page.getByRole('link', { name: 'الإدارة', exact: true })).toHaveCount(0);
+  // No people-management list and no security-authorities section. Phase 7: «الإدارة»
+  // is there, holding only «القوائم» — not the super admin's municipalities or settings.
+  await expect(page.getByRole('link', { name: 'البلديات', exact: true })).toHaveCount(0);
   await shots(page, '10-manage-places');
 
-  // A new station.
-  await page.getByRole('button', { name: 'محطة وقود جديدة' }).click();
+  // A new station (Phase 7: the «إضافة» of the stations tab).
+  await page.getByTestId('stations-list-add').click();
   await expect(page).toHaveURL('/manage/stations/new');
   const stationName = `محطة اختبار ${tag(5)}`;
   await page.locator('#st-company').selectOption({ index: 1 });
@@ -121,8 +122,9 @@ test('municipality manager: station, its supervisor, an office manager, archive 
 
   // The office manager of the fixture office.
   await navigateInApp(page, '/manage');
-  // The list is paged (25 a page): search for the one wanted.
-  await page.locator('#pl-search').fill(fixtures.registrationStationName);
+  // Phase 7: offices are their own tab. The list is paged: search for the one wanted.
+  await page.getByTestId('tab-offices').click();
+  await page.locator('#pl-of-search').fill(fixtures.registrationStationName);
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByRole('heading', { name: fixtures.registrationStationName })).toBeVisible();
   // Phase 5B: the people of a place are in its «الموظفون» tab.

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { NAV_PATHS, activeNavPath } from './navAccess.ts';
+import { NAV_ACCESS, NAV_PATHS, activeNavPath, singleDestination } from './navAccess.ts';
+// The real role grants, the same data the seed writes to the database.
+import { ROLE_PERMISSIONS } from '../../../api/prisma/rbac-catalog.ts';
 
 // Run by `pnpm test` in apps/web. The side menu, the phone bar and the phone
 // sheet all light the item `activeNavPath` returns, so one function decides.
@@ -59,4 +61,28 @@ test('the side menu items are exactly the nav list', () => {
   const block = source.slice(source.indexOf('const navItems'), source.indexOf('].filter((item) => item.show)'));
   const targets = [...block.matchAll(/to: '([^']+)'/g)].map((m) => m[1]!).sort();
   assert.deepEqual(targets, [...NAV_PATHS].sort());
+});
+
+const roleHas = (role: string) => (permission: string) => (ROLE_PERMISSIONS[role] ?? []).includes(permission);
+
+// After review (15 Oct 2026): the station employee records fill-ups and does
+// nothing else — the app opens on «تسجيل تعبئة», with no home screen, records,
+// reports or notifications.
+test('the station employee has one destination: «تسجيل تعبئة»', () => {
+  const has = roleHas('station_employee');
+  assert.equal(singleDestination(has), '/fillups/new');
+  for (const key of ['vehicles', 'stations', 'reports', 'dailyReport', 'violations', 'myStation', 'admin'] as const) {
+    assert.equal(NAV_ACCESS[key](has), false, `${key} is shown to the station employee`);
+  }
+  assert.equal(has('notifications:read'), false);
+  assert.equal(has('fuel_stock:read_visible'), false);
+});
+
+test('every other catalog role keeps its home screen, and whoever read vehicles still has the vehicles screen', () => {
+  for (const role of Object.keys(ROLE_PERMISSIONS)) {
+    if (role === 'station_employee') continue;
+    const has = roleHas(role);
+    assert.equal(singleDestination(has), null, `${role} lost its home screen`);
+    if (has('vehicles:read')) assert.ok(NAV_ACCESS.vehicles(has), `${role} lost «المركبات»`);
+  }
 });

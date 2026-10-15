@@ -17,10 +17,10 @@
 //   "08-1234567"   → "8-1234567"
 //   "8 / 1234567"  → "8-1234567"   (any run of separators is ONE separator)
 //
-// Phase 5A: a plate may carry an optional trailing letter N (12% of real
-// plates, e.g. `5-1234567N`). The N is PART OF THE PLATE'S IDENTITY: `5-123456N`
-// and `5-123456` are two different plates and never normalize to the same
-// value. `5-1234567 N` and `5-1234567n` are the same plate as `5-1234567N`.
+// Phase 7: a plate is digits only. The optional trailing N of Phase 5A is
+// gone (Libyan plates carry no letter): a plate typed with an N has no
+// canonical form, so the API refuses it as PLATE_INVALID. Plates stored with
+// an N before Phase 7 keep it in the database; it just can't be typed now.
 //
 // A plate typed with no separator ("81234567") is ambiguous — nothing says
 // where the city code ends — so it has NO canonical form: normalizePlate()
@@ -62,37 +62,25 @@ export function toWesternDigits(raw: string): string {
 export interface PlateParts {
   city: string;
   serial: string;
-  /** The optional trailing N; '' when the plate has none. */
-  suffix: '' | 'N';
 }
 
-// Splits a typed plate into its parts, or null when it can't be split into a
-// city code, a serial number and (optionally) the trailing N.
+// Splits a typed plate into its city code and serial number, or null when it
+// can't be split into exactly those two runs of digits.
 export function splitPlate(raw: string): PlateParts | null {
-  let pieces = toWesternDigits(raw)
+  const pieces = toWesternDigits(raw)
     .split(SEPARATORS)
     .filter((piece) => piece !== '');
-  let suffix: '' | 'N' = '';
-  // "5-1234567-N" / "5 1234567 N": the N typed as its own piece.
-  if (pieces.length === 3 && /^[Nn]$/.test(pieces[2]!)) {
-    suffix = 'N';
-    pieces = pieces.slice(0, 2);
-  } else if (pieces.length === 2 && /^[0-9]+[Nn]$/.test(pieces[1]!)) {
-    // "5-1234567N": the N glued to the serial.
-    suffix = 'N';
-    pieces = [pieces[0]!, pieces[1]!.slice(0, -1)];
-  }
   if (pieces.length !== 2) return null;
   const [city, serial] = pieces.map((piece) => (/^[0-9]+$/.test(piece) ? piece.replace(/^0+/, '') : null));
   if (!city || !serial) return null;
   if (city.length > CITY_CODE_MAX_DIGITS || serial.length > SERIAL_MAX_DIGITS) return null;
-  return { city, serial, suffix };
+  return { city, serial };
 }
 
 // The canonical form, or null when the plate can't be split (see above).
 export function normalizePlate(raw: string): string | null {
   const parts = splitPlate(raw);
-  return parts ? `${parts.city}-${parts.serial}${parts.suffix}` : null;
+  return parts ? `${parts.city}-${parts.serial}` : null;
 }
 
 // True when both plates are splittable and are the same plate.
@@ -101,16 +89,13 @@ export function platesMatch(a: string, b: string): boolean {
   return left !== null && left === normalizePlate(b);
 }
 
-// A partial plate typed into a SEARCH box ("8-12", "٨ 12", "5-12N"): the same
-// digit and separator rules, but no validation and no zero-stripping, so a
-// prefix still matches as the user types. A trailing N is kept (upper-cased).
-// Returns '' when the text isn't plate-like at all (other letters etc.), so
-// callers skip the plate clause.
+// A partial plate typed into a SEARCH box ("8-12", "٨ 12"): the same digit
+// and separator rules, but no validation and no zero-stripping, so a prefix
+// still matches as the user types. Returns '' when the text isn't plate-like
+// at all (letters etc.), so callers skip the plate clause.
 export function plateSearchTerm(raw: string): string {
   const term = toWesternDigits(raw)
     .trim()
-    .replace(new RegExp(SEPARATORS.source, 'gu'), '-')
-    .replace(/-+n$/i, 'N')
-    .replace(/n$/i, 'N');
-  return /^[0-9-]+N?$/.test(term) && /[0-9]/.test(term) ? term : '';
+    .replace(new RegExp(SEPARATORS.source, 'gu'), '-');
+  return /^[0-9-]+$/.test(term) && /[0-9]/.test(term) ? term : '';
 }

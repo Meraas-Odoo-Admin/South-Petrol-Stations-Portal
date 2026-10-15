@@ -107,9 +107,9 @@ export function VehicleSearchSelect({ value, onChange, initialLabel, onQueryChan
         // Client's own recommended fix: make the placeholder look like an
         // example plate shape instead, which both fits the bold styling
         // naturally and doubles as an implicit format hint.
-        placeholder="8-xxxxxxxx"
+        placeholder="مثال: 5-1234567"
         dir="ltr"
-        className="h-12 w-full rounded-sm border border-line bg-surface-alt px-3 text-end font-mono text-[20px] font-extrabold text-primary-dark placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent"
+        className="h-12 w-full rounded-sm border border-line bg-surface-alt px-3 text-end font-mono text-[20px] font-extrabold text-primary-dark placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-primary-dark"
       />
       <p className="mt-1 text-[13px] lg:text-[12px] text-ink-soft">
         مثال: <LtrText>{LICENSE_PLATE_DISPLAY_EXAMPLE}</LtrText>

@@ -119,5 +119,18 @@ describe('RBAC catalog sync (e2e)', () => {
       expect(ROLE_PERMISSIONS.registration_supervisor).toContain('cards:cancel');
       expect(ROLE_PERMISSIONS.station_employee).not.toContain('owners:read');
     });
+
+    // After review (Khalil, 15 Oct 2026): the station employee records fill-ups
+    // and nothing else. Exactly what the fill-up screen calls — no record
+    // screens (records:browse), reports, stock or notifications.
+    it('gives the station employee only what recording a fill-up needs', () => {
+      expect([...ROLE_PERMISSIONS.station_employee!].sort()).toEqual(
+        ['cards:scan', 'fillups:create', 'fillups:record_exception', 'stations:read', 'vehicles:read'].sort(),
+      );
+      for (const [role, grants] of Object.entries(ROLE_PERMISSIONS)) {
+        if (role === 'station_employee' || role === 'system_admin') continue;
+        if (grants.includes('vehicles:read')) expect(grants).toContain('records:browse');
+      }
+    });
   });
 });

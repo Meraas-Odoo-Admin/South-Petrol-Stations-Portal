@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { StatusPill } from '../../components/design/StatusPill';
 import { useAuth } from '../auth/AuthProvider';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 // The top of «إدارة المحطات» and of a municipality in «إدارة البلديات»:
 // a short row of the numbers that need a decision.
@@ -58,7 +59,7 @@ export function PlaceSummaryRow({ municipalityId }: { municipalityId?: string })
     staleTime: 60_000,
   });
   if (!allowed) return null;
-  if (query.isLoading) return <p className="mb-4 text-[15px] text-ink-soft">جارٍ تحميل الملخص…</p>;
+  if (query.isLoading) return <SkeletonRows rows={2} label="جارٍ تحميل الملخص" />;
   if (query.isError || !query.data) return null;
   const { registration: r, fuel: f } = query.data;
   const tall = new Intl.NumberFormat('en-US');

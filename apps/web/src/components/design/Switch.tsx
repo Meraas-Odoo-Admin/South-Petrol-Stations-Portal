@@ -37,7 +37,7 @@ export function Switch({
       data-testid={testId}
       disabled={disabled || busy}
       onClick={() => onChange(!checked)}
-      className="flex min-h-[44px] shrink-0 items-center gap-2.5 rounded-full px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-60"
+      className="flex min-h-[44px] shrink-0 items-center gap-2.5 rounded-full px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 disabled:opacity-60"
     >
       <span className={`text-[15px] font-bold lg:text-[13px] ${checked ? 'text-ok' : 'text-ink-soft'}`}>{word}</span>
       <span

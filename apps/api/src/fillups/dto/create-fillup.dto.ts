@@ -58,9 +58,4 @@ export class CreateFillUpDto {
   @IsString()
   @MinLength(1)
   reason?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  proofReference?: string;
 }

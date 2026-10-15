@@ -6,15 +6,24 @@
 
 export type HasPermission = (permission: string) => boolean;
 
+// The lookup lists (exception types, vehicle types): who may manage either.
+const canManageLists = (has: HasPermission) => has('exception_types:manage') || has('vehicle_types:manage');
+
 export const NAV_ACCESS = {
   home: () => true,
   fillup: (has: HasPermission) => has('fillups:create'),
   // Registering needs both: vehicles:manage to create, and a registration
   // station to do it at.
   registration: (has: HasPermission) => has('vehicles:manage') && has('registration_stations:read'),
-  vehicles: (has: HasPermission) => has('vehicles:read'),
+  // records:browse, not vehicles:read: the station employee looks vehicles up
+  // while recording but has no vehicles screen (after review, 15 Oct 2026).
+  vehicles: (has: HasPermission) => has('records:browse'),
   violations: (has: HasPermission) => has('reports:view'),
-  changeRequests: (has: HasPermission) => has('vehicles:approve_change'),
+  // After review (Khalil, 15 Oct 2026): «طلبات التعديل» is hidden from every
+  // role — no menu item, home card or bar tab. The screen and its API stay
+  // (/vehicles/change-requests, vehicles:approve_change); bring the entry back
+  // with \`(has) => has('vehicles:approve_change')\`.
+  changeRequests: (_has: HasPermission) => false,
   dailyReport: (has: HasPermission) => has('reports:view'),
   // Phase 5B: ONE reports destination. What it shows is each job's own
   // reports; the API decides what each may read. The three 4c monitoring pages
@@ -32,22 +41,53 @@ export const NAV_ACCESS = {
   //    the people inside each);
   //  - «محطتي»: a station supervisor's own station and employees;
   //  - «مكتبي»: a registration office manager's own office and employees;
-  //  - «الإدارة»: the super admin's municipalities, settings and audit log.
+  //  - «الإدارة»: the super admin's municipalities, settings and audit log,
+  //    and «القوائم» (Phase 7: a tab here, not its own menu item), which a
+  //    municipality manager opens too.
   manage: (has: HasPermission) => has('stations:create') || has('registration_stations:manage'),
   myStation: (has: HasPermission) =>
     has('users:manage_staff') && has('stations:manage') && !has('stations:create'),
   myOffice: (has: HasPermission) =>
-    has('users:manage_staff') && has('registration_desks:manage') && !has('registration_stations:manage'),
+    // Phase 7: told apart by the office's own reports (the desk permission is gone).
+    has('users:manage_staff') && has('registration_reports:view') && !has('registration_stations:manage'),
   // The plain station list is for people who have no station page of their own.
   stations: (has: HasPermission) =>
-    has('stations:read') && !has('stations:create') && !has('users:manage_staff'),
-  // Phase 6: the lookup lists (exception types, vehicle types) in one place.
-  lists: (has: HasPermission) => has('exception_types:manage') || has('vehicle_types:manage'),
+    has('records:browse') && has('stations:read') && !has('stations:create') && !has('users:manage_staff'),
+  // Phase 6: the lookup lists (exception types, vehicle types) in one place;
+  // Phase 7: the «القوائم» tab of «الإدارة».
+  lists: canManageLists,
   admin: (has: HasPermission) =>
-    has('municipalities:manage') || has('settings:manage') || has('audit:view'),
+    has('municipalities:manage') || has('settings:manage') || has('audit:view') || canManageLists(has),
 } as const;
 
 export type NavKey = keyof typeof NAV_ACCESS;
+
+// Where each destination lives («القوائم» is a tab of «الإدارة», not its own).
+const DESTINATION_PATHS: Partial<Record<NavKey, string>> = {
+  fillup: '/fillups/new',
+  registration: '/registration',
+  vehicles: '/vehicles',
+  violations: '/reports/violations',
+  changeRequests: '/vehicles/change-requests',
+  reports: '/reports',
+  dailyReport: '/reports/daily',
+  manage: '/manage',
+  myStation: '/my-station',
+  myOffice: '/my-office',
+  stations: '/stations',
+  admin: '/admin',
+};
+
+// Someone with ONE destination besides the home screen (the station employee:
+// «تسجيل تعبئة», after review 15 Oct 2026) has no home screen and no menu of
+// one item: the app opens straight on that screen. Read from the permissions,
+// like everything else here — never from the role's name.
+export function singleDestination(has: HasPermission): string | null {
+  const paths = (Object.keys(DESTINATION_PATHS) as NavKey[])
+    .filter((key) => (NAV_ACCESS[key] as (h: HasPermission) => boolean)(has))
+    .map((key) => DESTINATION_PATHS[key]!);
+  return paths.length === 1 ? (paths[0] ?? null) : null;
+}
 
 // Every destination of the side menu, the phone bar and the phone sheet. The
 // layout builds its items from these paths; keeping them here lets one pure
@@ -65,7 +105,6 @@ export const NAV_PATHS = [
   '/my-station',
   '/my-office',
   '/stations',
-  '/lists',
   '/admin',
 ] as const;
 

@@ -11,9 +11,12 @@ import { Icon, ICONS } from '../../components/icons';
 import { Notice } from '../users/parts';
 import { useMunicipalityList } from '../places/placesShared';
 import { adminErrorMessage } from './adminErrors';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { Pagination } from '../../components/Pagination';
+import { useClientPage } from '../../lib/pageSize';
 
 const SELECT_CLASS =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 // «إدارة البلديات» — the super admin's list of municipalities, with search,
 // filters and sortable columns. Opening one shows everything about it. The
@@ -72,6 +75,7 @@ export function MunicipalitiesAdminPage() {
   }
 
   const rows = list.data ?? [];
+  const rowPage = useClientPage(rows);
   const sortHeader = (key: string, label: string) => (
     <th
       scope="col"
@@ -151,7 +155,7 @@ export function MunicipalitiesAdminPage() {
             <Notice kind="error">تعذّر تحميل البلديات. تأكد من الاتصال ثم أعد المحاولة.</Notice>
           </div>
         )}
-        {list.isLoading && <p className="p-4 text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+        {list.isLoading && <SkeletonRows rows={5} />}
         {list.data && rows.length === 0 && (
           <div className="px-4 py-10 text-center">
             <p className="text-[18px] font-extrabold text-ink lg:text-[15px]">
@@ -177,10 +181,10 @@ export function MunicipalitiesAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((m) => (
+                  {rowPage.pageItems.map((m) => (
                     <tr key={m.id} className="border-b border-line-soft last:border-0 hover:bg-surface-alt/60" data-testid={`municipality-row-${m.id}`}>
                       <td className="px-[18px] py-3 font-bold text-ink">
-                        <Link to={`/admin/municipalities/${m.id}`} className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                        <Link to={`/admin/municipalities/${m.id}`} className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark">
                           {m.name}
                         </Link>
                       </td>
@@ -208,7 +212,7 @@ export function MunicipalitiesAdminPage() {
               </table>
             </div>
             <ul className="divide-y divide-line-soft lg:hidden">
-              {rows.map((m) => (
+              {rowPage.pageItems.map((m) => (
                 <li key={m.id}>
                   <Link to={`/admin/municipalities/${m.id}`} className="block min-h-[88px] px-4 py-4 hover:bg-surface-alt/60">
                     <p className="text-[18px] font-extrabold text-ink">{m.name}</p>
@@ -228,6 +232,7 @@ export function MunicipalitiesAdminPage() {
                 </li>
               ))}
             </ul>
+            <Pagination skip={rowPage.skip} take={rowPage.take} total={rowPage.total} onSkipChange={rowPage.setSkip} testId="municipalities-pager" />
           </>
         )}
       </Card>

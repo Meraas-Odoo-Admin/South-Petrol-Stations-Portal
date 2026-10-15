@@ -8,6 +8,7 @@ import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice } from './parts';
 import { useAccountMutation } from './useUsers';
 import type { UserDetail } from './types';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 // A person's permissions, grouped by area, in plain Arabic (phase 5B).
 //
@@ -74,7 +75,7 @@ export function AdvancedCard({ user }: { user: UserDetail }) {
           aria-controls="advanced-body"
           data-testid="permissions-toggle"
           onClick={() => setOpen((o) => !o)}
-          className="flex min-h-[48px] w-full items-center justify-between gap-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          className="flex min-h-[48px] w-full items-center justify-between gap-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2"
         >
           <span>
             <span className="block text-[18px] font-extrabold text-ink lg:text-[15px]">الصلاحيات</span>
@@ -93,7 +94,7 @@ export function AdvancedCard({ user }: { user: UserDetail }) {
               صلاحيات الوظيفة ثابتة ولا تُسحب وحدها: لتغييرها غيّر الوظيفة. الصلاحيات الإضافية للحالات الاستثنائية فقط، وكل منح أو سحب يُسجَّل باسمك.
             </Notice>
             {error && <Notice kind="error">{adminErrorMessage(error, 'تعذّر تغيير الصلاحية.')}</Notice>}
-            {permissions.isLoading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ تحميل القائمة…</p>}
+            {permissions.isLoading && <SkeletonRows rows={4} label="جارٍ تحميل القائمة" />}
             {permissions.isError && <Notice kind="error">تعذّر تحميل قائمة الصلاحيات.</Notice>}
             {permissions.data && fromJobCount === 0 && (
               <p className="text-[15px] text-ink-soft lg:text-[13px]">لا وظيفة محدّدة لهذا الحساب بعد.</p>

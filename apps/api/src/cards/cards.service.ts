@@ -46,7 +46,6 @@ export class CardIssuePolicy {
 
 const CARD_INCLUDE = {
   registrationStation: { select: { id: true, internalCode: true, name: true } },
-  desk: { select: { id: true, name: true } },
   issuedBy: { select: { id: true, fullName: true } },
   cancelledBy: { select: { id: true, fullName: true } },
 } as const;
@@ -140,34 +139,20 @@ export class CardsService {
     return card;
   }
 
-  // Printing, reprinting and the failed-print path are desk actions at the
-  // office the PRINTING employee works at - which is not necessarily the office
-  // that first issued the card (vehicles are global: any registration
-  // employee, in any office, may reprint any vehicle's card). The office and
-  // desk come from the request; without them the card's own office and desk are
-  // used, as before. The print is counted against the office and desk it is
-  // printed at (its blank-card stock), whoever first issued the card.
-  private async resolveDeskAction(
+  // Printing, reprinting and the failed-print path happen at the office the
+  // PRINTING employee works at - which is not necessarily the office that first
+  // issued the card (vehicles are global: any registration employee, in any
+  // office, may reprint any vehicle's card). The office comes from the request;
+  // without it the card's own office is used. Phase 7: a print is recorded
+  // against the office and the employee only (desks and printers are gone).
+  private async resolvePrintOffice(
     card: VehicleCard,
-    where: { registrationStationId?: string; deskId?: string },
+    where: { registrationStationId?: string },
     actorId: string,
-  ): Promise<{ registrationStationId: string; deskId: string }> {
+  ): Promise<string> {
     const registrationStationId = where.registrationStationId ?? card.registrationStationId;
     await this.registrationStations.assertCanRegisterAt(registrationStationId, actorId);
-    const sameOffice = registrationStationId === card.registrationStationId;
-    const deskId = where.deskId ?? (sameOffice ? card.deskId : undefined);
-    if (!deskId) {
-      throw new ConflictException('DESK_NOT_AVAILABLE');
-    }
-    // Same-office, same-desk keeps the card's own desk even if it has since
-    // been retired (as before); any other desk must be an active desk there.
-    if (!(sameOffice && deskId === card.deskId)) {
-      const desk = await this.prisma.registrationDesk.findUnique({ where: { id: deskId } });
-      if (!desk || desk.registrationStationId !== registrationStationId || !desk.isActive) {
-        throw new ConflictException('DESK_NOT_AVAILABLE');
-      }
-    }
-    return { registrationStationId, deskId };
+    return registrationStationId;
   }
 
   // Creates the new card row (and marks `replacing` REPLACED first) inside
@@ -177,7 +162,6 @@ export class CardsService {
     params: {
       vehicleId: string;
       registrationStationId: string;
-      deskId: string;
       reason: VehicleCardIssueReason;
       reasonNote?: string;
       actorId: string;
@@ -245,7 +229,6 @@ export class CardsService {
         cardNumber,
         vehicleId: params.vehicleId,
         registrationStationId: params.registrationStationId,
-        deskId: params.deskId,
         issuedById: params.actorId,
         issuedAt,
         reason: params.reason,
@@ -266,7 +249,6 @@ export class CardsService {
           vehicleId: card.vehicleId,
           reason: card.reason,
           registrationStationId: card.registrationStationId,
-          deskId: card.deskId,
           replacedCardId: params.replacing?.id,
         },
       },
@@ -277,10 +259,6 @@ export class CardsService {
 
   async issue(vehicleId: string, dto: IssueCardDto, actorId: string) {
     await this.registrationStations.assertCanRegisterAt(dto.registrationStationId, actorId);
-    const desk = await this.prisma.registrationDesk.findUnique({ where: { id: dto.deskId } });
-    if (!desk || desk.registrationStationId !== dto.registrationStationId || !desk.isActive) {
-      throw new ConflictException('DESK_NOT_AVAILABLE');
-    }
     const vehicle = await this.prisma.vehicle.findUnique({ where: { id: vehicleId }, select: { id: true } });
     if (!vehicle) {
       throw new NotFoundException('Vehicle not found.');
@@ -304,7 +282,6 @@ export class CardsService {
         return this.createCardInTx(tx, {
           vehicleId,
           registrationStationId: dto.registrationStationId,
-          deskId: dto.deskId,
           reason: dto.reason,
           reasonNote: dto.reasonNote,
           actorId,
@@ -313,7 +290,7 @@ export class CardsService {
       });
       return this.present(await this.findCard(card.id));
     } catch (error) {
-      // Two desks issuing for the same vehicle at the same instant: the
+      // Two employees issuing for the same vehicle at the same instant: the
       // database's one-active-card rule lets exactly one through.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('CARD_ISSUE_CONFLICT');
@@ -323,10 +300,10 @@ export class CardsService {
   }
 
   // "هل طُبعت البطاقة بشكل سليم؟" → no: the misprinted card is cancelled on
-  // the spot and a new card number is issued at the same station and desk.
-  async failedPrint(cardId: string, where: { registrationStationId?: string; deskId?: string }, actorId: string) {
+  // the spot and a new card number is issued at the same office.
+  async failedPrint(cardId: string, where: { registrationStationId?: string }, actorId: string) {
     const card = await this.findCard(cardId);
-    const desk = await this.resolveDeskAction(card, where, actorId);
+    const registrationStationId = await this.resolvePrintOffice(card, where, actorId);
     if (card.status !== 'ACTIVE') {
       throw new ConflictException('CARD_NOT_ACTIVE');
     }
@@ -354,8 +331,7 @@ export class CardsService {
       );
       return this.createCardInTx(tx, {
         vehicleId: card.vehicleId,
-        registrationStationId: desk.registrationStationId,
-        deskId: desk.deskId,
+        registrationStationId,
         reason: 'FAILED_PRINT',
         actorId,
         replacing: null,
@@ -416,11 +392,11 @@ export class CardsService {
   async print(
     cardId: string,
     mode: CardRenderMode,
-    where: { registrationStationId?: string; deskId?: string },
+    where: { registrationStationId?: string },
     actorId: string,
   ): Promise<{ pdf: Buffer; cardNumber: string }> {
     const card = await this.findCard(cardId);
-    const desk = await this.resolveDeskAction(card, where, actorId);
+    const registrationStationId = await this.resolvePrintOffice(card, where, actorId);
     if (card.status !== 'ACTIVE') {
       throw new ConflictException('CARD_NOT_ACTIVE');
     }
@@ -430,8 +406,7 @@ export class CardsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.cardPrint.create({
         data: {
-          registrationStationId: desk.registrationStationId,
-          deskId: desk.deskId,
+          registrationStationId,
           kind: 'CARD',
           cardId: card.id,
           printedById: actorId,
@@ -446,8 +421,7 @@ export class CardsService {
           newValue: {
             cardNumber: card.cardNumber,
             mode,
-            printedAtRegistrationStationId: desk.registrationStationId,
-            printedAtDeskId: desk.deskId,
+            printedAtRegistrationStationId: registrationStationId,
           },
         },
         tx,

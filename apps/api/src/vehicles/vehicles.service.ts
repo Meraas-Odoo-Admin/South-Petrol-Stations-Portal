@@ -697,7 +697,6 @@ export class VehiclesService {
           currentValue,
           requestedValue: dto.requestedValue,
           reason: dto.reason,
-          proofReference: dto.proofReference,
           requestedById: actorId,
         },
       });

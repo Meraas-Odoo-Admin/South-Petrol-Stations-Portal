@@ -37,6 +37,8 @@ export interface DigitBoxInputProps {
   // firing a lookup against a still-partial value) should gate on this
   // rather than on value/onChange alone, which fires on every keystroke.
   onFocusLeave?: () => void;
+  /** What the boxes hold, read to a screen reader (Phase 7 audit), e.g. «رقم اللوحة». */
+  label?: string;
 }
 
 export function DigitBoxInput({
@@ -50,6 +52,7 @@ export function DigitBoxInput({
   className,
   'data-testid': testId,
   onFocusLeave,
+  label = 'الرقم',
 }: DigitBoxInputProps) {
   const total = totalBoxes(groups);
   const groupValues = splitToGroups(value, groups, separator);
@@ -342,9 +345,16 @@ export function DigitBoxInput({
   // straight from groupValues.
   const renderDigits = flatDigits();
 
+  // Phase 7 (Part B): the 12-box identity row was ~388px wide and ran past a
+  // 390px phone's card. A row of more than 10 boxes uses 23px boxes and 3px
+  // gaps on a phone (12 boxes: 317px), so the whole number fits without
+  // scrolling; larger screens keep the usual size.
+  const dense = total > 10;
+  const gapClass = dense ? 'gap-[3px] sm:gap-1.5' : 'gap-1 sm:gap-1.5';
+
   let flatCursor = 0;
   return (
-    <div data-testid={testId} data-complete={complete}>
+    <div data-testid={testId} data-complete={complete} role="group" aria-label={label}>
       {/* Round 11 item 5: at real phone widths (~360-390px) the 9-box plate
           row (2+7 boxes, dash, gaps) is wider than the padded content area
           a `Card` (`overflow-hidden`) leaves for it — the row overflowed
@@ -385,7 +395,7 @@ export function DigitBoxInput({
             via w-full, long content grows past 100% and genuinely
             overflows the outer wrapper, which then scrolls instead of
             squeezing or clipping. */}
-        <div className="flex w-full min-w-max items-center justify-center gap-1 sm:gap-1.5" dir="ltr">
+        <div className={`flex w-full min-w-max items-center justify-center ${gapClass}`} dir="ltr">
           {groups.map((group, groupIndex) => {
             const boxes = Array.from({ length: group.boxes }, (_, i) => {
               const flatIndex = flatCursor + i;
@@ -397,6 +407,7 @@ export function DigitBoxInput({
                     boxRefs.current[flatIndex] = el;
                   }}
                   data-testid={testId ? `${testId}-box-${flatIndex}` : undefined}
+                  aria-label={`${label}: الخانة ${flatIndex + 1} من ${total}`}
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -411,14 +422,14 @@ export function DigitBoxInput({
                   onPaste={(e) => handlePaste(flatIndex, e)}
                   className={
                     className ??
-                    'h-11 w-7 sm:w-8 rounded-sm border border-line bg-surface-alt text-center text-[16px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-accent'
+                    `h-11 ${dense ? 'w-[23px]' : 'w-7'} sm:w-8 rounded-sm border border-line bg-surface-alt text-center text-[16px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark`
                   }
                 />
               );
             });
             flatCursor += group.boxes;
             return (
-              <span key={groupIndex} className="flex items-center gap-1 sm:gap-1.5">
+              <span key={groupIndex} className={`flex items-center ${gapClass}`}>
                 {groupIndex > 0 && separator && <span className="text-[16px] font-bold text-ink-faint">{separator}</span>}
                 {boxes}
               </span>
@@ -444,6 +455,7 @@ export function DigitBoxInput({
             type="button"
             disabled={disabled}
             onClick={handleKeypadBackspace}
+            aria-label="حذف آخر رقم"
             className="h-11 rounded-sm bg-surface-alt text-[15px] lg:text-[13px] font-bold text-ink-soft hover:bg-primary-100"
           >
             ⌫

@@ -14,6 +14,8 @@ import { TemporaryPasswordPanel } from './TemporaryPasswordPanel';
 import { Notice, SectionCard } from './parts';
 import { useCreateUser, usePlaceOptions, useUserOptions } from './useUsers';
 import type { CreatedUser, JobOption, PlaceKind } from './types';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { focusFirstInvalid } from '../../lib/focusField';
 
 const placeKindOf = (job: JobOption): PlaceKind => job.placeKind ?? (job.municipalityScoped ? 'MUNICIPALITY' : job.kind);
 
@@ -97,7 +99,8 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
     event.preventDefault();
     const found = validate();
     setErrors(found);
-    if (Object.keys(found).length > 0 || !selected) return;
+    if (Object.keys(found).length > 0) return focusFirstInvalid();
+    if (!selected) return;
     create.mutate(
       {
         username: username.trim(),
@@ -174,7 +177,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
     <form onSubmit={submit} noValidate className="mx-auto max-w-3xl space-y-4">
       <Link
         to={backPath}
-        className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 lg:text-[14px]"
+        className="inline-flex min-h-[44px] items-center gap-2 rounded-full pe-3 text-[16px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 lg:text-[14px]"
       >
         <Icon d={ICONS.arrowBack} size={18} />
         العودة إلى القائمة
@@ -215,7 +218,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
       </SectionCard>
 
       <SectionCard step={2} title="ما وظيفته؟" description="لكل شخص وظيفة واحدة.">
-        {options.isLoading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ تحميل الوظائف…</p>}
+        {options.isLoading && <SkeletonRows rows={3} label="جارٍ تحميل الوظائف" />}
         {options.isError && <Notice kind="error">تعذّر تحميل الوظائف. أعد تحميل الصفحة.</Notice>}
         {fixedJob ? (
           <div className="rounded-md border-2 border-primary bg-primary-100 p-4">

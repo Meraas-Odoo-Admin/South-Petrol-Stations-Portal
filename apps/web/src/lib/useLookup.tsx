@@ -43,7 +43,7 @@ export function LookupSearch({
         type="search"
         value={q}
         onChange={(e) => onChange(e.target.value)}
-        className="h-[44px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:text-[14px]"
+        className="h-[44px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:text-[14px]"
       />
     </div>
   );

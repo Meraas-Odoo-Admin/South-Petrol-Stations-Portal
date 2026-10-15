@@ -7,6 +7,7 @@ import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { Pagination } from '../../components/Pagination';
 import { dayLabel, stamp } from '../regreports/common';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 // One screen component for every phase-5B report: the API returns named
 // tables (apps/api/src/ops-reports/ops-report-types.ts) and this draws them.
@@ -43,7 +44,7 @@ export interface OpsReport {
 }
 
 const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
-export const PAGE = 25;
+export const PAGE = LIST_PAGE_SIZE;
 
 const GOOD = ['سليم', 'في المسار', 'فعّال', 'مفعّلة', 'لا أحد بلا بطاقة'];
 const BAD = ['غير مبرَّر', 'بطاقات غير مبرَّرة', 'فات الموعد', 'معرّض للتأخر', 'بيانات تحتاج مراجعة', 'فارغ', 'يحتاج مراجعة'];
@@ -140,9 +141,9 @@ export function OpsTableView({
 
   return (
     <Card className="mb-4" data-testid={`ops-table-${table.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-primary-100/50 px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-primary/15 bg-primary-100 px-4 py-3">
         <div className="min-w-0">
-          <h3 className="text-[18px] font-extrabold text-primary-dark lg:text-[15px]">{table.title}</h3>
+          <h3 className="text-[16px] font-extrabold text-primary-dark lg:text-[14px]">{table.title}</h3>
           {table.note && <p className="mt-0.5 text-[14px] leading-[1.7] text-ink-soft lg:text-[12px]">{table.note}</p>}
         </div>
         {total > 0 && (
@@ -196,7 +197,7 @@ export function OpsTableView({
                       <button
                         type="button"
                         onClick={() => toggle(c.key)}
-                        className="inline-flex min-h-[32px] items-center gap-1 rounded hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        className="inline-flex min-h-[32px] items-center gap-1 rounded hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark"
                       >
                         {c.label}
                         <span aria-hidden="true" className="text-[13px] text-ink-soft lg:text-[12px]">

@@ -48,7 +48,7 @@ export function JobPicker({
                       className="peer sr-only"
                     />
                     <span
-                      className={`block min-h-[64px] rounded-md border-2 p-4 transition peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 ${
+                      className={`block min-h-[64px] rounded-md border-2 p-4 transition peer-focus-visible:ring-2 peer-focus-visible:ring-primary-dark peer-focus-visible:ring-offset-2 ${
                         checked ? 'border-primary bg-primary-100' : 'border-line bg-surface hover:bg-surface-alt'
                       } ${disabled && !checked ? 'opacity-60' : ''}`}
                     >

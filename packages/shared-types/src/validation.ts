@@ -99,7 +99,14 @@ export function checkNationalId(raw: string, options: IdCheckOptions = {}): Fiel
 
 // ── administrative number (الرقم الإداري) ───────────────────────────
 
-export const ADMINISTRATIVE_ID_HELP = 'يبدأ بالرقم 9 ويتكوّن من 12 رقمًا.';
+// Phase 7 (14 Oct 2026): 10 digits, the first 5 (male) or 6 (female). It
+// replaced "12 digits starting with 9". It carries no birth year, so there is
+// no year or age check.
+export const ADMINISTRATIVE_ID_LENGTH = 10;
+
+export const ADMINISTRATIVE_ID_HELP = 'يتكوّن من 10 أرقام ويبدأ بـ 5 (ذكر) أو 6 (أنثى).';
+
+const ADMINISTRATIVE_ID_MESSAGE = 'الرقم الإداري يتكوّن من 10 أرقام ويبدأ بـ 5 (ذكر) أو 6 (أنثى).';
 
 export function checkAdministrativeId(raw: string, options: IdCheckOptions = {}): FieldCheck {
   const digits = cleanDigits(raw);
@@ -109,16 +116,21 @@ export function checkAdministrativeId(raw: string, options: IdCheckOptions = {})
   if (!/^[0-9]+$/.test(digits)) {
     return fail('NOT_DIGITS', 'الرقم الإداري يتكوّن من أرقام فقط.');
   }
-  if (digits[0] !== '9') {
-    return fail('PREFIX', 'الرقم الإداري يجب أن يبدأ بالرقم 9.');
+  if (digits[0] !== '5' && digits[0] !== '6') {
+    return fail('PREFIX', ADMINISTRATIVE_ID_MESSAGE);
   }
-  if (digits.length > 12) {
-    return fail('LENGTH', 'الرقم الإداري يجب أن يتكوّن من 12 رقمًا.');
+  if (digits.length > ADMINISTRATIVE_ID_LENGTH) {
+    return fail('LENGTH', ADMINISTRATIVE_ID_MESSAGE);
   }
-  if (digits.length < 12) {
-    return options.partial ? ok(digits, false) : fail('LENGTH', 'الرقم الإداري يجب أن يتكوّن من 12 رقمًا.');
+  if (digits.length < ADMINISTRATIVE_ID_LENGTH) {
+    return options.partial ? ok(digits, false) : fail('LENGTH', ADMINISTRATIVE_ID_MESSAGE);
   }
   return ok(digits);
+}
+
+// How many digits an owner's identity number has, by its kind.
+export function identityNumberLength(kind: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID'): number {
+  return kind === 'NATIONAL_ID' ? NATIONAL_ID_LENGTH : ADMINISTRATIVE_ID_LENGTH;
 }
 
 export type OwnerIdentityKind = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
@@ -204,15 +216,23 @@ export function checkChassis(raw: string, nonStandard = false): FieldCheck {
   return ok(value);
 }
 
+export const BOOKLET_MIN_LENGTH = 6;
+export const BOOKLET_MAX_LENGTH = 12;
+export const BOOKLET_HELP = 'أرقام فقط، من 6 إلى 12 رقمًا.';
+
 export function normalizeBooklet(raw: string): string {
   return toWesternDigits(raw).replace(/\s+/g, '').toUpperCase();
 }
 
+// Phase 7: digits only (it used to accept English letters too).
 export function checkBooklet(raw: string): FieldCheck {
   const value = normalizeBooklet(raw);
   if (value === '') return fail('REQUIRED', 'رقم الدفتر مطلوب.');
-  if (!/^[A-Z0-9]{6,12}$/.test(value)) {
-    return fail('FORMAT', 'رقم الدفتر يتكوّن من 6 إلى 12 خانة من الأحرف الإنجليزية والأرقام.');
+  if (!/^[0-9]+$/.test(value)) {
+    return fail('NOT_DIGITS', 'رقم الدفتر يتكوّن من أرقام فقط.');
+  }
+  if (value.length < BOOKLET_MIN_LENGTH || value.length > BOOKLET_MAX_LENGTH) {
+    return fail('LENGTH', 'رقم الدفتر يتكوّن من 6 إلى 12 رقمًا.');
   }
   return ok(value);
 }
@@ -227,6 +247,14 @@ export function checkManufactureYear(raw: string | number, now: Date = new Date(
     return fail('RANGE', `سنة الصنع يجب أن تكون من 4 أرقام بين ${MANUFACTURE_YEAR_MIN} و${max}.`);
   }
   return ok(text);
+}
+
+// The years a person can pick (Phase 7: a dropdown, not a typed field),
+// newest first: next year down to 1950.
+export function manufactureYearOptions(now: Date = new Date()): number[] {
+  const years: number[] = [];
+  for (let year = tripoliYear(now) + 1; year >= MANUFACTURE_YEAR_MIN; year -= 1) years.push(year);
+  return years;
 }
 
 // Make and model are free text, typed exactly as written in the booklet.

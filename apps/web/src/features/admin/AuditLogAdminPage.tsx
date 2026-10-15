@@ -6,8 +6,12 @@ import { Card, CardHeader } from '../../components/design/Card';
 import { CodeText } from '../../components/design/CodeText';
 import { LtrText } from '../../components/LtrText';
 import type { AuditLogRow } from './types';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
+import { Pagination } from '../../components/Pagination';
+import { usePageParam } from '../../lib/usePageParam';
 
-const TAKE = 25;
+const TAKE = LIST_PAGE_SIZE;
 
 const ENTITY_TYPES = [
   'User',
@@ -38,8 +42,13 @@ function ValueChip({ value, variant }: { value: unknown; variant: 'neutral' | 'a
 // static rows) is a scale necessity at 9 entity types — kept but restyled
 // to sit inside the card header rather than as a bare page control.
 export function AuditLogAdminPage() {
-  const [skip, setSkip] = useState(0);
-  const [entityType, setEntityType] = useState('');
+  // The page lives in the address, like every other list (?page=).
+  const { skip, setSkip, reset } = usePageParam(TAKE);
+  const [entityType, setEntityTypeState] = useState('');
+  const setEntityType = (value: string) => {
+    setEntityTypeState(value);
+    reset();
+  };
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'audit-log', skip, entityType],
@@ -61,9 +70,8 @@ export function AuditLogAdminPage() {
             value={entityType}
             onChange={(e) => {
               setEntityType(e.target.value);
-              setSkip(0);
             }}
-            className="h-8 rounded-sm bg-surface-alt px-2.5 text-[13px] lg:text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+            className="h-8 rounded-sm bg-surface-alt px-2.5 text-[13px] lg:text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark"
           >
             <option value="">كل الأنواع</option>
             {ENTITY_TYPES.map((t) => (
@@ -75,7 +83,7 @@ export function AuditLogAdminPage() {
         }
       />
 
-      {isLoading && <p className="p-4 text-sm text-ink-soft">...جارٍ التحميل</p>}
+      {isLoading && <SkeletonRows rows={6} />}
       {isError && <p className="p-4 text-sm text-danger">تعذر تحميل سجل التدقيق.</p>}
 
       {data && (
@@ -124,27 +132,8 @@ export function AuditLogAdminPage() {
           })}
           {data.rows.length === 0 && <p className="p-4 text-center text-[13px] lg:text-[12.5px] text-ink-soft">لا توجد سجلات</p>}
 
-          <div className="flex items-center justify-between px-[18px] py-3 text-[13px] lg:text-[12px] text-ink-faint">
-            <span>السجل للإضافة فقط — لا يُعدّل ولا يُحذف.</span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={skip === 0}
-                onClick={() => setSkip(Math.max(0, skip - TAKE))}
-                className="rounded-full px-3 py-1 font-bold text-ink-soft hover:bg-surface-alt disabled:opacity-40"
-              >
-                السابق
-              </button>
-              <button
-                type="button"
-                disabled={skip + TAKE >= data.total}
-                onClick={() => setSkip(skip + TAKE)}
-                className="rounded-full px-3 py-1 font-bold text-ink-soft hover:bg-surface-alt disabled:opacity-40"
-              >
-                التالي
-              </button>
-            </div>
-          </div>
+          <Pagination skip={skip} take={TAKE} total={data.total} onSkipChange={setSkip} alwaysShow={data.total > 0} testId="audit-pager" />
+          <p className="px-[18px] pb-3 text-[13px] text-ink-faint lg:text-[12px]">السجل للإضافة فقط — لا يُعدّل ولا يُحذف.</p>
         </>
       )}
     </Card>

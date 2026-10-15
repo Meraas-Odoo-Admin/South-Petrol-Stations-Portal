@@ -7,6 +7,7 @@ import {
   checkLiters,
   checkManufactureYear,
   checkNationalId,
+  manufactureYearOptions,
   normalizeLibyanMobile,
   tripoliYear,
 } from '@fuel-tracking/shared-types';
@@ -105,10 +106,31 @@ describe('checkNationalId (phase 5A)', () => {
 });
 
 describe('checkAdministrativeId', () => {
-  it('is 12 digits starting with 9', () => {
-    expect(checkAdministrativeId('912345678901').ok).toBe(true);
-    expect(checkAdministrativeId('112345678901').ok).toBe(false);
-    expect(checkAdministrativeId('91234567890').ok).toBe(false);
+  it('is 10 digits starting with 5 (male) or 6 (female) (phase 7)', () => {
+    expect(checkAdministrativeId('5123456789').ok).toBe(true);
+    expect(checkAdministrativeId('6123456789').ok).toBe(true);
+    expect(checkAdministrativeId('٦١٢٣٤٥٦٧٨٩').ok).toBe(true);
+    expect(code(checkAdministrativeId('7123456789'))).toBe('PREFIX');
+    expect(code(checkAdministrativeId('912345678901'))).toBe('PREFIX');
+    expect(code(checkAdministrativeId('512345678'))).toBe('LENGTH');
+    expect(code(checkAdministrativeId('51234567890'))).toBe('LENGTH');
+  });
+
+  it('has no birth-year or age check', () => {
+    // Read as a national ID, digits 2-5 here would be a future birth year.
+    expect(checkAdministrativeId('5999900000').ok).toBe(true);
+  });
+
+  it('while typing: short is not an error yet, a wrong first digit is', () => {
+    const live = { partial: true };
+    const short = checkAdministrativeId('512', live);
+    expect(short.ok && short.complete).toBe(false);
+    expect(code(checkAdministrativeId('9', live))).toBe('PREFIX');
+  });
+
+  it('says the rule in one Arabic sentence', () => {
+    const result = checkAdministrativeId('912345678901');
+    expect(!result.ok && result.message).toBe('الرقم الإداري يتكوّن من 10 أرقام ويبدأ بـ 5 (ذكر) أو 6 (أنثى).');
   });
 });
 
@@ -149,9 +171,19 @@ describe('vehicle document fields', () => {
     expect(checkChassis('A'.repeat(20), true).ok).toBe(true);
   });
 
-  it('booklet: 6–12 letters and digits', () => {
-    expect(checkBooklet('ab123456').ok).toBe(true);
-    expect(checkBooklet('123').ok).toBe(false);
+  it('booklet: 6–12 digits only (phase 7)', () => {
+    expect(checkBooklet('123456').ok).toBe(true);
+    expect(checkBooklet('١٢٣٤٥٦٧٨').ok).toBe(true);
+    expect(code(checkBooklet('ab123456'))).toBe('NOT_DIGITS');
+    expect(code(checkBooklet('12345'))).toBe('LENGTH');
+    expect(code(checkBooklet('1234567890123'))).toBe('LENGTH');
+  });
+
+  it('manufacturing year options: next year down to 1950, newest first', () => {
+    const years = manufactureYearOptions(NOW);
+    expect(years[0]).toBe(2027);
+    expect(years[years.length - 1]).toBe(1950);
+    expect(years).toHaveLength(2027 - 1950 + 1);
   });
 
   it('manufacturing year: 1950 to next year', () => {

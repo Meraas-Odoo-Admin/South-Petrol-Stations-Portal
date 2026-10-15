@@ -22,14 +22,23 @@ export function Dialog({
   footer?: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Phase 7 (audit P0): the callers pass a new onClose on every render, so
+  // with onClose/busy in the effect's dependencies, every keystroke in the
+  // reason field re-ran it: focus jumped back to the opener and then to the
+  // panel, one character at a time. They are read through refs instead, and
+  // focus moves only when the sheet opens and closes.
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  onCloseRef.current = onClose;
+  busyRef.current = busy;
 
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
     panelRef.current?.focus();
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !busy) {
-        onClose();
+      if (event.key === 'Escape' && !busyRef.current) {
+        onCloseRef.current();
         return;
       }
       // Keep Tab inside the sheet: from the last control it wraps to the first,
@@ -55,7 +64,7 @@ export function Dialog({
       document.removeEventListener('keydown', onKey);
       opener?.focus?.();
     };
-  }, [open, busy, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (

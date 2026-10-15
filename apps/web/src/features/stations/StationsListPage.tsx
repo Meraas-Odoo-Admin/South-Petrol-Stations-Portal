@@ -7,11 +7,12 @@ import { CodeText } from '../../components/design/CodeText';
 import { Icon, ICONS } from '../../components/icons';
 import { STATION_STATUS_VARIANT, stationStatusLabel, fuelTypeLabel } from '../../lib/labels';
 import type { StationBasicInfo } from './types';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 const STATUS_FILTER_OPTIONS = ['ACTIVE', 'NOT_YET_SUPPLIED', 'SUSPENDED_LEGAL', 'SUSPENDED_COMMITTEE', 'SUSPENDED_OWNER', 'UNVERIFIED'];
 
 const SELECT_CLASS =
-  'h-[52px] rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
+  'h-[52px] rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 function matches(station: StationBasicInfo, term: string): boolean {
   if (!term) return true;
@@ -37,7 +38,7 @@ export function StationsListPage() {
     <div className="space-y-4">
       <PageHeader title="المحطات" subtitle={stations ? `${stations.length} محطة ضمن صلاحياتك` : undefined} />
 
-      {isLoading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+      {isLoading && <SkeletonRows rows={6} />}
       {isError && <p className="text-[15px] text-danger lg:text-[13px]">تعذر تحميل قائمة المحطات.</p>}
 
       {stations && (

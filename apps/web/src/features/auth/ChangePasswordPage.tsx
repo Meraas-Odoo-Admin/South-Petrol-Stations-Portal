@@ -8,6 +8,7 @@ import { useAuth } from './AuthProvider';
 import { BrandMark } from '../../components/BrandMark';
 import { EyeIcon } from '../../components/EyeIcon';
 import { APP_NAME, APP_TAGLINE } from '../../lib/appInfo';
+import { PillButton } from '../../components/design/PillButton';
 
 const changePasswordSchema = z
   .object({
@@ -101,9 +102,9 @@ export function ChangePasswordPage() {
   // whole class of bug since sibling layout order doesn't depend on either
   // child's own dir.
   const fieldRowClass =
-    'mt-2 flex h-[52px] items-center gap-2 rounded-sm bg-surface-alt px-3.5 focus-within:ring-2 focus-within:ring-accent';
+    'mt-2 flex h-[52px] items-center gap-2 rounded-sm border border-line bg-surface-alt px-3.5 focus-within:ring-2 focus-within:ring-primary-dark focus-within:ring-offset-2';
   const fieldInputClass =
-    'min-w-0 flex-1 bg-transparent text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none';
+    'min-w-0 flex-1 border-0 bg-transparent text-[15px] font-bold text-ink tracking-[0.15em] focus:outline-none';
 
   // Round 14: this page used to be a bare, unbranded card — a visible
   // downgrade right after LoginPage's polished two-tone shell (same auth
@@ -148,9 +149,10 @@ export function ChangePasswordPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
           <div className="rounded-md border border-line p-4">
-            <label className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
+            <label htmlFor="cp-current" className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
             <div className={fieldRowClass}>
               <input
+              id="cp-current"
                 type={showCurrent ? 'text' : 'password'}
                 {...register('currentPassword')}
                 dir="ltr"
@@ -172,9 +174,10 @@ export function ChangePasswordPage() {
           </div>
 
           <div className="rounded-md border border-line p-4">
-            <label className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
+            <label htmlFor="cp-new" className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
             <div className={fieldRowClass}>
               <input
+              id="cp-new"
                 type={showNew ? 'text' : 'password'}
                 {...register('newPassword')}
                 dir="ltr"
@@ -229,9 +232,10 @@ export function ChangePasswordPage() {
           </div>
 
           <div className="rounded-md border border-line p-4">
-            <label className="text-[15px] lg:text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
+            <label htmlFor="cp-confirm" className="text-[15px] lg:text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
             <div className={fieldRowClass}>
               <input
+              id="cp-confirm"
                 type={showConfirm ? 'text' : 'password'}
                 {...register('confirmPassword')}
                 dir="ltr"
@@ -266,13 +270,9 @@ export function ChangePasswordPage() {
 
           {serverError && <p className="text-[15px] lg:text-[13px] text-danger">{serverError}</p>}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="mt-1 flex h-[54px] items-center justify-center rounded-full bg-gradient-to-l from-accent to-accent-mid text-[16px] font-extrabold text-ink shadow-glow disabled:opacity-50"
-          >
-            {isSubmitting ? '...جارٍ الحفظ' : 'حفظ والمتابعة'}
-          </button>
+          <PillButton type="submit" size="field" disabled={isSubmitting} className="mt-1 w-full">
+            {isSubmitting ? 'جارٍ الحفظ…' : 'حفظ والمتابعة'}
+          </PillButton>
         </form>
         </div>
       </div>

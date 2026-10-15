@@ -16,7 +16,7 @@ import { PAGE } from './OpsReportView';
 export type OpsReportKey = 'my-shift' | 'my-day' | 'office' | 'station' | 'municipality' | 'summary';
 
 const SELECT =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:h-10 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:h-10 lg:text-[14px]';
 
 const IDENTIFICATIONS: Array<[string, string]> = [
   ['CARD_SCAN', 'بطاقة'],
@@ -217,7 +217,7 @@ export function OpsReportPanel({
             </div>
           )}
           {data.tables.length > 1 && (
-            <div role="tablist" aria-label="اختر التقرير" className="mb-4 flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible" data-testid="ops-report-chooser">
+            <div role="tablist" aria-label="اختر التقرير" className="scrollbar-none mb-4 flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible" data-testid="ops-report-chooser">
               {data.tables.map((table) => {
                 const active = table.id === shownTable?.id;
                 return (
@@ -238,7 +238,7 @@ export function OpsReportPanel({
                         { replace: true },
                       )
                     }
-                    className={`min-h-[44px] shrink-0 rounded-full px-4 text-[15px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-[40px] lg:text-[13px] ${
+                    className={`min-h-[44px] shrink-0 rounded-full px-4 text-[15px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark lg:min-h-[40px] lg:text-[13px] ${
                       active ? 'bg-primary text-white' : 'bg-surface-alt text-ink-soft hover:bg-primary-100 hover:text-primary'
                     }`}
                   >

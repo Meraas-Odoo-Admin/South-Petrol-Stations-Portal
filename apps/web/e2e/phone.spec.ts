@@ -24,6 +24,9 @@ interface Role {
   // Cards and menu entries this kind of user must see / must not see.
   mustSee: string[];
   mustNotSee: string[];
+  // One screen and nothing else (the station employee, after review 15 Oct
+  // 2026): the app opens on it, with no home screen and no bottom bar.
+  onlyScreen?: string;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -91,9 +94,10 @@ test.beforeAll(async () => {
       key: 'station employee',
       username: employeeUsername,
       password: fixtures.supervisorPassword,
-      routes: ['/fillups/new', '/vehicles', '/stations', '/reports'],
-      mustSee: ['/fillups/new', '/vehicles', '/reports'],
-      mustNotSee: ['/admin', '/manage', '/my-station', '/registration', '/reports/readiness', '/reports/card-stock', '/reports/registration'],
+      routes: ['/fillups/new'],
+      mustSee: ['/fillups/new'],
+      mustNotSee: ['/vehicles', '/stations', '/reports', '/admin', '/manage', '/my-station', '/registration', '/reports/daily'],
+      onlyScreen: '/fillups/new',
     },
     {
       key: 'station supervisor',
@@ -124,8 +128,9 @@ test.beforeAll(async () => {
         '/manage/stations/new',
         '/manage/offices/new',
       ],
-      mustSee: ['/manage', '/reports/daily', '/reports'],
-      mustNotSee: ['/admin', '/my-station'],
+      // Phase 7: «الإدارة» holds the manager's «القوائم» tab.
+      mustSee: ['/manage', '/reports/daily', '/reports', '/admin'],
+      mustNotSee: ['/my-station', '/lists'],
     },
   ];
 });
@@ -205,59 +210,73 @@ test('for every kind of user: one-line equal-width bottom bar, menu = home cards
         failed.push(`${role.key}: ${res.status()} ${res.request().method()} ${res.url().split('/api/v1')[1]}`);
       }
     });
-    await loginAs(page, role.username, role.password);
+    await loginAs(page, role.username, role.password, role.onlyScreen ?? '/');
 
     // ── Bottom bar ────────────────────────────────────────────────────
     const bar = page.locator('nav[aria-label="التنقل السريع"]');
-    await expect(bar, `${role.key}: bottom bar`).toBeVisible();
-    const items = bar.locator('> a, > button');
-    const count = await items.count();
-    expect(count, `${role.key}: bar items`).toBeGreaterThanOrEqual(2);
-    const widths: number[] = [];
-    for (let i = 0; i < count; i += 1) {
-      const item = items.nth(i);
-      const label = (await item.innerText()).trim();
-      expect(label.length, `${role.key}: bar item ${i} has a label`).toBeGreaterThan(0);
-      // The visible word is short, but the link keeps its full name for screen
-      // readers and voice control, and the visible word is part of that name
-      // (a bar link used to be found by tests, and by assistive tech, by its
-      // full name, e.g. «تسجيل تعبئة»).
-      const fullName = (await item.getAttribute('aria-label')) ?? label;
-      expect(fullName, `${role.key}: "${label}" is part of its accessible name`).toContain(label);
-      // The label is the first span without the badge's absolute positioning.
-      const lines = await item.evaluate((el) => {
-        const span = Array.from(el.querySelectorAll('span')).find(
-          (s) => (s.textContent ?? '').trim().length > 0 && !s.className.includes('absolute'),
-        );
-        const range = document.createRange();
-        range.selectNodeContents(span as Element);
-        return range.getClientRects().length;
-      });
-      expect(lines, `${role.key}: "${label}" is on one line`).toBe(1);
-      widths.push((await item.boundingBox())!.width);
-    }
-    expect(Math.max(...widths) - Math.min(...widths), `${role.key}: equal widths ${widths.join(',')}`).toBeLessThanOrEqual(1.5);
+    if (role.onlyScreen) {
+      // One screen: no bar of one tab, and the menu sheet holds that screen only.
+      await expect(bar, `${role.key}: no bottom bar`).toHaveCount(0);
+      await page.getByRole('button', { name: 'القائمة' }).click();
+      const sheet = page.locator('div.fixed.inset-0.z-40');
+      await expect(sheet).toBeVisible();
+      const menu = (
+        await sheet.locator('a[href^="/"]').evaluateAll((els) => els.map((el) => el.getAttribute('href') as string))
+      ).filter((href) => href !== '/change-password');
+      expect(menu, `${role.key}: menu`).toEqual([role.onlyScreen]);
+      await sheet.locator('button[aria-label="إغلاق"]').last().click();
+      await expect(sheet).toHaveCount(0);
+    } else {
+      await expect(bar, `${role.key}: bottom bar`).toBeVisible();
+      const items = bar.locator('> a, > button');
+      const count = await items.count();
+      expect(count, `${role.key}: bar items`).toBeGreaterThanOrEqual(2);
+      const widths: number[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const item = items.nth(i);
+        const label = (await item.innerText()).trim();
+        expect(label.length, `${role.key}: bar item ${i} has a label`).toBeGreaterThan(0);
+        // The visible word is short, but the link keeps its full name for screen
+        // readers and voice control, and the visible word is part of that name
+        // (a bar link used to be found by tests, and by assistive tech, by its
+        // full name, e.g. «تسجيل تعبئة»).
+        const fullName = (await item.getAttribute('aria-label')) ?? label;
+        expect(fullName, `${role.key}: "${label}" is part of its accessible name`).toContain(label);
+        // The label is the first span without the badge's absolute positioning.
+        const lines = await item.evaluate((el) => {
+          const span = Array.from(el.querySelectorAll('span')).find(
+            (s) => (s.textContent ?? '').trim().length > 0 && !s.className.includes('absolute'),
+          );
+          const range = document.createRange();
+          range.selectNodeContents(span as Element);
+          return range.getClientRects().length;
+        });
+        expect(lines, `${role.key}: "${label}" is on one line`).toBe(1);
+        widths.push((await item.boundingBox())!.width);
+      }
+      expect(Math.max(...widths) - Math.min(...widths), `${role.key}: equal widths ${widths.join(',')}`).toBeLessThanOrEqual(1.5);
 
-    // ── Menu sheet and home cards offer the same destinations ─────────
-    const cards = await page.locator('main a[href^="/"]').evaluateAll((els) =>
-      els.map((el) => el.getAttribute('href') as string).filter((href) => href !== '/'),
-    );
-    await page.getByRole('button', { name: 'القائمة' }).click();
-    const sheet = page.locator('div.fixed.inset-0.z-40');
-    await expect(sheet).toBeVisible();
-    const menu = (
-      await sheet.locator('a[href^="/"]').evaluateAll((els) => els.map((el) => el.getAttribute('href') as string))
-    ).filter((href) => href !== '/' && href !== '/change-password');
-    expect([...new Set(cards)].sort(), `${role.key}: home cards vs phone menu`).toEqual([...new Set(menu)].sort());
-    for (const path of role.mustSee) expect(menu, `${role.key} sees ${path}`).toContain(path);
-    for (const path of role.mustNotSee) expect(menu, `${role.key} must not see ${path}`).not.toContain(path);
-    await sheet.locator('button[aria-label="إغلاق"]').last().click();
-    await expect(sheet).toHaveCount(0);
+      // ── Menu sheet and home cards offer the same destinations ─────────
+      const cards = await page.locator('main a[href^="/"]').evaluateAll((els) =>
+        els.map((el) => el.getAttribute('href') as string).filter((href) => href !== '/'),
+      );
+      await page.getByRole('button', { name: 'القائمة' }).click();
+      const sheet = page.locator('div.fixed.inset-0.z-40');
+      await expect(sheet).toBeVisible();
+      const menu = (
+        await sheet.locator('a[href^="/"]').evaluateAll((els) => els.map((el) => el.getAttribute('href') as string))
+      ).filter((href) => href !== '/' && href !== '/change-password');
+      expect([...new Set(cards)].sort(), `${role.key}: home cards vs phone menu`).toEqual([...new Set(menu)].sort());
+      for (const path of role.mustSee) expect(menu, `${role.key} sees ${path}`).toContain(path);
+      for (const path of role.mustNotSee) expect(menu, `${role.key} must not see ${path}`).not.toContain(path);
+      await sheet.locator('button[aria-label="إغلاق"]').last().click();
+      await expect(sheet).toHaveCount(0);
+    }
 
     // ── No side scroll and no small field on every route, at every width ──
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: TALL });
-      for (const route of ['/', ...role.routes]) {
+      for (const route of role.onlyScreen ? role.routes : ['/', ...role.routes]) {
         await navigateInApp(page, route);
         await page.waitForLoadState('networkidle').catch(() => undefined);
         await page.waitForTimeout(250);

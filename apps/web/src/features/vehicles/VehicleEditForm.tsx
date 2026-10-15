@@ -8,11 +8,13 @@ import {
   checkColor,
   checkMakeOrModel,
   checkManufactureYear,
+  manufactureYearOptions,
   type VehicleFuelTypeKey,
 } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { TextField } from '../../components/design/TextField';
+import { focusField } from '../../lib/focusField';
 import type { VehicleBasicInfo } from './types';
 
 interface VehicleEditFormProps {
@@ -21,7 +23,7 @@ interface VehicleEditFormProps {
 }
 
 const SELECT_CLASS =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 // Round 12: edits split by whether they affect fill-up rule eligibility.
 // Make, model, colour, manufacturing year and (phase 5A) fuel type don't feed
@@ -40,6 +42,10 @@ export function VehicleEditForm({ vehicle, onDone }: VehicleEditFormProps) {
   const [fuelType, setFuelType] = useState<VehicleFuelTypeKey | ''>(vehicle.fuelType ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failed, setFailed] = useState(false);
+  // Phase 7: the year is picked from a list, newest first. A year stored
+  // before the list existed is offered too, so the form never drops it.
+  const yearOptions = manufactureYearOptions();
+  if (vehicle.manufactureYear && !yearOptions.includes(vehicle.manufactureYear)) yearOptions.push(vehicle.manufactureYear);
 
   const color = colorChoice === VEHICLE_COLOR_OTHER ? colorOther : colorChoice;
 
@@ -72,18 +78,21 @@ export function VehicleEditForm({ vehicle, onDone }: VehicleEditFormProps) {
     if (!y.ok) found.manufactureYear = y.message;
     if (!fuelType) found.fuelType = 'اختر نوع وقود المركبة.';
     setErrors(found);
-    if (Object.keys(found).length === 0) mutation.mutate();
+    // First-error focus, in the order of the form.
+    const first = ['make', 'model', 'color', 'manufactureYear', 'fuelType'].find((field) => found[field]);
+    if (first) return focusField(`vehicle-edit-${first}`);
+    mutation.mutate();
   }
 
   return (
     <div className="space-y-4">
-      <TextField label="الصانع (كما في الدفتر)" value={make} onChange={(e) => setMake(e.target.value)} error={errors.make} />
-      <TextField label="الطراز (كما في الدفتر)" value={model} onChange={(e) => setModel(e.target.value)} error={errors.model} />
+      <TextField label="الصانع (كما في الدفتر)" data-testid="vehicle-edit-make" placeholder="مثال: تويوتا" value={make} onChange={(e) => setMake(e.target.value)} error={errors.make} />
+      <TextField label="الطراز (كما في الدفتر)" data-testid="vehicle-edit-model" placeholder="مثال: كامري" value={model} onChange={(e) => setModel(e.target.value)} error={errors.model} />
       <div>
         <label htmlFor="edit-color" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">
           اللون
         </label>
-        <select id="edit-color" value={colorChoice} onChange={(e) => setColorChoice(e.target.value)} className={SELECT_CLASS}>
+        <select id="edit-color" data-testid="vehicle-edit-color" value={colorChoice} onChange={(e) => setColorChoice(e.target.value)} className={SELECT_CLASS}>
           <option value="">— اختر —</option>
           {VEHICLE_COLORS.map((c) => (
             <option key={c} value={c}>
@@ -99,20 +108,33 @@ export function VehicleEditForm({ vehicle, onDone }: VehicleEditFormProps) {
         )}
         {errors.color && <p role="alert" className="mt-1.5 text-[14px] font-medium text-danger-dark lg:text-[12px]">{errors.color}</p>}
       </div>
-      <TextField
-        label="سنة الصنع"
-        value={manufactureYear}
-        onChange={(e) => setManufactureYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-        inputMode="numeric"
-        ltr
-        error={errors.manufactureYear}
-      />
+      <div>
+        <label htmlFor="edit-year" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">
+          سنة الصنع
+        </label>
+        <select
+          id="edit-year"
+          data-testid="vehicle-edit-manufactureYear"
+          value={manufactureYear}
+          onChange={(e) => setManufactureYear(e.target.value)}
+          className={SELECT_CLASS}
+        >
+          <option value="">— اختر —</option>
+          {yearOptions.map((year) => (
+            <option key={year} value={String(year)}>
+              {year}
+            </option>
+          ))}
+        </select>
+        {errors.manufactureYear && <p role="alert" className="mt-1.5 text-[14px] font-medium text-danger-dark lg:text-[12px]">{errors.manufactureYear}</p>}
+      </div>
       <div>
         <label htmlFor="edit-fuel" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">
           نوع وقود المركبة
         </label>
         <select
           id="edit-fuel"
+          data-testid="vehicle-edit-fuelType"
           value={fuelType}
           onChange={(e) => setFuelType(e.target.value as VehicleFuelTypeKey | '')}
           className={SELECT_CLASS}

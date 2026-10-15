@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import {
   ADMINISTRATIVE_ID_HELP,
+  BOOKLET_HELP,
   NATIONAL_ID_HELP,
   LIBYAN_MOBILE_HELP,
   VEHICLE_COLORS,
@@ -19,6 +20,8 @@ import {
   checkMakeOrModel,
   checkManufactureYear,
   checkOwnerIdentity,
+  identityNumberLength,
+  manufactureYearOptions,
   normalizeChassis,
   normalizePlate,
   type FieldCheck,
@@ -32,7 +35,8 @@ import {
   restrictToPhoneNumber,
   restrictToRegistrationBooklet,
 } from '../../lib/libyanFormats';
-import { IDENTITY_DIGIT_GROUPS, PLATE_DIGIT_GROUPS } from '../../lib/digitBoxGroups';
+import { PLATE_DIGIT_GROUPS, identityDigitGroups } from '../../lib/digitBoxGroups';
+import { focusField } from '../../lib/focusField';
 import { identityTypeLabel } from '../../lib/labels';
 import { PageHeader } from '../../components/design/PageHeader';
 import { PillButton } from '../../components/design/PillButton';
@@ -43,6 +47,7 @@ import { LtrText } from '../../components/LtrText';
 import { Notice, SectionCard } from '../users/parts';
 import { registrationErrorMessage } from './registrationErrors';
 import { CardIssueFlow } from '../cards/CardIssueFlow';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 type IdentityType = 'NATIONAL_ID' | 'ADMINISTRATIVE_ID';
 type DuplicateField = 'currentPlate' | 'chassisNumber' | 'registrationBooklet';
@@ -96,7 +101,7 @@ function canRegisterAt(station: RegistrationStationRow | undefined): boolean {
 }
 
 const SELECT_CLASS =
-  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
+  'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
 function Label({ htmlFor, children }: { htmlFor?: string; children: React.ReactNode }) {
   return (
@@ -176,7 +181,8 @@ export function RegistrationPage() {
   const identityLive = identityNumber
     ? checkOwnerIdentity(identityType, identityNumber, { partial: true })
     : null;
-  const identityComplete = identityNumber.length === 12 && checkOwnerIdentity(identityType, identityNumber).ok;
+  const identityComplete =
+    identityNumber.length === identityNumberLength(identityType) && checkOwnerIdentity(identityType, identityNumber).ok;
 
   const ownerLookup = useQuery({
     queryKey: ['owners', 'by-identity', searchedIdentity],
@@ -225,7 +231,8 @@ export function RegistrationPage() {
     setOwnerTouched(true);
     const name = checkArabicPersonName(newOwnerName, 'اسم المالك');
     const phone = checkLibyanMobile(newOwnerPhone, { required: true });
-    if (!name.ok || !phone.ok) return;
+    if (!name.ok) return focusField('registration-owner-name');
+    if (!phone.ok) return focusField('registration-owner-phone');
     createIndividual.mutate();
   }
 
@@ -234,7 +241,6 @@ export function RegistrationPage() {
 
   // ── 3. Vehicle ──────────────────────────────────────────────────────
   const [plate, setPlate] = useState('');
-  const [plateN, setPlateN] = useState(false);
   const [chassisNumber, setChassisNumber] = useState('');
   const [chassisNonStandard, setChassisNonStandard] = useState(false);
   const [registrationBooklet, setRegistrationBooklet] = useState('');
@@ -254,7 +260,8 @@ export function RegistrationPage() {
     registrationStationId: string;
   } | null>(null);
 
-  const fullPlate = plate ? `${plate}${plateN ? 'N' : ''}` : '';
+  const fullPlate = plate;
+  const yearOptions = useMemo(() => manufactureYearOptions(), []);
   const color = colorChoice === VEHICLE_COLOR_OTHER ? colorOther : colorChoice;
 
   const typeLookup = useLookup<{ id: string; name: string; isActive: boolean }>('/vehicle-types', 'vehicle-types');
@@ -331,29 +338,33 @@ export function RegistrationPage() {
     },
   });
 
-  // The first problem in the order a person fills the form in.
-  function firstVehicleProblem(): string | null {
-    if (!normalizePlate(fullPlate)) return 'رقم اللوحة مطلوب: رمز المدينة ثم رقم اللوحة.';
+  // The first problem in the order a person fills the form in, and the field
+  // to put the cursor on.
+  function firstVehicleProblem(): { message: string; field: string } | null {
+    if (!normalizePlate(fullPlate)) return { message: 'رقم اللوحة مطلوب: رمز المدينة ثم رقم اللوحة.', field: 'registration-plate-input' };
     const chassis = checkChassis(chassisNumber, chassisNonStandard);
-    if (!chassis.ok) return chassis.message;
+    if (!chassis.ok) return { message: chassis.message, field: 'registration-chassis-input' };
     const booklet = checkBooklet(registrationBooklet);
-    if (!booklet.ok) return booklet.message;
+    if (!booklet.ok) return { message: booklet.message, field: 'registration-booklet-input' };
     const m = checkMakeOrModel(make, 'الصانع');
-    if (!m.ok) return m.message;
+    if (!m.ok) return { message: m.message, field: 'registration-make' };
     const md = checkMakeOrModel(model, 'الطراز');
-    if (!md.ok) return md.message;
+    if (!md.ok) return { message: md.message, field: 'registration-model' };
     const c = checkColor(color);
-    if (!c.ok) return c.message;
+    if (!c.ok) return { message: c.message, field: colorChoice === VEHICLE_COLOR_OTHER ? 'registration-color-other' : 'registration-color' };
     const y = checkManufactureYear(manufactureYear);
-    if (!y.ok) return y.message;
-    if (!fuelType) return 'نوع وقود المركبة مطلوب: بنزين أو ديزل.';
-    if (conflicts.length > 0) return 'بعض بيانات المركبة مسجّلة مسبقًا لمركبة أخرى — راجع التنبيهات أسفل الحقول.';
+    if (!y.ok) return { message: y.message, field: 'registration-year' };
+    if (!fuelType) return { message: 'نوع وقود المركبة مطلوب: بنزين أو ديزل.', field: 'registration-fuel' };
+    const conflict = conflicts[0];
+    if (conflict) {
+      const field = { currentPlate: 'registration-plate-input', chassisNumber: 'registration-chassis-input', registrationBooklet: 'registration-booklet-input' }[conflict.field];
+      return { message: 'بعض بيانات المركبة مسجّلة مسبقًا لمركبة أخرى — راجع التنبيهات أسفل الحقول.', field };
+    }
     return null;
   }
 
   function resetVehicle() {
     setPlate('');
-    setPlateN(false);
     setChassisNumber('');
     setChassisNonStandard(false);
     setRegistrationBooklet('');
@@ -427,7 +438,7 @@ export function RegistrationPage() {
 
       {/* 1 — Registration office */}
       <SectionCard title="مكتب التسجيل">
-        {stationsQuery.isLoading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+        {stationsQuery.isLoading && <SkeletonRows rows={1} />}
         {stationsQuery.isError && (
           <p className="text-[15px] text-danger lg:text-[13px]" data-testid="registration-not-allowed">
             تسجيل المركبات يتم في مكاتب التسجيل فقط، وحسابك لا يملك صلاحية التسجيل.
@@ -528,13 +539,15 @@ export function RegistrationPage() {
                     >
                       <Label>{identityType === 'NATIONAL_ID' ? 'الرقم الوطني' : 'الرقم الإداري'}</Label>
                       <DigitBoxInput
-                        groups={IDENTITY_DIGIT_GROUPS}
+                        key={identityType}
+                        groups={identityDigitGroups(identityType)}
                         value={identityNumber}
                         onChange={(v) => {
-                          setIdentityNumber(restrictToIdentityNumber(v));
+                          setIdentityNumber(restrictToIdentityNumber(v, identityNumberLength(identityType)));
                           setSearchedIdentity(null);
                         }}
                         data-testid="registration-identity-input"
+                        label={identityType === 'NATIONAL_ID' ? 'الرقم الوطني' : 'الرقم الإداري'}
                       />
                       <FieldHelp
                         check={identityLive}
@@ -609,30 +622,20 @@ export function RegistrationPage() {
 
       {/* 3 — Vehicle */}
       <div className={stationReady && owner ? '' : 'pointer-events-none opacity-50'}>
-        <SectionCard step={2} title="المركبة">
+        {/* Phase 7 (critique): a locked step says why. */}
+        <SectionCard step={2} title="المركبة" description={owner ? undefined : 'تُفتح بعد اختيار المالك أو تسجيله في الخطوة 1.'}>
           <div className="space-y-5">
             <div>
               <Label>رقم اللوحة</Label>
-              <div className="flex flex-wrap items-center gap-3">
-                <DigitBoxInput
-                  groups={PLATE_DIGIT_GROUPS}
-                  separator="-"
-                  value={plate}
-                  onChange={setPlate}
-                  data-testid="registration-plate-input"
-                />
-                <label className="flex min-h-[44px] items-center gap-2 text-[16px] font-bold text-ink lg:text-[14px]">
-                  <input
-                    type="checkbox"
-                    data-testid="registration-plate-n"
-                    checked={plateN}
-                    onChange={(e) => setPlateN(e.target.checked)}
-                    className="h-5 w-5"
-                  />
-                  تنتهي اللوحة بحرف N
-                </label>
-              </div>
-              <FieldHelp check={vehicleTouched ? checks.plate : null} help="رمز المدينة — رقم المركبة. حرف N جزء من اللوحة، فاللوحة بـ N تختلف عن التي بدونه." />
+              <DigitBoxInput
+                groups={PLATE_DIGIT_GROUPS}
+                separator="-"
+                value={plate}
+                onChange={setPlate}
+                data-testid="registration-plate-input"
+                label="رقم اللوحة"
+              />
+              <FieldHelp check={vehicleTouched ? checks.plate : null} help="رمز المدينة (رقم أو رقمان)، ثم رقم المركبة. أرقام فقط." />
               <DuplicateWarning conflict={conflictFor('currentPlate')} />
             </div>
 
@@ -647,7 +650,7 @@ export function RegistrationPage() {
                 maxLength={20}
                 autoCapitalize="characters"
                 aria-invalid={checks.chassis && !checks.chassis.ok ? true : undefined}
-                className={`h-[52px] w-full rounded-sm border bg-surface-alt px-3.5 text-end font-mono text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:h-11 lg:text-[14px] ${
+                className={`h-[52px] w-full rounded-sm border bg-surface-alt px-3.5 text-end font-mono text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:h-11 lg:text-[14px] ${
                   checks.chassis && !checks.chassis.ok ? 'border-danger' : 'border-line'
                 }`}
               />
@@ -681,13 +684,13 @@ export function RegistrationPage() {
                 onChange={(e) => setRegistrationBooklet(restrictToRegistrationBooklet(e.target.value))}
                 dir="ltr"
                 maxLength={12}
-                autoCapitalize="characters"
+                inputMode="numeric"
                 aria-invalid={checks.booklet && !checks.booklet.ok ? true : undefined}
-                className={`h-[52px] w-full rounded-sm border bg-surface-alt px-3.5 text-end font-mono text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-accent lg:h-11 lg:text-[14px] ${
+                className={`h-[52px] w-full rounded-sm border bg-surface-alt px-3.5 text-end font-mono text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:h-11 lg:text-[14px] ${
                   checks.booklet && !checks.booklet.ok ? 'border-danger' : 'border-line'
                 }`}
               />
-              <FieldHelp check={checks.booklet} help="من 6 إلى 12 خانة من الأحرف الإنجليزية والأرقام." />
+              <FieldHelp check={checks.booklet} help={BOOKLET_HELP} />
               <DuplicateWarning conflict={conflictFor('registrationBooklet')} />
             </div>
 
@@ -698,7 +701,7 @@ export function RegistrationPage() {
                 value={make}
                 onChange={(e) => setMake(e.target.value)}
                 error={checks.make && !checks.make.ok ? checks.make.message : null}
-                placeholder="مثال: Toyota"
+                placeholder="مثال: تويوتا"
               />
               <TextField
                 label="الطراز (كما في الدفتر)"
@@ -706,7 +709,7 @@ export function RegistrationPage() {
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 error={checks.model && !checks.model.ok ? checks.model.message : null}
-                placeholder="مثال: Hilux"
+                placeholder="مثال: كامري"
               />
               <div>
                 <Label htmlFor="reg-color">اللون</Label>
@@ -731,15 +734,23 @@ export function RegistrationPage() {
                   </div>
                 )}
               </div>
-              <TextField
-                label="سنة الصنع"
-                data-testid="registration-year"
-                value={manufactureYear}
-                onChange={(e) => setManufactureYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                error={checks.year && !checks.year.ok ? checks.year.message : null}
-                inputMode="numeric"
-                ltr
-              />
+              <div>
+                <Label htmlFor="reg-year">سنة الصنع</Label>
+                <select
+                  id="reg-year"
+                  data-testid="registration-year"
+                  value={manufactureYear}
+                  onChange={(e) => setManufactureYear(e.target.value)}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">— اختر —</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <Label htmlFor="reg-fuel">نوع وقود المركبة</Label>
                 <select
@@ -793,7 +804,10 @@ export function RegistrationPage() {
                 setVehicleError(null);
                 setVehicleTouched(true);
                 const problem = firstVehicleProblem();
-                if (problem) return setVehicleError(problem);
+                if (problem) {
+                  setVehicleError(problem.message);
+                  return focusField(problem.field);
+                }
                 registerVehicle.mutate();
               }}
             >

@@ -53,7 +53,6 @@ export interface CreateFillUpRequest {
   // exception type and writes a short reason; the fill-up then goes through.
   exceptionTypeId?: string;
   reason?: string;
-  proofReference?: string;
 }
 
 // GET /fillups/exception-types — same shape as reports.ts's
@@ -63,7 +62,6 @@ export interface ExceptionTypeOption {
   id: string;
   key: string;
   name: string;
-  requiresProof: boolean;
   isActive: boolean;
   // Phase 6: the rules this type may override (empty = any rule), its daily
   // limit per station (null = none) and the municipality it belongs to (null =
@@ -99,7 +97,6 @@ export interface FillUpExceptionRaw {
   exceptionTypeId: string;
   reason: string;
   approvedById: string | null;
-  proofReference: string | null;
   validUntil: string | null;
   createdAt: string;
   triggerReason: RuleFailureReason | null;

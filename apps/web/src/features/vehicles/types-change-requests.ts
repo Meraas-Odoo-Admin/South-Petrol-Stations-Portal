@@ -6,7 +6,6 @@ export interface VehicleChangeRequestEntry {
   currentValue: string;
   requestedValue: string;
   reason: string;
-  proofReference: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   requestedById: string;
   decidedById: string | null;
@@ -28,7 +27,6 @@ export interface OwnerChangeRequestEntry {
   requestedIdentityType: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID' | 'DRIVERS_LICENSE';
   requestedIdentityNumber: string;
   reason: string;
-  proofReference: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   requestedById: string;
   decidedById: string | null;

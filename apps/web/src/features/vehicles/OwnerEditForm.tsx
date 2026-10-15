@@ -5,6 +5,7 @@ import { apiClient } from '../../lib/apiClient';
 import { PillButton } from '../../components/design/PillButton';
 import { TextField } from '../../components/design/TextField';
 import { restrictToPhoneNumber } from '../../lib/libyanFormats';
+import { focusFirstInvalid } from '../../lib/focusField';
 
 interface OwnerEditFormProps {
   ownerId: string;
@@ -49,7 +50,8 @@ export function OwnerEditForm({ ownerId, fullName, phone, onDone }: OwnerEditFor
     const p = checkLibyanMobile(phoneValue);
     if (!p.ok) found.phone = p.message;
     setErrors(found);
-    if (!found.name && !found.phone) mutation.mutate();
+    if (found.name || found.phone) return focusFirstInvalid();
+    mutation.mutate();
   }
 
   return (

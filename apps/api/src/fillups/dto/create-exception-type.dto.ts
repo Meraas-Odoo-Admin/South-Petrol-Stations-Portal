@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 import { RULE_FAILURE_REASONS } from '../rule-engine/types';
 
 export class CreateExceptionTypeDto {
@@ -12,11 +12,6 @@ export class CreateExceptionTypeDto {
   @IsString()
   @MinLength(1)
   name!: string;
-
-  @ApiProperty({ required: false, default: false })
-  @IsOptional()
-  @IsBoolean()
-  requiresProof?: boolean;
 
   @ApiProperty({ required: false, description: 'Rules this type may override; empty or omitted = any rule.' })
   @IsOptional()

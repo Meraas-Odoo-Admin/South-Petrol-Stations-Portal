@@ -3,6 +3,7 @@ import { ACCOUNT_ACTION_LABELS, roleLabel } from '../../lib/labels';
 import { Notice, SectionCard } from './parts';
 import { formatWhen } from './format';
 import { useUserActivity } from './useUsers';
+import { SkeletonRows } from '../../components/design/Skeleton';
 
 // The latest entries about this account: who did what, when, and why. The
 // same trail the audit log keeps; nothing here is editable.
@@ -11,7 +12,7 @@ export function ActivityCard({ userId }: { userId: string }) {
 
   return (
     <SectionCard title="آخر النشاط" description="ما جرى على هذا الحساب ومن فعله.">
-      {activity.isLoading && <p className="text-[15px] text-ink-soft lg:text-[13px]">جارٍ التحميل…</p>}
+      {activity.isLoading && <SkeletonRows rows={3} />}
       {activity.isError && (
         <div className="space-y-3">
           <Notice kind="error">تعذّر تحميل النشاط.</Notice>

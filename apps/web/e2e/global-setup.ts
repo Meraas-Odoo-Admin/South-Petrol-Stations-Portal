@@ -49,7 +49,6 @@ export interface Fixtures {
   // Two more vehicles with ACTIVE cards, for specs that record fill-ups through
   // the API (a fill-up needs a card since Phase 6).
   extraCardNumbers: string[];
-  deskName: string;
   supervisorUsername: string;
   supervisorPassword: string;
   adminUsername: string;
@@ -153,7 +152,7 @@ async function main() {
   };
   const vehicleFields = () => ({
     chassisNumber: chassis(),
-    registrationBooklet: `PW${randomDigits(8)}`,
+    registrationBooklet: randomDigits(8),
     make: 'Toyota',
     model: 'Hilux',
     color: 'ابيض',
@@ -243,13 +242,7 @@ async function main() {
     { headers },
   );
 
-  // ── Phase 3: a desk, and a vehicle with a real printed card ────────
-  const deskName = `PW Desk ${runId}`;
-  const desk = await api.post<{ id: string }>(
-    `${API_BASE}/registration-stations/${registrationStation.data.id}/desks`,
-    { name: deskName, printerModel: 'PW test printer' },
-    { headers },
-  );
+  // ── Phase 3: a vehicle with a real printed card (Phase 7: no desk) ──
   const scanOwner = await registerOwner(`مالك مسح ${arabicTag(6)}`, nationalId());
   const scanVehicle = await api.post(
     `${API_BASE}/vehicles`,
@@ -266,7 +259,7 @@ async function main() {
   );
   const scanCard = await api.post<{ id: string; cardNumber: string }>(
     `${API_BASE}/vehicles/${scanVehicle.data.id}/cards`,
-    { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+    { registrationStationId: registrationStation.data.id, reason: 'FIRST_ISSUE' },
     { headers },
   );
   const preview = await api.get<ArrayBuffer>(`${API_BASE}/cards/${scanCard.data.id}/preview`, {
@@ -290,7 +283,7 @@ async function main() {
     );
     const extraCard = await api.post<{ cardNumber: string }>(
       `${API_BASE}/vehicles/${extraVehicle.data.id}/cards`,
-      { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+      { registrationStationId: registrationStation.data.id, reason: 'FIRST_ISSUE' },
       { headers },
     );
     extraCardNumbers.push(extraCard.data.cardNumber);
@@ -300,7 +293,7 @@ async function main() {
   // history trips the gap rule in the fill-up test and feeds the reports tests.
   const historyCard = await api.post<{ id: string; cardNumber: string }>(
     `${API_BASE}/vehicles/${vehicle.data.id}/cards`,
-    { registrationStationId: registrationStation.data.id, deskId: desk.data.id, reason: 'FIRST_ISSUE' },
+    { registrationStationId: registrationStation.data.id, reason: 'FIRST_ISSUE' },
     { headers },
   );
   const historyPreview = await api.get<ArrayBuffer>(`${API_BASE}/cards/${historyCard.data.id}/preview`, {
@@ -399,7 +392,6 @@ async function main() {
     scanVehicleCurrentPlate: scanVehicle.data.currentPlate,
     scanCardNumber: scanCard.data.cardNumber,
     extraCardNumbers,
-    deskName,
     supervisorUsername,
     supervisorPassword: RUN_PASSWORD,
     adminUsername,

@@ -186,40 +186,35 @@ test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the rese
   await context.close();
 });
 
-test('station employee: sees the level while shown, and nothing once hidden', async ({ browser }) => {
+// After review (Khalil, 15 Oct 2026): the station employee records fill-ups
+// and nothing else. Even with the stock shown, they see no stock, no bell, no
+// records and no reports: the app opens on «تسجيل تعبئة», its only screen.
+test('station employee: only «تسجيل تعبئة» — no home, stock, bell, records or reports', async ({ browser }) => {
   test.setTimeout(240_000);
-  const { context, page } = await newPage(browser);
-  await loginAs(page, employeeUsername, fixtures.supervisorPassword);
-  // The supervisor's switch is off: no stock anywhere for the employee.
-  await expect(page.getByTestId('stock-strip')).toHaveCount(0);
-  await shots(page, '20-employee-home-stock-hidden');
-  await context.close();
-
-  // The supervisor shows it again, through the API, and the employee sees it.
+  // The supervisor shows the stock again (the steps after this one expect it).
   await api.patch(
     `${API_BASE}/stations/${fixtures.stationId}/stock-visibility`,
     { show: true },
     { headers: { Authorization: `Bearer ${supervisorToken}` } },
   );
-  const second = await newPage(browser);
-  await loginAs(second.page, employeeUsername, fixtures.supervisorPassword);
-  await expect(second.page.getByTestId('stock-strip')).toBeVisible();
-  await expect(second.page.getByTestId('stock-strip-DIESEL')).toContainText('لتر');
-  await shots(second.page, '21-employee-home-stock-shown');
+  const { context, page } = await newPage(browser);
+  await loginAs(page, employeeUsername, fixtures.supervisorPassword, '/fillups/new');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByTestId('stock-strip')).toHaveCount(0);
+  await expect(page.locator('[data-testid="notification-bell"]')).toHaveCount(0);
+  const menu = page.locator('aside nav a');
+  await expect(menu).toHaveCount(1);
+  await expect(menu.first()).toContainText('تسجيل تعبئة');
+  await shots(page, '20-employee-recording-only');
 
-  // The bell: low stock reached the employee because stock is visible; the
-  // supervisor's reset did not (it is for the municipality manager).
-  await second.page.locator('[data-testid="notification-bell"]:visible').click();
-  await expect(second.page.getByTestId('notification-panel')).toBeVisible();
-  await shots(second.page, '22-employee-bell');
-  await second.page.keyboard.press('Escape');
-
-  // Their only report is their own shift.
-  await second.page.getByRole('link', { name: 'التقارير' }).first().click();
-  await expect(second.page).toHaveURL(/\/reports/);
-  await showTable(second.page, 'totals');
-  await shots(second.page, '23-employee-shift-report');
-  await second.context.close();
+  // Any other address brings them back to their one screen.
+  for (const address of ['/', '/vehicles', '/stations', '/reports']) {
+    await page.evaluate(
+      `window.history.pushState({}, '', ${JSON.stringify(address)}); window.dispatchEvent(new PopStateEvent('popstate'));`,
+    );
+    await expect(page, `${address} is not theirs`).toHaveURL(/\/fillups\/new$/);
+  }
+  await context.close();
 });
 
 test('supervisor: the bell, the station reports with a CSV export, and the person page', async ({ browser }) => {
@@ -267,7 +262,7 @@ test('municipality manager: the summary row, a station and an office, and the re
 
   // A station: overview, staff, fuel and stock, reports.
   // The list is paged (25 a page): search for the one wanted.
-  await page.locator('#pl-search').fill(fixtures.stationName);
+  await page.locator('#pl-st-search').fill(fixtures.stationName);
   await page.getByRole('link', { name: fixtures.stationName }).first().click();
   await expect(page.getByTestId('tab-overview')).toBeVisible();
   await shots(page, '41-station-overview');
@@ -292,20 +287,20 @@ test('municipality manager: the summary row, a station and an office, and the re
   await shots(page, '49b-person-permissions-locked');
   await navigateInApp(page, '/manage');
   // The list is paged (25 a page): search for the one wanted.
-  await page.locator('#pl-search').fill(fixtures.stationName);
+  await page.locator('#pl-st-search').fill(fixtures.stationName);
   await page.getByRole('link', { name: fixtures.stationName }).first().click();
 
-  // An office: overview, staff, cards and stock, desks and printers.
+  // An office: overview and staff (Phase 7: no desks and printers).
   await navigateInApp(page, '/manage');
-  // The list is paged (25 a page): search for the one wanted.
-  await page.locator('#pl-search').fill(fixtures.registrationStationName);
+  // Phase 7: offices are their own tab. The list is paged: search for the one wanted.
+  await page.getByTestId('tab-offices').click();
+  await page.locator('#pl-of-search').fill(fixtures.registrationStationName);
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByTestId('tab-overview')).toBeVisible();
   await shots(page, '44-office-overview');
   // Phase 6: no «البطاقات والمخزون» tab on an office any more.
   await expect(page.getByTestId('tab-cards')).toHaveCount(0);
-  await page.getByTestId('tab-desks').click();
-  await shots(page, '46-office-desks-tab');
+  await expect(page.getByTestId('tab-desks')).toHaveCount(0);
 
   // The role reports: the municipality's.
   await navigateInApp(page, '/reports?report=municipality');

@@ -207,7 +207,6 @@ export class ExceptionsService {
       id: t.id,
       key: t.key,
       name: t.name,
-      requiresProof: t.requiresProof,
       isActive: t.isActive,
       overridableRules: t.overridableRules as RuleFailureReason[],
       dailyLimitPerStation: t.dailyLimitPerStation,

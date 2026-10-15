@@ -81,7 +81,6 @@ export interface ExceptionTypeSummary {
   id: string;
   key: string;
   name: string;
-  requiresProof: boolean;
   isActive: boolean;
 }
 
@@ -90,7 +89,6 @@ export interface ExceptionSummary {
   exceptionTypeId: string;
   reason: string;
   approvedById: string | null;
-  proofReference: string | null;
   validUntil: string | null;
   createdAt: string;
   exceptionType: ExceptionTypeSummary;

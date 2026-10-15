@@ -68,7 +68,10 @@ test('the shared rules give one answer to both sides', () => {
   assert.equal(shared.checkNationalId('319900123456', { now }).ok, false);
   assert.equal(shared.checkNationalId('120090123456', { now }).ok, false); // 17 years old
   assert.equal(shared.checkNationalId('120080123456', { now }).ok, true); // 18
-  assert.equal(shared.normalizePlate('5-123456N') === shared.normalizePlate('5-123456'), false);
+  assert.equal(shared.normalizePlate('5-123456N'), null); // phase 7: digits only
+  assert.equal(shared.checkAdministrativeId('5123456789').ok, true);
+  assert.equal(shared.checkAdministrativeId('912345678901').ok, false);
+  assert.equal(shared.checkBooklet('AB123456').ok, false);
   assert.equal(shared.normalizeLibyanMobile('+218912345678'), '0912345678');
   assert.equal(shared.checkChassis('ABCDEFGHJKLMNPRST', false).ok, true);
   assert.equal(shared.checkChassis('ABC123', false).ok, false);

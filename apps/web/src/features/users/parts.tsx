@@ -16,10 +16,11 @@ export function SectionCard({
   step?: number;
   children: ReactNode;
 }) {
+  // Phase 7 (7): the title on a teal-tinted band, the content below on white.
   return (
     <Card>
-      <section aria-label={title} className="p-4 lg:p-5">
-        <div className="mb-4 flex items-start gap-3">
+      <section aria-label={title}>
+        <div className="flex items-start gap-3 border-b border-primary/15 bg-primary-100 px-4 py-3 lg:px-5">
           {step !== undefined && (
             <span
               aria-hidden="true"
@@ -29,11 +30,11 @@ export function SectionCard({
             </span>
           )}
           <div>
-            <h2 className="text-[18px] font-extrabold text-ink lg:text-[15px]">{title}</h2>
+            <h2 className="text-[18px] font-extrabold text-primary-dark lg:text-[15px]">{title}</h2>
             {description && <p className="mt-0.5 text-[15px] text-ink-soft lg:text-[13px]">{description}</p>}
           </div>
         </div>
-        {children}
+        <div className="p-4 lg:p-5">{children}</div>
       </section>
     </Card>
   );

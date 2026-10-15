@@ -8,11 +8,13 @@ async function fillVehicleDetails(page: import('@playwright/test').Page) {
   const alphabet = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
   const rnd = (n: number) => Array.from({ length: n }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
   await page.getByTestId('registration-chassis-input').fill(rnd(17));
-  await page.getByTestId('registration-booklet-input').fill(rnd(8));
-  await page.getByTestId('registration-make').fill('Toyota');
-  await page.getByTestId('registration-model').fill('Hilux');
+  // Phase 7: the booklet number is digits only; the year is a list.
+  const digits = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');
+  await page.getByTestId('registration-booklet-input').fill(digits(8));
+  await page.getByTestId('registration-make').fill('تويوتا');
+  await page.getByTestId('registration-model').fill('هايلكس');
   await page.getByTestId('registration-color').selectOption('ابيض');
-  await page.getByTestId('registration-year').fill('2020');
+  await page.getByTestId('registration-year').selectOption('2020');
   await page.getByTestId('registration-fuel').selectOption('PETROL');
 }
 
@@ -54,10 +56,10 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
   await expect(page.getByTestId('registration-success')).toContainText('تم تسجيل المركبة');
   await expect(page.getByTestId('registration-success')).toContainText(ownerName);
 
-  // ── Phase 3: issue and print the card at the desk ─────────────────
-  // First visit on this device: pick the desk (then it's remembered).
-  await page.getByTestId('card-desk-select').selectOption({ label: `${fixtures.deskName} — PW test printer` });
-  await expect(page.getByTestId('card-desk-current')).toHaveText(fixtures.deskName);
+  // ── Phase 3: issue and print the card at the office ──────────────
+  // Phase 7: no desk to pick; the black-only ribbon is the one device setting.
+  await expect(page.getByTestId('card-printer-settings')).toBeVisible();
+  await expect(page.getByTestId('card-desk-select')).toHaveCount(0);
   await page.getByTestId('card-issue').click();
   const firstNumber = (await page.getByTestId('card-issued-number').innerText()).trim();
   expect(firstNumber).toMatch(/^SBH-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);

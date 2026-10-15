@@ -25,15 +25,19 @@ import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { FUEL_TYPE_LABELS, fuelTypeLabel } from '../../lib/labels';
 import { InfoHint } from '../../components/InfoHint';
 import { maskIdentityNumber } from '../../lib/masking';
+import { describeApiError } from '../../lib/apiError';
+import { SkeletonRows } from '../../components/design/Skeleton';
+import { REFERENCE_CODE_LABEL, referenceCode } from '@fuel-tracking/shared-types';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 const selectClass =
-  'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60';
+  'h-9 rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark disabled:opacity-60';
 const tintedSelectClass =
-  'h-9 rounded-sm bg-accent-100 px-3 text-[13px] lg:text-[12.5px] font-bold text-accent-ink focus:outline-none focus:ring-2 focus:ring-accent';
+  'h-9 rounded-sm bg-accent-100 px-3 text-[13px] lg:text-[12.5px] font-bold text-accent-ink focus:outline-none focus:ring-2 focus:ring-primary-dark';
 
 // Round 4 feedback item 9, matches design/feedback-2026-08-29/
 // 10-design-target-daily-report.png: active (non-default) filters are
@@ -41,7 +45,15 @@ const tintedSelectClass =
 // optional filters narrowed the set, KPI tiles + a fuel-type breakdown
 // chart + the results table are all computed from the SAME filtered
 // response the backend returns — never a separately hardcoded number.
-const DAILY_PAGE_SIZE = 25;
+const DAILY_PAGE_SIZE = LIST_PAGE_SIZE;
+
+// Phase 7: a fill-up that needs a reference (an exception, or one recorded
+// without a card) shows the system's own code; an ordinary one needs none.
+function fillUpReference(row: { id: string; identifiedBy?: string | null; exception?: { id: string } | null }): string | null {
+  if (row.exception) return referenceCode('EXCEPTION', row.exception.id);
+  if (row.identifiedBy === 'NO_CARD') return referenceCode('NO_CARD', row.id);
+  return null;
+}
 
 export function DailyReportPage() {
   const { user, hasPermission } = useAuth();
@@ -51,6 +63,14 @@ export function DailyReportPage() {
 
   const [stationId, setStationId] = useState(canViewAllStations ? '' : (ownStation?.stationId ?? ''));
   const [date, setDate] = useState(todayIso());
+  // Phase 7 (4.1): a cleared or half-typed date is never sent - the API refused
+  // `date=` and the page then blamed the station. The report keeps showing the
+  // last full date until a new one is picked.
+  const isFullDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const [reportDate, setReportDate] = useState(date);
+  useEffect(() => {
+    if (isFullDate) setReportDate(date);
+  }, [date, isFullDate]);
   const [fuelType, setFuelType] = useState<FuelType | ''>('');
   const [ownerId, setOwnerId] = useState('');
   const [ownerLabel, setOwnerLabel] = useState('');
@@ -60,7 +80,7 @@ export function DailyReportPage() {
 
   const exportParams = {
     stationId: stationId || undefined,
-    date,
+    date: reportDate,
     fuelType: fuelType || undefined,
     ownerId: ownerId || undefined,
     employeeId: employeeId || undefined,
@@ -69,7 +89,7 @@ export function DailyReportPage() {
   // 25 results a page, the page in the address; changing a filter returns to page 1.
   const { skip, setSkip } = usePageParam(DAILY_PAGE_SIZE);
   // A new filter starts again from page 1 (but a refresh keeps the page).
-  const filterKey = `${stationId}|${date}|${fuelType}|${ownerId}|${employeeId}|${noCardOnly}`;
+  const filterKey = `${stationId}|${reportDate}|${fuelType}|${ownerId}|${employeeId}|${noCardOnly}`;
   const lastFilterKey = useRef(filterKey);
   useEffect(() => {
     if (lastFilterKey.current !== filterKey) {
@@ -78,8 +98,8 @@ export function DailyReportPage() {
     }
   });
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['reports', 'daily', stationId, date, fuelType, ownerId, employeeId, noCardOnly, skip],
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['reports', 'daily', stationId, reportDate, fuelType, ownerId, employeeId, noCardOnly, skip],
     placeholderData: (prev) => prev,
     queryFn: async () =>
       (await apiClient.get<DailyReportResponse>('/reports/daily', { params: { ...exportParams, skip, take: DAILY_PAGE_SIZE } })).data,
@@ -92,7 +112,7 @@ export function DailyReportPage() {
         params: { ...exportParams, format },
         responseType: 'blob',
       });
-      downloadBlob(res.data, `daily-report-${date}.${format}`);
+      downloadBlob(res.data, `daily-report-${reportDate}.${format}`);
     } finally {
       setExporting(null);
     }
@@ -103,8 +123,8 @@ export function DailyReportPage() {
     try {
       const res = await apiClient.get<DailyReportResponse>('/reports/daily', { params: { ...exportParams, skip: 0, take: 100 } });
       downloadCsv(
-        `daily-report-${date}.csv`,
-        ['الوقت', 'المحطة', 'اللوحة', 'المالك', 'الوقود', 'اللترات', 'الحالة', 'بدون بطاقة'],
+        `daily-report-${reportDate}.csv`,
+        ['الوقت', 'المحطة', 'اللوحة', 'المالك', 'الوقود', 'اللترات', 'الحالة', 'بدون بطاقة', 'رمز المرجع'],
         res.data.rows.map((r) => [
           formatTime(r.occurredAt),
           r.station.internalCode,
@@ -114,6 +134,7 @@ export function DailyReportPage() {
           r.quantityLiters,
           r.isException ? 'استثناء' : 'مطابق للقواعد',
           r.identifiedBy === 'NO_CARD' ? 'نعم' : 'لا',
+          fillUpReference(r) ?? '',
         ]),
       );
     } finally {
@@ -177,20 +198,26 @@ export function DailyReportPage() {
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المحطة</label>
+            <label htmlFor="daily-station" className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المحطة</label>
             {canViewAllStations ? (
-              <StationSelect value={stationId} onChange={setStationId} allowAllOption className={`w-56 ${selectClass}`} />
+              <StationSelect id="daily-station" value={stationId} onChange={setStationId} allowAllOption className={`w-56 ${selectClass}`} />
             ) : (
-              <StationSelect value={stationId} onChange={setStationId} disabled className={`w-56 ${selectClass}`} />
+              <StationSelect id="daily-station" value={stationId} onChange={setStationId} disabled className={`w-56 ${selectClass}`} />
             )}
           </div>
           <div>
-            <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">التاريخ</label>
+            <label htmlFor="daily-date" className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">التاريخ</label>
             <DateField
+              id="daily-date"
               value={date}
               onChange={setDate}
-              inputClassName={`w-36 pe-9 ${date !== todayIso() ? tintedSelectClass : selectClass}`}
+              inputClassName={`w-44 pe-9 ${date !== todayIso() ? tintedSelectClass : selectClass}`}
             />
+            {!isFullDate && (
+              <p className="mt-1 text-[13px] text-ink-soft lg:text-[12px]" data-testid="daily-date-incomplete">
+                اكتب التاريخ كاملًا (يوم/شهر/سنة) أو اختره من التقويم.
+              </p>
+            )}
           </div>
           <div>
             <label className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">نوع الوقود (اختياري)</label>
@@ -260,10 +287,14 @@ export function DailyReportPage() {
         </div>
       </Card>
 
-      {isLoading && <p className="text-[15px] lg:text-[13px] text-ink-soft">...جارٍ التحميل</p>}
+      {isLoading && (
+        <Card>
+          <SkeletonRows rows={5} label="جارٍ تحميل التقرير" />
+        </Card>
+      )}
       {isError && (
-        <p className="text-[15px] lg:text-[13px] text-danger">
-          تعذر تحميل التقرير — تأكد من اختيار محطة إن لم تملك صلاحية عرض جميع المحطات.
+        <p role="alert" className="text-[15px] lg:text-[13px] text-danger-dark" data-testid="daily-report-error">
+          {describeApiError(error, 'تعذر تحميل تقرير اليوم.').message}
         </p>
       )}
 
@@ -310,7 +341,7 @@ export function DailyReportPage() {
 
           <Card>
             <CardHeader title="نتائج التعبئات" />
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[760px] text-[13px] lg:text-[12.5px]">
                 <thead>
                   <tr className="bg-surface-alt text-[13px] lg:text-[12px] font-bold text-ink-soft">
@@ -352,6 +383,11 @@ export function DailyReportPage() {
                       </td>
                       <td className="px-[18px] py-3">
                         <FillUpStatusPill row={row} />
+                        {fillUpReference(row) && (
+                          <div className="mt-1" title={REFERENCE_CODE_LABEL} data-testid="daily-row-reference">
+                            <CodeText>{fillUpReference(row)}</CodeText>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -365,6 +401,34 @@ export function DailyReportPage() {
                 </tbody>
               </table>
             </div>
+            {/* On a phone each fill-up is a small card: nothing scrolls sideways. */}
+            <ul className="divide-y divide-line-soft lg:hidden" data-testid="daily-rows-stacked">
+              {data.rows.map((row) => (
+                <li key={row.id} className="space-y-1.5 px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <FillUpPlate vehicle={row.vehicle} typedPlate={row.typedPlate} />
+                    <FillUpStatusPill row={row} />
+                  </div>
+                  <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] text-ink">
+                    <span>{fuelTypeLabel(row.fuelType)}</span>
+                    <span>
+                      <LtrText className="font-bold">{row.quantityLiters}</LtrText> لتر
+                    </span>
+                    <CodeText>{formatTime(row.occurredAt)}</CodeText>
+                  </p>
+                  <p className="text-[15px] text-ink-soft">
+                    {row.station.internalCode}
+                    {row.vehicle?.owner ? ` — ${row.vehicle.owner.fullName}` : ''}
+                  </p>
+                  {fillUpReference(row) && (
+                    <p title={REFERENCE_CODE_LABEL}>
+                      <CodeText>{fillUpReference(row)}</CodeText>
+                    </p>
+                  )}
+                </li>
+              ))}
+              {data.rows.length === 0 && <li className="p-6 text-center text-[15px] text-ink-soft">لا توجد تعبئات مطابقة</li>}
+            </ul>
             <Pagination
               skip={skip}
               take={DAILY_PAGE_SIZE}
@@ -376,7 +440,7 @@ export function DailyReportPage() {
         </>
       )}
 
-      {canViewAllStations && <DirectorateOverview />}
+      {canViewAllStations && <DirectorateOverview endDate={reportDate} />}
     </div>
   );
 }

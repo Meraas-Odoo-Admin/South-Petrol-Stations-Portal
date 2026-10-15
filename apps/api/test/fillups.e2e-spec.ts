@@ -442,9 +442,9 @@ describe('Fill-ups (e2e)', () => {
     expect(replayAttemptRes.body.vehicleId).toBeUndefined();
   });
 
-  // ── requiresProof enforcement ───────────────────────────────────────
+  // ── Phase 7: no proof reference, for any type ───────────────────────
 
-  it('rejects an exception submission with a requiresProof:true exception type and no proofReference, creating nothing', async () => {
+  it("accepts an exception with a type that used to require a proof reference, and stores none", async () => {
     const accessToken = await loginAsRecorder();
     const idempotencyKey = `e2e-fu-noproof-${runId}`;
 
@@ -455,13 +455,24 @@ describe('Fill-ups (e2e)', () => {
       .send(
         baseFillUpBody({
           exceptionTypeId: exceptionTypeRequiresProofId,
-          reason: 'E2E test: exception type requires proof but none supplied',
+          reason: 'E2E test: no proof reference is asked for any more',
         }),
       )
-      .expect(400);
+      .expect(201);
 
-    const rows = await prisma.fillUpTransaction.findMany({ where: { idempotencyKey } });
-    expect(rows).toHaveLength(0);
+    const rows = await prisma.fillUpTransaction.findMany({ where: { idempotencyKey }, include: { exception: true } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.exception?.proofReference).toBeNull();
+  });
+
+  it("refuses a proofReference sent anyway: the field no longer exists", async () => {
+    const accessToken = await loginAsRecorder();
+    await request(app.getHttpServer())
+      .post('/api/v1/fillups')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Idempotency-Key', `e2e-fu-proof-field-${runId}`)
+      .send(baseFillUpBody({ exceptionTypeId: exceptionTypeRequiresProofId, reason: 'x', proofReference: 'REF-1' }))
+      .expect(400);
   });
 
   // ── Reject -> exception -> approve, end to end ──────────────────────

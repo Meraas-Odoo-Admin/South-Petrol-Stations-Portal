@@ -201,8 +201,9 @@ model RegistrationStation {
 }
 
 // Registration pivot, phase 3: a desk at a registration station, with the
-// card printer attached to its computer. Staff pick their desk once per
-// device; every card records the desk it was issued at.
+// card printer attached to its computer. Phase 7: no longer used - desks and
+// printers are gone from the app, and a card or a print is recorded against
+// the office and the employee only. The table and its rows are kept.
 model RegistrationDesk {
   id                    String              @id @default(cuid())
   registrationStationId String
@@ -233,8 +234,8 @@ model VehicleCard {
   vehicle               Vehicle                @relation(fields: [vehicleId], references: [id])
   registrationStationId String
   registrationStation   RegistrationStation    @relation(fields: [registrationStationId], references: [id])
-  deskId                String
-  desk                  RegistrationDesk       @relation(fields: [deskId], references: [id])
+  deskId                String? // Phase 7: desks are gone; set on cards issued before
+  desk                  RegistrationDesk?      @relation(fields: [deskId], references: [id])
   issuedById            String
   issuedBy              User                   @relation("VehicleCardIssuedBy", fields: [issuedById], references: [id])
   issuedAt              DateTime               @default(now())
@@ -648,7 +649,7 @@ model OwnerChangeRequest {
   requestedIdentityType   IdentityType
   requestedIdentityNumber String
   reason                  String
-  proofReference          String // mandatory, same as VehicleChangeRequest
+  proofReference          String? // Phase 7: no longer asked for (the field is gone from every form); kept for the rows that have one
   status                  VehicleChangeRequestStatus @default(PENDING)
   requestedById           String
   requestedBy             User                       @relation("OwnerChangeRequestedBy", fields: [requestedById], references: [id])
@@ -858,7 +859,7 @@ model VehicleChangeRequest {
   currentValue    String // snapshot at request time, for audit context
   requestedValue  String
   reason          String
-  proofReference  String // mandatory for both change types — not the fill-up ExceptionType's optional-per-category toggle
+  proofReference  String? // Phase 7: no longer asked for (the field is gone from every form); kept for the rows that have one
   status          VehicleChangeRequestStatus @default(PENDING)
   requestedById   String
   requestedBy     User                       @relation("VehicleChangeRequestedBy", fields: [requestedById], references: [id])
@@ -1015,7 +1016,7 @@ model ExceptionType {
   id            String      @id @default(cuid())
   key           String      @unique // "medical_chronic", "transit_traveler", "government", "emergency"
   name          String
-  requiresProof Boolean     @default(true)
+  requiresProof Boolean     @default(true) // Phase 7: unused - no exception asks for a proof reference any more; kept for old rows
   isActive      Boolean     @default(true)
   // Phase 6: the rule(s) this type may override (RuleFailureReason values); empty = any rule.
   overridableRules String[] @default([])
@@ -1037,7 +1038,7 @@ model Exception {
   // Nullable: set only on approval, not at request time — a requested
   // exception has no approver yet (see POST /fillups/:id/exceptions/approve).
   approvedById        String?
-  proofReference      String?
+  proofReference      String? // Phase 7: no longer asked for; kept for the rows that have one
   validUntil          DateTime? // null = one-off; set = recurring exception with an expiry
   createdAt           DateTime          @default(now())
 
@@ -1115,8 +1116,8 @@ model CardPrint {
   id                    String              @id @default(cuid())
   registrationStationId String
   registrationStation   RegistrationStation @relation(fields: [registrationStationId], references: [id])
-  deskId                String
-  desk                  RegistrationDesk    @relation(fields: [deskId], references: [id])
+  deskId                String? // Phase 7: desks are gone; set on prints made before
+  desk                  RegistrationDesk?   @relation(fields: [deskId], references: [id])
   kind                  CardPrintKind
   cardId                String? // null for a test card
   printedById           String

@@ -70,14 +70,18 @@ export function totalBoxes(groups: DigitGroup[]): number {
 }
 
 // Shared box shapes — every screen that takes a plate or an owner identity
-// number uses these same two group definitions (round 7 item 2: one
-// reusable component, not per-screen copies of the shape too). Matches
-// LICENSE_PLATE_REGEX (`/^\d{1,2}[-\s]?\d{1,7}$/`) and
-// NATIONAL_ID_REGEX/ADMINISTRATIVE_ID_REGEX (12 digits) in
-// lib/libyanFormats.ts exactly — this file only describes box counts, the
-// actual format rules stay in libyanFormats.ts, un-duplicated.
+// number uses these same group definitions (round 7 item 2: one reusable
+// component, not per-screen copies of the shape too). They only describe box
+// counts; the rules themselves are in packages/shared-types (a plate: a 1–2
+// digit city code and a 1–7 digit serial; a national ID: 12 digits; an
+// administrative number: 10 digits since Phase 7).
 export const PLATE_DIGIT_GROUPS: DigitGroup[] = [
   { boxes: 2, minFilled: 1 },
   { boxes: 7, minFilled: 1 },
 ];
 export const IDENTITY_DIGIT_GROUPS: DigitGroup[] = [{ boxes: 12 }];
+export const ADMINISTRATIVE_ID_DIGIT_GROUPS: DigitGroup[] = [{ boxes: 10 }];
+
+export function identityDigitGroups(kind: 'NATIONAL_ID' | 'ADMINISTRATIVE_ID'): DigitGroup[] {
+  return kind === 'NATIONAL_ID' ? IDENTITY_DIGIT_GROUPS : ADMINISTRATIVE_ID_DIGIT_GROUPS;
+}

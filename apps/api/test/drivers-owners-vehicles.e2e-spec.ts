@@ -333,7 +333,7 @@ describe('Owners/Vehicles (e2e)', () => {
     const auth = (req: request.Test) => req.set('Authorization', `Bearer ${accessToken}`);
 
     await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
-      .send({ identityType: 'NATIONAL_ID', identityNumber: `1${nationalIdTail()}`, reason: 'x', proofReference: 'y' })
+      .send({ identityType: 'NATIONAL_ID', identityNumber: `1${nationalIdTail()}`, reason: 'x' })
       .expect(403);
     await auth(request(server).get('/api/v1/owners/change-requests')).expect(403);
   });
@@ -349,7 +349,6 @@ describe('Owners/Vehicles (e2e)', () => {
         identityType: 'NATIONAL_ID',
         identityNumber: newIdentityNumber,
         reason: 'Typed the wrong national ID at onboarding.',
-        proofReference: 'ref-001',
       })
       .expect(201);
     expect(requestRes.body.status).toBe('PENDING');
@@ -362,7 +361,6 @@ describe('Owners/Vehicles (e2e)', () => {
         identityType: 'NATIONAL_ID',
         identityNumber: `1${nationalIdTail()}`,
         reason: 'Another attempt',
-        proofReference: 'ref-002',
       })
       .expect(409);
 
@@ -400,7 +398,6 @@ describe('Owners/Vehicles (e2e)', () => {
         identityType: 'NATIONAL_ID',
         identityNumber: conflictOwnerRes.body.identityNumber,
         reason: 'Trying to reuse another owner\'s identity',
-        proofReference: 'ref-003',
       })
       .expect(409);
   });
@@ -413,9 +410,9 @@ describe('Owners/Vehicles (e2e)', () => {
     const requestRes = await auth(request(server).post(`/api/v1/owners/${ownerId}/change-requests`))
       .send({
         identityType: 'ADMINISTRATIVE_ID',
-        identityNumber: `9${nationalIdTail()}`,
+        // Phase 7: 10 digits, starting with 5 (male) or 6 (female).
+        identityNumber: `5${nationalIdTail().slice(0, 9)}`,
         reason: 'Second correction attempt',
-        proofReference: 'ref-004',
       })
       .expect(201);
 
@@ -543,7 +540,6 @@ describe('Owners/Vehicles (e2e)', () => {
         changeType: 'OWNER_CHANGE',
         requestedValue: secondOwnerId,
         reason: 'E2E DOV owner reassignment test',
-        proofReference: 'E2E-PROOF-OWNER-CHANGE',
       })
       .expect(201);
     expect(requestRes.body.requiresApproval).toBe(true);
@@ -568,7 +564,6 @@ describe('Owners/Vehicles (e2e)', () => {
         changeType: 'OWNER_CHANGE',
         requestedValue: ownerId,
         reason: 'E2E DOV owner revert',
-        proofReference: 'E2E-PROOF-OWNER-REVERT',
       })
       .expect(201);
     await request(app.getHttpServer())

@@ -10,7 +10,7 @@ import { createMunicipality, deleteMunicipalities } from './support/municipality
 
 // UX round, item 4: vehicles are global, so a registration employee in ANY
 // office reprints or re-issues ANY vehicle's card. The print is counted against
-// the PRINTING employee's office and desk; the old card is cancelled/replaced;
+// the PRINTING employee's office (Phase 7: no desk); the old card is cancelled/replaced;
 // every action is audited; and an employee still cannot act at an office that
 // is not theirs.
 describe('Cards from another office (e2e)', () => {
@@ -28,8 +28,6 @@ describe('Cards from another office (e2e)', () => {
   let authorityId: string;
   let officeA: string;
   let officeB: string;
-  let deskA: string;
-  let deskB: string;
   const vehicleIds: string[] = [];
 
   beforeAll(async () => {
@@ -51,8 +49,6 @@ describe('Cards from another office (e2e)', () => {
       });
     officeA = (await office('A')).id;
     officeB = (await office('B')).id;
-    deskA = (await prisma.registrationDesk.create({ data: { registrationStationId: officeA, name: 'Desk A' } })).id;
-    deskB = (await prisma.registrationDesk.create({ data: { registrationStationId: officeB, name: 'Desk B' } })).id;
 
     // Vehicles registered at office A.
     for (let i = 0; i < 3; i++) {
@@ -96,7 +92,6 @@ describe('Cards from another office (e2e)', () => {
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: roleIds } } });
     await prisma.role.deleteMany({ where: { id: { in: roleIds } } });
-    await prisma.registrationDesk.deleteMany({ where: { registrationStationId: { in: [officeA, officeB] } } });
     await prisma.registrationStation.deleteMany({ where: { id: { in: [officeA, officeB] } } });
     await prisma.securityAuthority.deleteMany({ where: { id: authorityId } });
     await deleteMunicipalities(prisma, [municipalityId]);
@@ -126,16 +121,16 @@ describe('Cards from another office (e2e)', () => {
 
   async function issueAtA(vehicleId: string) {
     const a = await as('atA');
-    return (await a.post(`/vehicles/${vehicleId}/cards`, { registrationStationId: officeA, deskId: deskA, reason: 'FIRST_ISSUE' }).expect(201)).body;
+    return (await a.post(`/vehicles/${vehicleId}/cards`, { registrationStationId: officeA, reason: 'FIRST_ISSUE' }).expect(201)).body;
   }
 
-  it("an employee at office B reprints a card office A issued, and the print is counted at office B's desk", async () => {
+  it("an employee at office B reprints a card office A issued, and the print is counted at office B", async () => {
     const card = await issueAtA(vehicleIds[0]!);
     const b = await as('atB');
     const [aBefore, bBefore] = [await prints(officeA), await prints(officeB)];
 
     await b
-      .post(`/cards/${card.id}/print`, { mode: 'full', registrationStationId: officeB, deskId: deskB })
+      .post(`/cards/${card.id}/print`, { mode: 'full', registrationStationId: officeB })
       .buffer(true)
       .parse(binary)
       .expect(200);
@@ -143,12 +138,13 @@ describe('Cards from another office (e2e)', () => {
     expect(await prints(officeB)).toBe(bBefore + 1);
     expect(await prints(officeA)).toBe(aBefore);
     const row = await prisma.cardPrint.findFirst({ where: { cardId: card.id }, orderBy: { printedAt: 'desc' } });
-    expect(row).toMatchObject({ registrationStationId: officeB, deskId: deskB, printedById: userIds.atB });
+    expect(row).toMatchObject({ registrationStationId: officeB, deskId: null, printedById: userIds.atB });
 
     const audit = await prisma.auditLog.findMany({ where: { entityType: 'VehicleCard', entityId: card.id, action: 'PRINT_CARD' } });
     expect(audit).toHaveLength(1);
     expect(audit[0]!.userId).toBe(userIds.atB);
-    expect(audit[0]!.newValue).toMatchObject({ printedAtRegistrationStationId: officeB, printedAtDeskId: deskB });
+    expect(audit[0]!.newValue).toMatchObject({ printedAtRegistrationStationId: officeB });
+    expect(audit[0]!.newValue).not.toHaveProperty('printedAtDeskId');
   }, 60_000);
 
   it('the card stays office A\'s record; the reprint changes nothing about the card', async () => {
@@ -161,16 +157,10 @@ describe('Cards from another office (e2e)', () => {
     const b = await as('atB');
     // Naming office A (not theirs) is refused, and so is the old behaviour of
     // "the card's own office" when that office is not theirs.
-    await b.post(`/cards/${card!.id}/print`, { registrationStationId: officeA, deskId: deskA }).expect(403);
+    await b.post(`/cards/${card!.id}/print`, { registrationStationId: officeA }).expect(403);
     await b.post(`/cards/${card!.id}/print`, {}).expect(403);
-    // A desk of another office is not available.
-    expect(
-      (await b.post(`/cards/${card!.id}/print`, { registrationStationId: officeB, deskId: deskA }).expect(409)).body.message,
-    ).toBe('DESK_NOT_AVAILABLE');
-    // Without a desk for another office's card: not available either.
-    expect((await b.post(`/cards/${card!.id}/print`, { registrationStationId: officeB }).expect(409)).body.message).toBe(
-      'DESK_NOT_AVAILABLE',
-    );
+    // A deskId is no longer a field at all (Phase 7).
+    await b.post(`/cards/${card!.id}/print`, { registrationStationId: officeB, deskId: 'x' }).expect(400);
   });
 
   it('an employee at office B issues a NEW card for a vehicle registered at office A: the old one is replaced, the new one is office B\'s', async () => {
@@ -179,14 +169,13 @@ describe('Cards from another office (e2e)', () => {
     const res = await b
       .post(`/vehicles/${vehicleIds[1]!}/cards`, {
         registrationStationId: officeB,
-        deskId: deskB,
         reason: 'LOST',
         reasonNote: 'فُقدت البطاقة',
       })
       .expect(201);
     expect(res.body).toMatchObject({ status: 'ACTIVE', reason: 'LOST', reasonNote: 'فُقدت البطاقة' });
     expect(res.body.registrationStation.id).toBe(officeB);
-    expect(res.body.desk.id).toBe(deskB);
+    expect(res.body.deskId).toBeNull();
     expect(res.body.issuedBy.id).toBe(userIds.atB);
 
     const old = await prisma.vehicleCard.findUniqueOrThrow({ where: { id: first.id } });
@@ -199,22 +188,22 @@ describe('Cards from another office (e2e)', () => {
 
     // Printing the new card is counted at office B as well.
     const before = await prints(officeB);
-    await b.post(`/cards/${res.body.id}/print`, { mode: 'full', registrationStationId: officeB, deskId: deskB }).buffer(true).parse(binary).expect(200);
+    await b.post(`/cards/${res.body.id}/print`, { mode: 'full', registrationStationId: officeB }).buffer(true).parse(binary).expect(200);
     expect(await prints(officeB)).toBe(before + 1);
   }, 60_000);
 
   it('the reason is still required for a new card, and an employee cannot issue at an office that is not theirs', async () => {
     const b = await as('atB');
-    await b.post(`/vehicles/${vehicleIds[1]!}/cards`, { registrationStationId: officeB, deskId: deskB }).expect(400);
+    await b.post(`/vehicles/${vehicleIds[1]!}/cards`, { registrationStationId: officeB }).expect(400);
     await b
-      .post(`/vehicles/${vehicleIds[1]!}/cards`, { registrationStationId: officeA, deskId: deskA, reason: 'LOST' })
+      .post(`/vehicles/${vehicleIds[1]!}/cards`, { registrationStationId: officeA, reason: 'LOST' })
       .expect(403);
   });
 
   it('"not printed properly" from office B on a card office A issued: cancelled, and a new card is issued at office B', async () => {
     const card = await issueAtA(vehicleIds[2]!);
     const b = await as('atB');
-    const res = await b.post(`/cards/${card.id}/failed-print`, { registrationStationId: officeB, deskId: deskB }).expect(201);
+    const res = await b.post(`/cards/${card.id}/failed-print`, { registrationStationId: officeB }).expect(201);
     expect(res.body.registrationStation.id).toBe(officeB);
     expect(res.body.reason).toBe('FAILED_PRINT');
     const old = await prisma.vehicleCard.findUniqueOrThrow({ where: { id: card.id } });

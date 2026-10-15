@@ -34,6 +34,9 @@ export const COUNT_UNITS = {
   row: { one: 'صف', oneWord: 'واحد', two: 'صفان', few: 'صفوف', many: 'صفًّا' },
   time: { one: 'مرة', oneWord: 'واحدة', two: 'مرتان', few: 'مرات', many: 'مرة' },
   case: { one: 'حالة', oneWord: 'واحدة', two: 'حالتان', few: 'حالات', many: 'حالة' },
+  // Phase 7: the units of the settings page.
+  exception: { one: 'استثناء', oneWord: 'واحد', two: 'استثناءان', few: 'استثناءات', many: 'استثناءً' },
+  dinar: { one: 'دينار', oneWord: 'واحد', two: 'ديناران', few: 'دنانير', many: 'دينارًا' },
 } as const satisfies Record<string, CountUnit>;
 
 export type CountUnitKey = keyof typeof COUNT_UNITS;

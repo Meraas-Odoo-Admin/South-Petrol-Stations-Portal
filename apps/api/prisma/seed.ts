@@ -83,7 +83,7 @@ const SEED_OWNERS = [
   { key: 'O8', identityType: 'NATIONAL_ID', identityNumber: '219770000018', fullName: 'زينب محمد الرقيعي', phone: '091-2340018' },
   { key: 'O9', identityType: 'NATIONAL_ID', identityNumber: '119600000019', fullName: 'مفتاح سالم القذاذفة', phone: '092-6450019' },
   { key: 'O10', identityType: 'NATIONAL_ID', identityNumber: '219850000020', fullName: 'حواء إبراهيم أنت عمر', phone: '091-3670020' },
-  { key: 'O11', identityType: 'ADMINISTRATIVE_ID', identityNumber: '918700000021', fullName: 'عبدالناصر خليفة الفزاني', phone: '092-5890021' },
+  { key: 'O11', identityType: 'ADMINISTRATIVE_ID', identityNumber: '5187000021', fullName: 'عبدالناصر خليفة الفزاني', phone: '092-5890021' },
   { key: 'O12', identityType: 'NATIONAL_ID', identityNumber: '219730000022', fullName: 'سعاد علي المجابرة', phone: '091-4230022' },
 ] as const;
 
@@ -91,7 +91,7 @@ const SEED_DRIVERS = [
   { key: 'D1', identityType: 'NATIONAL_ID', identityNumber: '119850000001', fullName: 'محمد عبدالسلام الزنتاني', phone: '091-2000001' },
   { key: 'D2', identityType: 'NATIONAL_ID', identityNumber: '219900000002', fullName: 'خديجة إبراهيم المصراتي', phone: '092-2000002' },
   { key: 'D3', identityType: 'NATIONAL_ID', identityNumber: '117800000003', fullName: 'عمر يوسف الفزاني', phone: '093-2000003' },
-  { key: 'D4', identityType: 'ADMINISTRATIVE_ID', identityNumber: '919950000004', fullName: 'يوسف الطاهر الطارقي', phone: '094-2000004' },
+  { key: 'D4', identityType: 'ADMINISTRATIVE_ID', identityNumber: '5199500004', fullName: 'يوسف الطاهر الطارقي', phone: '094-2000004' },
   { key: 'D5', identityType: 'NATIONAL_ID', identityNumber: '118200000005', fullName: 'سالم أحمد البرعصي', phone: '095-2000005' },
   { key: 'D6', identityType: 'NATIONAL_ID', identityNumber: '218800000006', fullName: 'مريم خالد الشريف', phone: '096-2000006' },
 ] as const;

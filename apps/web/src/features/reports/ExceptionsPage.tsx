@@ -5,7 +5,7 @@ import { apiClient } from '../../lib/apiClient';
 import { downloadCsv } from '../../lib/csv';
 import { formatDateTime } from '../../lib/dateFormat';
 import { formatLicensePlate } from '../../lib/libyanFormats';
-import { fuelTypeLabel } from '../../lib/labels';
+import { fuelTypeLabel, settingValueText } from '../../lib/labels';
 import { useAuth } from '../auth/AuthProvider';
 import { Pagination } from '../../components/Pagination';
 import { StationSelect } from '../../components/StationSelect';
@@ -13,17 +13,21 @@ import { DateField } from '../../components/DateField';
 import { LtrText } from '../../components/LtrText';
 import { PageHeader } from '../../components/design/PageHeader';
 import { SkeletonRows } from '../../components/design/Skeleton';
-import { Card } from '../../components/design/Card';
+import { Card, CardHeader } from '../../components/design/Card';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
 import { TabPanel, Tabs, useTab, type TabDef } from '../../components/design/Tabs';
 import { RULE_VIOLATION_MESSAGES } from '../fillups/ruleViolationMessages';
 import type { RuleFailureReason } from '@fuel-tracking/shared-types';
+import { REFERENCE_CODE_LABEL, referenceCode } from '@fuel-tracking/shared-types';
+import { CodeText } from '../../components/design/CodeText';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
+import { useClientPage } from '../../lib/pageSize';
 
-const TAKE = 25;
+const TAKE = LIST_PAGE_SIZE;
 
 const selectClass =
-  'h-11 rounded-sm bg-surface-alt px-3 text-[15px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 lg:h-10 lg:text-[13px]';
+  'h-11 rounded-sm bg-surface-alt px-3 text-[15px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark disabled:opacity-60 lg:h-10 lg:text-[13px]';
 const labelClass = 'mb-1 block text-[14px] font-bold text-ink-soft lg:text-[12px]';
 
 interface ExceptionRow {
@@ -137,8 +141,9 @@ export function ExceptionsPage() {
     const res = await apiClient.get<ListResponse>('/exceptions', { params: { ...params, skip: 0, take: 100 } });
     downloadCsv(
       `exceptions_${res.data.range.from}_${res.data.range.to}.csv`,
-      ['الوقت', 'المحطة', 'اللوحة', 'النوع', 'القاعدة', 'السبب', 'الموظف', 'الوقود', 'اللترات', 'فوق حد النوع'],
+      ['رمز المرجع', 'الوقت', 'المحطة', 'اللوحة', 'النوع', 'القاعدة', 'السبب', 'الموظف', 'الوقود', 'اللترات', 'فوق حد النوع'],
       res.data.rows.map((r) => [
+        referenceCode('EXCEPTION', r.id),
         formatDateTime(r.occurredAt),
         r.station,
         r.plate,
@@ -172,8 +177,9 @@ export function ExceptionsPage() {
         <Card className="mb-4 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className={labelClass}>المحطة</label>
+              <label htmlFor="exc-station" className={labelClass}>المحطة</label>
               <StationSelect
+                id="exc-station"
                 value={stationId}
                 onChange={reset(setStationId)}
                 allowAllOption={canViewAllStations || canByStation}
@@ -182,16 +188,16 @@ export function ExceptionsPage() {
               />
             </div>
             <div>
-              <label className={labelClass}>من تاريخ</label>
-              <DateField value={from} onChange={reset(setFrom)} inputClassName={`w-44 pe-9 ${selectClass}`} />
+              <label htmlFor="exc-from" className={labelClass}>من تاريخ</label>
+              <DateField id="exc-from" value={from} onChange={reset(setFrom)} inputClassName={`w-44 pe-9 ${selectClass}`} />
             </div>
             <div>
-              <label className={labelClass}>إلى تاريخ</label>
-              <DateField value={to} onChange={reset(setTo)} inputClassName={`w-44 pe-9 ${selectClass}`} />
+              <label htmlFor="exc-to" className={labelClass}>إلى تاريخ</label>
+              <DateField id="exc-to" value={to} onChange={reset(setTo)} inputClassName={`w-44 pe-9 ${selectClass}`} />
             </div>
             <div>
-              <label className={labelClass}>نوع الاستثناء</label>
-              <select value={typeId} onChange={(e) => reset(setTypeId)(e.target.value)} className={`w-48 ${selectClass}`} data-testid="exceptions-filter-type">
+              <label htmlFor="exc-type" className={labelClass}>نوع الاستثناء</label>
+              <select id="exc-type" value={typeId} onChange={(e) => reset(setTypeId)(e.target.value)} className={`w-48 ${selectClass}`} data-testid="exceptions-filter-type">
                 <option value="">كل الأنواع</option>
                 {types.data?.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -223,10 +229,14 @@ export function ExceptionsPage() {
             <SkeletonRows rows={6} />
           </Card>
         )}
-        {list.isError && <p className="text-[15px] text-danger">تعذّر تحميل الاستثناءات.</p>}
+        {list.isError && (
+          <p role="alert" className="text-[15px] text-danger-dark lg:text-[13px]">
+            تعذّر تحميل الاستثناءات. تأكد من الاتصال ثم أعد تحميل الصفحة.
+          </p>
+        )}
         {list.data && (
           <Card>
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[960px] text-[14px] lg:text-[12.5px]" data-testid="exceptions-table">
                 <thead>
                   <tr className="bg-surface-alt text-[13px] font-bold text-ink-soft lg:text-[12px]">
@@ -245,6 +255,10 @@ export function ExceptionsPage() {
                     <tr key={r.id} className="border-b border-line-soft align-top last:border-0" data-testid="exceptions-row">
                       <td className="px-[18px] py-3">
                         <LtrText>{formatDateTime(r.occurredAt)}</LtrText>
+                        {/* Phase 7: the system's reference code, in place of «رقم المرجع/الإثبات». */}
+                        <div title={REFERENCE_CODE_LABEL} data-testid="exception-reference">
+                          <CodeText size="md">{referenceCode('EXCEPTION', r.id)}</CodeText>
+                        </div>
                       </td>
                       <td className="px-[18px] py-3">{r.station}</td>
                       <td className="px-[18px] py-3">{r.plate ? <LtrText>{formatLicensePlate(r.plate)}</LtrText> : '—'}</td>
@@ -271,6 +285,32 @@ export function ExceptionsPage() {
                 </tbody>
               </table>
             </div>
+            {/* On a phone each exception is a small card: nothing scrolls sideways. */}
+            <ul className="divide-y divide-line-soft lg:hidden" data-testid="exceptions-rows-stacked">
+              {list.data.rows.map((r) => (
+                <li key={r.id} className="space-y-1.5 px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-[16px] font-bold text-ink">{r.type}</p>
+                    {r.plate && <LtrText className="font-mono text-[16px] font-bold text-ink">{formatLicensePlate(r.plate)}</LtrText>}
+                  </div>
+                  <p className="text-[15px] text-ink">{ruleText(r.rule)}</p>
+                  <p className="text-[15px] text-ink-soft">{r.reason}</p>
+                  <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] text-ink-soft">
+                    <span>{r.station}</span>
+                    <span>{r.employee}</span>
+                    <LtrText>{formatDateTime(r.occurredAt)}</LtrText>
+                    <CodeText size="md">{referenceCode('EXCEPTION', r.id)}</CodeText>
+                  </p>
+                  {(r.overLimit || r.stationFlagged) && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {r.overLimit && <StatusPill variant="danger">فوق حد النوع اليومي</StatusPill>}
+                      {r.stationFlagged && <StatusPill variant="warn">محطة مرتفعة الاستثناءات</StatusPill>}
+                    </div>
+                  )}
+                </li>
+              ))}
+              {list.data.rows.length === 0 && <li className="p-6 text-center text-[15px] text-ink-soft">لا توجد استثناءات مطابقة</li>}
+            </ul>
             <div className="px-[18px] py-3">
               <Pagination skip={skip} take={TAKE} total={list.data.total} onSkipChange={setSkip} />
             </div>
@@ -317,6 +357,7 @@ function ByStationPanel({ onOpenStation }: { onOpenStation: (stationId: string) 
     queryFn: async () =>
       (await apiClient.get<ByStationResponse>('/exceptions/by-station', { params: { municipalityId, from: from || undefined, to: to || undefined } })).data,
   });
+  const stationPage = useClientPage(stations.data?.stations ?? []);
 
   return (
     <div className="space-y-4">
@@ -365,7 +406,7 @@ function ByStationPanel({ onOpenStation }: { onOpenStation: (stationId: string) 
                 </tr>
               </thead>
               <tbody>
-                {stations.data.stations.map((s) => (
+                {stationPage.pageItems.map((s) => (
                   <tr key={s.stationId} className="border-b border-line-soft last:border-0" data-testid={`exceptions-station-${s.stationId}`}>
                     <td className="px-[18px] py-3 font-bold text-ink">{s.station}</td>
                     <td className="px-[18px] py-3 text-ink-soft">{s.company}</td>
@@ -390,6 +431,7 @@ function ByStationPanel({ onOpenStation }: { onOpenStation: (stationId: string) 
               </tbody>
             </table>
           </div>
+          <Pagination skip={stationPage.skip} take={stationPage.take} total={stationPage.total} onSkipChange={stationPage.setSkip} testId="exceptions-stations-pager" />
         </Card>
       )}
 
@@ -431,49 +473,62 @@ export function MunicipalitySettingsCard({ municipalityId }: { municipalityId: s
 
   const general = query.data?.global;
   return (
-    <Card className="p-4" data-testid="exception-settings-card">
-      <h2 className="text-[18px] font-extrabold text-ink lg:text-[15px]">حدود الاستثناءات لهذه البلدية</h2>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelClass} htmlFor="exc-strict">منع تجاوز حد الاستثناءات</label>
-          <select
-            id="exc-strict"
-            value={strict}
-            onChange={(e) => {
-              setStrict(e.target.value as 'inherit' | 'on' | 'off');
-              setSaved(false);
-            }}
-            className={`w-full ${selectClass}`}
-            data-testid="exception-settings-strict"
-          >
-            <option value="inherit">حسب الإعداد العام ({general?.strictLimit ? 'مفعّل' : 'غير مفعّل'})</option>
-            <option value="on">مفعّل: يُرفض التجاوز</option>
-            <option value="off">غير مفعّل: يُسمح ويُبلَّغ المشرف</option>
-          </select>
+    <Card data-testid="exception-settings-card">
+      <CardHeader title="حدود الاستثناءات لهذه البلدية" />
+      <div className="p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass} htmlFor="exc-strict">منع تجاوز حد الاستثناءات</label>
+            <select
+              id="exc-strict"
+              value={strict}
+              onChange={(e) => {
+                setStrict(e.target.value as 'inherit' | 'on' | 'off');
+                setSaved(false);
+              }}
+              className={`w-full ${selectClass}`}
+              data-testid="exception-settings-strict"
+            >
+              <option value="inherit">حسب الإعداد العام ({general?.strictLimit ? 'مفعّل' : 'غير مفعّل'})</option>
+              <option value="on">مفعّل: يُرفض التجاوز</option>
+              <option value="off">غير مفعّل: يُسمح ويُبلَّغ المشرف</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="exc-threshold">عدد الاستثناءات اليومي غير المعقول لمحطة</label>
+            <div className="flex items-center gap-2">
+              <input
+                id="exc-threshold"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={threshold}
+                onChange={(e) => {
+                  setThreshold(e.target.value);
+                  setSaved(false);
+                }}
+                placeholder={general ? String(general.stationDailyThreshold) : ''}
+                className={`w-28 text-center ${selectClass}`}
+                data-testid="exception-settings-threshold"
+              />
+              <span className="text-[15px] font-bold text-primary-dark lg:text-[13px]">استثناء في اليوم</span>
+            </div>
+            <p className="mt-1 text-[14px] text-ink-soft lg:text-[12px]">
+              {threshold.trim() === ''
+                ? general
+                  ? `فارغ: يُطبَّق الإعداد العام (${settingValueText('exceptions.station_daily_threshold', general.stationDailyThreshold)}).`
+                  : 'فارغ: يُطبَّق الإعداد العام.'
+                : `تُعلَّم المحطة للمراجعة بعد ${settingValueText('exceptions.station_daily_threshold', threshold)}.`}
+            </p>
+          </div>
         </div>
-        <div>
-          <label className={labelClass} htmlFor="exc-threshold">عدد الاستثناءات اليومي غير المعقول لمحطة</label>
-          <input
-            id="exc-threshold"
-            type="number"
-            min={1}
-            value={threshold}
-            onChange={(e) => {
-              setThreshold(e.target.value);
-              setSaved(false);
-            }}
-            placeholder={general ? `الإعداد العام: ${general.stationDailyThreshold}` : ''}
-            className={`w-full ${selectClass}`}
-            data-testid="exception-settings-threshold"
-          />
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <PillButton variant="brand" size="sm" onClick={() => save.mutate()} disabled={save.isPending} data-testid="exception-settings-save">
+            {save.isPending ? 'جارٍ الحفظ…' : 'حفظ'}
+          </PillButton>
+          {saved && <span role="status" className="text-[14px] font-bold text-ok lg:text-[12px]">✓ تم الحفظ</span>}
+          {save.isError && <span role="alert" className="text-[14px] font-bold text-danger-dark lg:text-[12px]">تعذّر الحفظ. أعد المحاولة.</span>}
         </div>
-      </div>
-      <div className="mt-4 flex items-center gap-3">
-        <PillButton size="field" onClick={() => save.mutate()} disabled={save.isPending} data-testid="exception-settings-save">
-          {save.isPending ? 'جارٍ الحفظ…' : 'حفظ'}
-        </PillButton>
-        {saved && <span className="text-[15px] font-bold text-ok">تم الحفظ.</span>}
-        {save.isError && <span className="text-[15px] font-bold text-danger">تعذّر الحفظ.</span>}
       </div>
     </Card>
   );

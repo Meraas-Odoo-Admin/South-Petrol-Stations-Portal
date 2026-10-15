@@ -201,12 +201,11 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
             />
             {stage === 'scanning' && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="relative h-44 w-44">
-                  <span className="absolute -top-1 -start-1 h-8 w-8 rounded-tl-lg border-s-4 border-t-4 border-accent" />
-                  <span className="absolute -top-1 -end-1 h-8 w-8 rounded-tr-lg border-e-4 border-t-4 border-accent" />
-                  <span className="absolute -bottom-1 -start-1 h-8 w-8 rounded-bl-lg border-b-4 border-s-4 border-accent" />
-                  <span className="absolute -bottom-1 -end-1 h-8 w-8 rounded-br-lg border-b-4 border-e-4 border-accent" />
-                </div>
+                {/* Phase 7: the four corner marks as one drawn shape (the thick-border
+                    corners clashed with their rounding, and their sides did not follow RTL). */}
+                <svg viewBox="0 0 176 176" className="h-44 w-44 text-accent" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 36V16a12 12 0 0 1 12-12h20M140 4h20a12 12 0 0 1 12 12v20M172 140v20a12 12 0 0 1-12 12h-20M36 172H16a12 12 0 0 1-12-12v-20" />
+                </svg>
               </div>
             )}
             {outcome && (
@@ -247,11 +246,12 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
 
       {stage === 'denied' && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-white">
-          <p className="text-[15px] font-extrabold text-danger">لا يمكن فتح الكاميرا على هذا الجهاز</p>
+          {/* Phase 7 (critique): light text on the dark scanner panel (red was 3.4:1 here). */}
+          <p role="alert" className="text-[16px] font-extrabold text-danger-100">⚠ لا يمكن فتح الكاميرا على هذا الجهاز</p>
           <p className="max-w-sm text-[13px] lg:text-[12px] leading-[1.8] opacity-80">
             اسمح بالكاميرا من إعدادات الجهاز ثم أعد المحاولة، أو اطلب من المشرف.
           </p>
-          <PillButton variant="primary" onClick={() => void openCamera()} data-testid="qr-scan-retry-camera">
+          <PillButton variant="primary" size="field" className="shadow-none" onClick={() => void openCamera()} data-testid="qr-scan-retry-camera">
             إعادة المحاولة
           </PillButton>
         </div>

@@ -77,11 +77,20 @@ const PAIRS = [
   ['danger-dark', 'danger-100', 4.5, 'نص على تنبيه خطأ'],
   ['ok', 'ok-100', 4.5, 'نص على تنبيه نجاح'],
   ['white', 'danger', 4.5, 'نص على زر خطر'],
+  // Phase 7: the button system and the teal section headers.
+  ['ink-soft', 'primary-100', 4.5, 'نص ثانوي على رأس بطاقة أخضر'],
+  ['primary-dark', 'surface', 4.5, 'نص زر ثانوي (إطار أخضر)'],
+  ['danger-dark', 'surface', 4.5, 'نص زر خطر (إطار أحمر)'],
+  ['ink-faint', 'surface-alt', 4.5, 'نص زر معطَّل'],
   // UI boundaries: input borders, card edges, tabs, dividers that carry structure.
   ['line', 'surface', 3, 'حدّ حقل أو بطاقة على الأبيض'],
   ['line', 'paper', 3, 'حدّ بطاقة على خلفية الصفحة'],
   ['line', 'surface-alt', 3, 'حدّ حقل على خلفية الحقل'],
-  ['primary', 'surface', 3, 'مؤشر التركيز / التبويب المختار'],
+  ['primary', 'surface', 3, 'التبويب المختار'],
+  // Phase 7 (audit): the focus ring the code actually draws (it was amber, 2.1:1).
+  ['primary-dark', 'surface', 3, 'مؤشر التركيز على البطاقة'],
+  ['primary-dark', 'paper', 3, 'مؤشر التركيز على خلفية الصفحة'],
+  ['primary-dark', 'surface-alt', 3, 'مؤشر التركيز في حقل'],
   // The page and the card must read as different surfaces.
   ['surface', 'paper', 1.1, 'البطاقة عن خلفية الصفحة (مع الحدّ)'],
 ];

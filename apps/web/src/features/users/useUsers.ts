@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/apiClient';
 import type { StationBasicInfo } from '../stations/types';
 import type { PlaceOption } from './PlacePicker';
 import type { ActivityItem, CreatedUser, PlaceKind, UserDetail, UserListResponse, UsersOptions } from './types';
+import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
 export interface UserListFilters {
   q: string;
@@ -15,7 +16,7 @@ export interface UserListFilters {
   skip: number;
 }
 
-export const USERS_PAGE_SIZE = 25;
+export const USERS_PAGE_SIZE = LIST_PAGE_SIZE;
 
 export function useUserList(filters: UserListFilters) {
   return useQuery({

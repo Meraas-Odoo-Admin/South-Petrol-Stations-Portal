@@ -25,7 +25,7 @@ export class CreateOwnerDto {
   identityType!: (typeof REGISTRABLE_IDENTITY_TYPES)[number];
 
   @ApiProperty({
-    description: '12 digits: 1/2 + birth year + 7 digits for a national ID, 9 + 11 digits for an administrative ID.',
+    description: 'A national ID: 12 digits, 1/2 + birth year + 7 digits. An administrative ID: 10 digits starting with 5 (male) or 6 (female).',
   })
   @Transform(({ value }) => (typeof value === 'string' ? cleanDigits(value) : value))
   @IsString()

@@ -155,3 +155,8 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d
 
 Migrations apply automatically on the API container's next start, same
 as above.
+
+When an update changes the roles' permissions (`apps/api/prisma/rbac-catalog.ts`), re-run
+`bootstrap:prod` once (step 1 above, same variables): it makes every role match the
+catalog, and never overwrites a tuned setting or a password. Phase 7 needs it: the municipality manager gains
+`cards:issue` and `registration_desks:manage` is taken off every role.

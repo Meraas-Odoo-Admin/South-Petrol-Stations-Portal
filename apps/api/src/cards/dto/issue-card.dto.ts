@@ -12,11 +12,6 @@ export class IssueCardDto {
   @MinLength(1)
   registrationStationId!: string;
 
-  @ApiProperty({ description: 'The desk (and printer) the card is printed at.' })
-  @IsString()
-  @MinLength(1)
-  deskId!: string;
-
   @ApiProperty({ enum: ISSUABLE_REASONS })
   @IsIn(ISSUABLE_REASONS)
   reason!: IssuableReason;
