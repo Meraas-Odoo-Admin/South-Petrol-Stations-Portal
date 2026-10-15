@@ -62,6 +62,7 @@ export function CardIssueFlow({
   reasonNote,
   onDone,
   onCancel,
+  showPrinterSettings = true,
 }: {
   vehicleId: string;
   registrationStationId: string;
@@ -69,6 +70,10 @@ export function CardIssueFlow({
   reasonNote?: string;
   onDone?: (card: VehicleCardRow) => void;
   onCancel?: () => void;
+  // The black-only switch and the printer setup card. Hidden when a vehicle is
+  // registered (after review, 15 Oct 2026): the device's remembered setting
+  // still applies; it is changed from the card panel of a vehicle's record.
+  showPrinterSettings?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [card, setCard] = useState<VehicleCardRow | null>(null);
@@ -129,25 +134,27 @@ export function CardIssueFlow({
   return (
     <div className="space-y-3" data-testid="card-issue-flow">
       {/* The printer next to this device: one setting, remembered on it. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm bg-surface-alt p-3" data-testid="card-printer-settings">
-        <label className="flex min-h-[44px] items-center gap-2 text-[15px] text-ink lg:text-[13px]">
-          <input
-            type="checkbox"
-            className="h-5 w-5"
-            checked={printMode === 'black'}
-            data-testid="card-print-black-only"
-            onChange={(e) => {
-              const mode = e.target.checked ? 'black' : 'full';
-              setPrintMode(mode);
-              rememberPrintMode(mode);
-            }}
-          />
-          شريط أحادي اللون — اطبع بالأسود فقط (يُحفظ على هذا الجهاز)
-        </label>
-        <PillButton size="sm" variant="secondary" onClick={printSetupCard} data-testid="card-print-setup">
-          بطاقة إعداد الطابعة
-        </PillButton>
-      </div>
+      {showPrinterSettings && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm bg-surface-alt p-3" data-testid="card-printer-settings">
+          <label className="flex min-h-[44px] items-center gap-2 text-[15px] text-ink lg:text-[13px]">
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              checked={printMode === 'black'}
+              data-testid="card-print-black-only"
+              onChange={(e) => {
+                const mode = e.target.checked ? 'black' : 'full';
+                setPrintMode(mode);
+                rememberPrintMode(mode);
+              }}
+            />
+            شريط أحادي اللون — اطبع بالأسود فقط (يُحفظ على هذا الجهاز)
+          </label>
+          <PillButton size="sm" variant="secondary" onClick={printSetupCard} data-testid="card-print-setup">
+            بطاقة إعداد الطابعة
+          </PillButton>
+        </div>
+      )}
 
       {step === 'ready' && (
         <div className="flex flex-wrap gap-2">

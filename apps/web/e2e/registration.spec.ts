@@ -57,8 +57,10 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
   await expect(page.getByTestId('registration-success')).toContainText(ownerName);
 
   // ── Phase 3: issue and print the card at the office ──────────────
-  // Phase 7: no desk to pick; the black-only ribbon is the one device setting.
-  await expect(page.getByTestId('card-printer-settings')).toBeVisible();
+  // Phase 7: no desk to pick. After review (15 Oct 2026): no printer settings
+  // here either — the device's remembered setting applies (changed from a
+  // vehicle record's card panel).
+  await expect(page.getByTestId('card-printer-settings')).toHaveCount(0);
   await expect(page.getByTestId('card-desk-select')).toHaveCount(0);
   await page.getByTestId('card-issue').click();
   const firstNumber = (await page.getByTestId('card-issued-number').innerText()).trim();

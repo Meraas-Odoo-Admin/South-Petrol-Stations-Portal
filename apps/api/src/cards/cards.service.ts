@@ -470,6 +470,9 @@ export class CardsService {
             chassisNumber: true,
             registrationBooklet: true,
             vehicleType: { select: { name: true } },
+            // After review (15 Oct 2026): the pump shows who the vehicle is
+            // registered to — the name only, never the identity number.
+            owner: { select: { fullName: true } },
           },
         },
       },

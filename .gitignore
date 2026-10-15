@@ -40,6 +40,12 @@ Claude outputs/*.csv
 Claude outputs/*.xlsx
 Claude outputs/*.xls
 
+# Anywhere else too (15 Oct 2026: an export of the old system's vehicles was
+# dropped into docs/ and was one `git add -A` away from being published).
+# Real data lives in data/private/, never in the repository.
+*.xlsx
+*.xls
+
 # The client design handoff (design/design_handoff_fuel_control_system/) is
 # now tracked: it is the reference archive and holds the vehicle card print
 # spec. The canonical design rulebook is apps/web/DESIGN.md.

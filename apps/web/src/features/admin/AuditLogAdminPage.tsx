@@ -116,7 +116,13 @@ function AuditRow({ row }: { row: AuditLogRow }) {
         </div>
         <div className="min-w-0 flex-1 text-[15px] leading-[1.7] text-ink lg:text-[13px]">
           <Sentence row={row} />
-          {row.user && <p className="text-[13px] text-ink-faint lg:text-[12px]" dir="ltr">@{row.user.username}</p>}
+          {/* Only the name itself reads left-to-right: the line stays under the
+              person's name, not pushed to the far side of the row. */}
+          {row.user && (
+            <p className="text-[13px] text-ink-faint lg:text-[12px]">
+              <bdi dir="ltr">@{row.user.username}</bdi>
+            </p>
+          )}
 
           {inline.length > 0 && (
             <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] lg:text-[12px]">

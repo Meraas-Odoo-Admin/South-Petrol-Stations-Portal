@@ -22,6 +22,11 @@ export interface ScannedCard {
     fuelType?: 'PETROL' | 'DIESEL' | null;
     color: string | null;
     vehicleType: { name: string } | null;
+    // What the printed card shows, for the confirmation at the pump.
+    manufactureYear?: number | null;
+    chassisNumber?: string | null;
+    registrationBooklet?: string | null;
+    owner?: { fullName: string } | null;
   };
 }
 

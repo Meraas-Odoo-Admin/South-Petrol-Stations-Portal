@@ -59,7 +59,10 @@ test('pump: the plate step opens straight into the camera, reads the card, and a
   await expect(confirm).toBeVisible({ timeout: 30_000 });
   const [city, seq] = fixtures.scanVehicleCurrentPlate.split('-');
   await expect(page.getByTestId('fillup-scan-confirm-plate')).toHaveText(`${city} - ${seq}`);
-  await expect(confirm).toContainText('تويوتا هايلكس — أبيض');
+  // After review (15 Oct 2026): the card's details, one by one, and the owner.
+  await expect(page.getByTestId('fillup-scan-confirm-make')).toContainText('تويوتا هايلكس');
+  await expect(page.getByTestId('fillup-scan-confirm-color')).toContainText('أبيض');
+  await expect(page.getByTestId('fillup-scan-confirm-owner')).not.toContainText('—');
   await expect(page.getByTestId('fillup-scan-needs-reissue')).toHaveCount(0);
 
   // Nothing is recorded without the tap.

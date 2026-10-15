@@ -406,6 +406,7 @@ export function RegistrationPage() {
               vehicleId={registered.vehicle.id}
               registrationStationId={registered.registrationStationId}
               reason="FIRST_ISSUE"
+              showPrinterSettings={false}
             />
           </div>
           <div className="mt-6 flex flex-wrap justify-center gap-2.5">

@@ -490,6 +490,22 @@ export function RecordFillUpPage() {
   const soldFuels = (stationOfFillUp?.fuelAvailability ?? []).filter((f) => f.isAvailable).map((f) => f.fuelType);
   const availableFuelTypes = soldFuels.length > 0 ? FUEL_TYPES.filter((ft) => soldFuels.includes(ft.value)) : FUEL_TYPES;
   const chosenIsOffered = availableFuelTypes.some((ft) => ft.value === chosenFuel);
+  // After review (15 Oct 2026): the fuel starts as the one the vehicle is
+  // registered with (when the station sells it) — once per vehicle, so the
+  // employee can still change it.
+  const registeredFuel = scannedCard?.vehicle.fuelType ?? vehicleFuelType;
+  const registeredPumpFuel = registeredFuel === 'PETROL' ? 'PETROL_95' : registeredFuel === 'DIESEL' ? 'DIESEL' : null;
+  const fuelPresetFor = useRef('');
+  useEffect(() => {
+    if (!vehicleId) {
+      fuelPresetFor.current = '';
+      return;
+    }
+    if (!registeredPumpFuel || fuelPresetFor.current === vehicleId) return;
+    if (!availableFuelTypes.some((ft) => ft.value === registeredPumpFuel)) return;
+    fuelPresetFor.current = vehicleId;
+    fillUpForm.setValue('fuelType', registeredPumpFuel, { shouldValidate: true });
+  }, [vehicleId, registeredPumpFuel, availableFuelTypes.map((f) => f.value).join(',')]);
   useEffect(() => {
     if (!chosenIsOffered && availableFuelTypes[0]) {
       fillUpForm.setValue('fuelType', availableFuelTypes[0].value, { shouldValidate: true });
@@ -1183,18 +1199,43 @@ function PlateFigure({ plate, caption }: { plate: string; caption?: string }) {
   );
 }
 
+// The fuel a vehicle is registered with, in words (the card's own wording).
+const VEHICLE_FUEL_WORDS: Record<string, string> = { PETROL: 'بنزين', DIESEL: 'ديزل' };
+
 // After a card scan, the employee compares the card's vehicle with the car in
 // front of them before anything is recorded, and must tap the confirm button.
 function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onConfirm: () => void; onReject: () => void }) {
-  const makeLine = [[card.vehicle.make, card.vehicle.model].filter(Boolean).join(' '), card.vehicle.color].filter(Boolean).join(' — ');
+  const v = card.vehicle;
+  const makeModel = [v.make, v.model].filter(Boolean).join(' ');
+  // The same details as the printed card (after review, 15 Oct 2026), and the
+  // owner's name, so the employee checks the car against them.
+  const details: Array<{ label: string; value: string | null | undefined; ltr?: boolean; wide?: boolean; testId: string }> = [
+    { label: 'المالك', value: v.owner?.fullName, wide: true, testId: 'owner' },
+    { label: 'الماركة والطراز', value: makeModel, testId: 'make' },
+    { label: 'اللون', value: v.color, testId: 'color' },
+    { label: 'سنة الصنع', value: v.manufactureYear ? String(v.manufactureYear) : null, ltr: true, testId: 'year' },
+    { label: 'نوع الوقود', value: v.fuelType ? VEHICLE_FUEL_WORDS[v.fuelType] : null, testId: 'fuel' },
+    { label: 'رقم الهيكل', value: v.chassisNumber, ltr: true, wide: true, testId: 'chassis' },
+    { label: 'رقم دفتر السيارة', value: v.registrationBooklet, ltr: true, testId: 'booklet' },
+    { label: 'رقم البطاقة', value: card.cardNumber, ltr: true, testId: 'card' },
+  ];
   return (
     <Card className="p-5 text-center" data-testid="fillup-scan-confirm">
       <p className="text-[16px] font-bold text-ink-soft lg:text-[14px]">هل هذه هي المركبة التي أمامك؟</p>
       <p className="mt-3 text-[44px] font-black leading-none text-ink" data-testid="fillup-scan-confirm-plate">
-        <LtrText>{formatLicensePlate(card.vehicle.currentPlate)}</LtrText>
+        <LtrText>{formatLicensePlate(v.currentPlate)}</LtrText>
       </p>
-      {makeLine && <p className="mt-3 text-[18px] font-bold text-ink">{makeLine}</p>}
-      {card.vehicle.vehicleType && <p className="mt-1 text-[15px] text-ink-soft lg:text-[13px]">{card.vehicle.vehicleType.name}</p>}
+      {v.vehicleType && <p className="mt-2 text-[15px] text-ink-soft lg:text-[13px]">{v.vehicleType.name}</p>}
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-sm bg-surface-alt p-4 text-start" data-testid="fillup-scan-confirm-details">
+        {details.map((d) => (
+          <div key={d.testId} className={d.wide ? 'col-span-2' : ''} data-testid={`fillup-scan-confirm-${d.testId}`}>
+            <dt className="text-[14px] font-bold text-ink-soft lg:text-[12px]">{d.label}</dt>
+            <dd className="mt-0.5 break-words text-[18px] font-extrabold text-ink lg:text-[15px]">
+              {d.value ? d.ltr ? <LtrText>{d.value}</LtrText> : d.value : '—'}
+            </dd>
+          </div>
+        ))}
+      </dl>
       {card.needsReissue && (
         <div className="mt-4 rounded-sm bg-accent-100 p-3" data-testid="fillup-scan-needs-reissue">
           <p className="text-[16px] font-bold text-ink lg:text-[14px]">يجب تجديد هذه البطاقة</p>
