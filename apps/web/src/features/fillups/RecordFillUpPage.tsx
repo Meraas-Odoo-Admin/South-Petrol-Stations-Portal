@@ -488,24 +488,19 @@ export function RecordFillUpPage() {
   const fuelMismatch = fuelTypeMismatch(vehicleFuelType, chosenFuel);
   const stationOfFillUp = stations?.find((s) => s.id === stationId);
   const soldFuels = (stationOfFillUp?.fuelAvailability ?? []).filter((f) => f.isAvailable).map((f) => f.fuelType);
-  const availableFuelTypes = soldFuels.length > 0 ? FUEL_TYPES.filter((ft) => soldFuels.includes(ft.value)) : FUEL_TYPES;
-  const chosenIsOffered = availableFuelTypes.some((ft) => ft.value === chosenFuel);
-  // After review (15 Oct 2026): the fuel starts as the one the vehicle is
-  // registered with (when the station sells it) — once per vehicle, so the
-  // employee can still change it.
+  const stationFuelTypes = soldFuels.length > 0 ? FUEL_TYPES.filter((ft) => soldFuels.includes(ft.value)) : FUEL_TYPES;
+  // After review (15 Oct 2026): a vehicle gets the fuel it is registered with
+  // and only that one (petrol -> بنزين 95, diesel -> ديزل), whatever else the
+  // station sells. A vehicle with no registered fuel, or one the station does
+  // not sell, gets the station's fuels as before.
   const registeredFuel = scannedCard?.vehicle.fuelType ?? vehicleFuelType;
   const registeredPumpFuel = registeredFuel === 'PETROL' ? 'PETROL_95' : registeredFuel === 'DIESEL' ? 'DIESEL' : null;
-  const fuelPresetFor = useRef('');
-  useEffect(() => {
-    if (!vehicleId) {
-      fuelPresetFor.current = '';
-      return;
-    }
-    if (!registeredPumpFuel || fuelPresetFor.current === vehicleId) return;
-    if (!availableFuelTypes.some((ft) => ft.value === registeredPumpFuel)) return;
-    fuelPresetFor.current = vehicleId;
-    fillUpForm.setValue('fuelType', registeredPumpFuel, { shouldValidate: true });
-  }, [vehicleId, registeredPumpFuel, availableFuelTypes.map((f) => f.value).join(',')]);
+  const availableFuelTypes =
+    registeredPumpFuel && stationFuelTypes.some((ft) => ft.value === registeredPumpFuel)
+      ? stationFuelTypes.filter((ft) => ft.value === registeredPumpFuel)
+      : stationFuelTypes;
+  const chosenIsOffered = availableFuelTypes.some((ft) => ft.value === chosenFuel);
+  // The one offered fuel is chosen by itself (below).
   useEffect(() => {
     if (!chosenIsOffered && availableFuelTypes[0]) {
       fillUpForm.setValue('fuelType', availableFuelTypes[0].value, { shouldValidate: true });
