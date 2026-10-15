@@ -1093,10 +1093,14 @@ model AuditLog {
   oldValue   Json?
   newValue   Json?
   ipAddress  String?
+  // The browser and system the request came from (after review, 15 Oct 2026).
+  userAgent  String?
   createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([action, createdAt])
 }
 
 // ── Registration pivot, phase 4c: monitoring reports ─────────────────

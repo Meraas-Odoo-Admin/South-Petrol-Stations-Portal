@@ -57,7 +57,7 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
 
   function submitReason(run: typeof deactivate, message: string) {
     if (reason.trim().length < 3) {
-      setReasonError('اكتب سببًا واضحًا (ثلاثة أحرف على الأقل). يُحفظ السبب في سجل التغييرات.');
+      setReasonError('اكتب سببًا واضحًا (ثلاثة أحرف على الأقل). يُحفظ السبب في سجل التدقيق.');
       return;
     }
     setReasonError(null);
@@ -196,7 +196,7 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           error={reasonError}
-          hint="يُحفظ السبب في سجل التغييرات مع اسمك."
+          hint="يُحفظ السبب في سجل التدقيق مع اسمك."
         />
       </Dialog>
 
@@ -237,7 +237,7 @@ export function AccountCard({ user, readOnlyNote }: { user: UserDetail; readOnly
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           error={reasonError}
-          hint="يُحفظ السبب في سجل التغييرات مع اسمك."
+          hint="يُحفظ السبب في سجل التدقيق مع اسمك."
         />
       </Dialog>
 

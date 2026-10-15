@@ -124,7 +124,11 @@ export function LoginPage() {
 
         {/* Desktop: teal marketing panel (order-2 in RTL = visually start side) */}
         <div className="hidden flex-1 flex-col justify-between bg-gradient-to-br from-primary to-primary-dark p-14 text-white lg:order-2 lg:flex">
-          <p className="text-[13px] lg:text-[12px] font-extrabold opacity-70">مديرية أمن سبها</p>
+          {/* No directorate here (it read «مديرية أمن سبها»): the system serves
+              several municipalities, and who is signing in — so which one is
+              theirs — is not known yet. The name and tagline sit beside the
+              form; this empty slot keeps the panel's spacing. */}
+          <span aria-hidden="true" />
           <div>
             <p className="text-[34px] font-black leading-[1.45]">كل لتر مُسجَّل باسم مركبة ووقت ومن سجّله.</p>
             <p className="mt-[18px] text-[16px] lg:text-[14px] leading-[1.9] opacity-90">

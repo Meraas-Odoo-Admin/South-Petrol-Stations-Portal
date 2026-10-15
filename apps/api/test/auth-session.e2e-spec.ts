@@ -309,6 +309,13 @@ describe('Auth session lifecycle (e2e)', () => {
     expect(res.body.stationScope).toEqual([
       { stationId: meStation.id, internalCode: meStation.internalCode, name: meStation.name },
     ]);
+    // Their directorate comes from their station's municipality — never a
+    // municipality named in code (after review, 15 Oct 2026).
+    const municipality = await prisma.municipality.findUniqueOrThrow({
+      where: { id: meMunicipalityId },
+      include: { securityAuthority: true },
+    });
+    expect(res.body.directorates).toEqual([municipality.securityAuthority?.name ?? municipality.name]);
     // Never leaked, same precedent as every other user-facing endpoint.
     expect(res.body.passwordHash).toBeUndefined();
   });

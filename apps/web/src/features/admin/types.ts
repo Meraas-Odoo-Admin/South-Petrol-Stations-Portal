@@ -67,6 +67,12 @@ export interface AuditLogRow {
   newValue: unknown;
   createdAt: string;
   user: { id: string; username: string; fullName: string } | null;
+  // After review (15 Oct 2026): where it came from, and what it is about.
+  ipAddress: string | null;
+  userAgent: string | null;
+  // The person, station, vehicle… by name, as it is named now; null when the
+  // record is gone or has no name (a fill-up, a session).
+  entityLabel: string | null;
 }
 
 export interface ExceptionTypeRow {

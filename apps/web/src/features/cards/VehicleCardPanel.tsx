@@ -266,7 +266,7 @@ export function VehicleCardPanel({
                   placeholder="تفاصيل (اختياري) — مثل مكان فقدان البطاقة"
                   className="h-9 w-full rounded-sm bg-surface-alt px-3 text-[13px] lg:text-[12.5px]"
                 />
-                <p className="text-[13px] lg:text-[12px] text-ink-faint">البطاقة الحالية (إن وُجدت) تتوقف عن العمل فور إصدار الجديدة. يُسجَّل الإجراء في سجل التغييرات.</p>
+                <p className="text-[13px] lg:text-[12px] text-ink-faint">البطاقة الحالية (إن وُجدت) تتوقف عن العمل فور إصدار الجديدة. يُسجَّل الإجراء في سجل التدقيق.</p>
                 <div className="flex gap-2">
                   <PillButton size="sm" disabled={!stationId} onClick={() => setIssuing({ ...issuing, started: true })}>
                     متابعة

@@ -55,6 +55,12 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?generate a real random secret in infra/.env.prod, e.g. openssl rand -hex 48}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      # How many proxies sit in front of the API, so the audit log and the
+      # per-address login limit see the client's real address, not nginx's.
+      # 1 = only the web container's nginx (this file); 2 = another proxy for
+      # HTTPS in front of it. The API is not published to the host, so nothing
+      # can reach it without passing through those proxies.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
     # Not published to the host by default — the web service's nginx
     # reverse-proxies to it over the compose-internal network instead.
     # Uncomment only for direct access to GET /api/docs (Swagger) or ad

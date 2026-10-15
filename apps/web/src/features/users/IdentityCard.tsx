@@ -65,7 +65,7 @@ export function IdentityCard({ user, readOnlyNote }: { user: UserDetail; readOnl
           ltr
           disabled
           readOnly
-          disabledReason="اسم المستخدم لا يتغيّر بعد إنشاء الحساب لأنه أساس سجل التغييرات."
+          disabledReason="اسم المستخدم لا يتغيّر بعد إنشاء الحساب لأنه أساس سجل التدقيق."
         />
         <TextField
           label="الهاتف (اختياري)"

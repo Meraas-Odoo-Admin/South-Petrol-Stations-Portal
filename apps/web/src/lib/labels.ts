@@ -71,7 +71,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'fillups:update': 'تعديل تعبئة (غير مفعّلة حاليًا)',
   'fillups:record_exception': 'تسجيل تعبئة كاستثناء دون موافقة',
   'settings:manage': 'إدارة إعدادات المنظومة',
-  'audit:view': 'عرض سجل التغييرات',
+  'audit:view': 'عرض سجل التدقيق',
   'exception_types:manage': 'إدارة أنواع الاستثناءات',
 };
 

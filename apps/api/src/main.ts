@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -26,7 +27,19 @@ function loadHttpsOptions(): { cert: Buffer; key: Buffer } | undefined {
 
 async function bootstrap() {
   const httpsOptions = loadHttpsOptions();
-  const app = await NestFactory.create(AppModule, { httpsOptions });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { httpsOptions });
+
+  // The client's real address behind the proxies (after review, 15 Oct 2026).
+  // Behind nginx every request otherwise comes "from" nginx: the per-address
+  // login limit is shared by everyone, and the audit log's address column
+  // says nothing. TRUST_PROXY_HOPS = how many proxies sit in front of the API:
+  // 1 = the web container's nginx (infra/docker-compose.prod.yml), 2 = another
+  // proxy for HTTPS in front of that. Never "true": then anyone could write
+  // their own X-Forwarded-For and pick the address they are counted under.
+  const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (Number.isInteger(proxyHops) && proxyHops > 0) {
+    app.set('trust proxy', proxyHops);
+  }
 
   app.use(helmet());
   app.use(cookieParser());

@@ -37,13 +37,38 @@ export class AuthService {
     private readonly notifications: NotificationsService,
   ) {}
 
+  // A login that failed, in the audit log (after review, 15 Oct 2026): until
+  // then only successful logins were there, so guessing showed nowhere until an
+  // account locked. No actor (nobody is signed in); the account tried is the
+  // entity, and the name typed is kept when no such account exists.
+  private async logFailedLogin(
+    reason: 'UNKNOWN_USER' | 'INACTIVE' | 'LOCKED' | 'WRONG_PASSWORD',
+    username: string,
+    user: { id: string } | null,
+    extra: Record<string, string | number> = {},
+    ipAddress?: string,
+  ) {
+    await this.audit
+      .log({
+        userId: null,
+        action: 'LOGIN_FAILED',
+        entityType: 'User',
+        entityId: user?.id ?? '-',
+        newValue: { reason, username: username.slice(0, 64), ...extra },
+        ipAddress: ipAddress ?? null,
+      })
+      .catch(() => undefined);
+  }
+
   async validateCredentials(username: string, password: string, ipAddress?: string) {
     const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user || !user.isActive) {
+      await this.logFailedLogin(user ? 'INACTIVE' : 'UNKNOWN_USER', username, user, {}, ipAddress);
       throw new UnauthorizedException('Invalid username or password.');
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
+      await this.logFailedLogin('LOCKED', username, user, {}, ipAddress);
       throw new UnauthorizedException('Account is temporarily locked. Try again later.');
     }
 
@@ -58,7 +83,18 @@ export class AuthService {
         where: { id: user.id },
         data: { failedLoginAttempts: failedAttempts, lockedUntil },
       });
+      await this.logFailedLogin('WRONG_PASSWORD', username, user, { failedAttempts }, ipAddress);
       if (lockedUntil) {
+        await this.audit
+          .log({
+            userId: null,
+            action: 'ACCOUNT_LOCKED',
+            entityType: 'User',
+            entityId: user.id,
+            newValue: { lockedUntil: lockedUntil.toISOString(), minutes: LOCKOUT_MINUTES },
+            ipAddress: ipAddress ?? null,
+          })
+          .catch(() => undefined);
         await this.notifications.lockedOut(user.id).catch(() => undefined);
       }
       throw new UnauthorizedException('Invalid username or password.');
@@ -212,13 +248,27 @@ export class AuthService {
       where: { id: userId },
       include: {
         roles: { include: { role: true } },
-        stationScope: { include: { station: true } },
-        registrationStationScope: { include: { registrationStation: true } },
+        stationScope: { include: { station: { include: { municipality: { include: { securityAuthority: true } } } } } },
+        registrationStationScope: {
+          include: { registrationStation: { include: { municipality: { include: { securityAuthority: true } } } } },
+        },
+        municipalityScope: { include: { municipality: { include: { securityAuthority: true } } } },
       },
     });
     if (!user) {
       throw new UnauthorizedException();
     }
+    // The user's own directorates, from their places — the name the super
+    // admin gave the municipality's security authority, or the municipality's
+    // name when it has none yet.
+    const municipalities = [
+      ...user.municipalityScope.map((s) => s.municipality),
+      ...user.stationScope.map((s) => s.station.municipality),
+      ...user.registrationStationScope.map((s) => s.registrationStation.municipality),
+    ];
+    const directorates = [...new Set(municipalities.map((m) => m.securityAuthority?.name ?? m.name))].sort((a, b) =>
+      a.localeCompare(b, 'ar'),
+    );
 
     const permissions = await this.rbac.getPermissionsForUser(userId);
 
@@ -239,6 +289,7 @@ export class AuthService {
         internalCode: scope.registrationStation.internalCode,
         name: scope.registrationStation.name,
       })),
+      directorates,
     };
   }
 }

@@ -24,7 +24,7 @@ export function AdminLayout() {
     { to: '/admin/municipalities', label: 'البلديات', show: hasPermission('municipalities:manage') },
     { to: '/admin/settings', label: 'الإعدادات وقواعد التعبئة', show: hasPermission('settings:manage') },
     { to: '/admin/lists', label: 'القوائم', show: NAV_ACCESS.lists(hasPermission) },
-    { to: '/admin/audit-log', label: 'سجل التغييرات', show: hasPermission('audit:view') },
+    { to: '/admin/audit-log', label: 'سجل التدقيق', show: hasPermission('audit:view') },
   ].filter((tab) => tab.show);
 
   return (

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { currentRequestContext } from '../common/request-context';
 
 export interface AuditEntry {
   userId: string | null;
@@ -10,6 +11,7 @@ export interface AuditEntry {
   oldValue?: Prisma.InputJsonValue | null;
   newValue?: Prisma.InputJsonValue | null;
   ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 // A Prisma client capable of running auditLog.create — either the ambient
@@ -27,6 +29,9 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   async log(entry: AuditEntry, client: AuditCapableClient = this.prisma): Promise<void> {
+    // The address and device of the request being handled, unless the caller
+    // gave its own (after review, 15 Oct 2026). Empty from a CLI script.
+    const context = currentRequestContext();
     await client.auditLog.create({
       data: {
         userId: entry.userId,
@@ -35,7 +40,8 @@ export class AuditService {
         entityId: entry.entityId,
         oldValue: entry.oldValue ?? Prisma.JsonNull,
         newValue: entry.newValue ?? Prisma.JsonNull,
-        ipAddress: entry.ipAddress ?? null,
+        ipAddress: entry.ipAddress ?? context?.ip ?? null,
+        userAgent: entry.userAgent ?? context?.userAgent ?? null,
       },
     });
   }

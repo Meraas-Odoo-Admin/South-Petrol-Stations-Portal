@@ -160,3 +160,16 @@ When an update changes the roles' permissions (`apps/api/prisma/rbac-catalog.ts`
 `bootstrap:prod` once (step 1 above, same variables): it makes every role match the
 catalog, and never overwrites a tuned setting or a password. Phase 7 needs it: the municipality manager gains
 `cards:issue` and `registration_desks:manage` is taken off every role.
+
+## Checking the addresses in the audit log
+
+The audit log records the address and the device behind every entry. For the address to be the person's own and not the proxy's, `TRUST_PROXY_HOPS` (in `infra/.env.prod`) must equal the number of proxies in front of the API:
+- `1` (the default): only the web container's nginx.
+- `2`: another reverse proxy or load balancer handles HTTPS in front of that nginx.
+
+To check it after a deployment, without touching the database:
+1. Sign in from two different devices, for example a phone on mobile data and a computer on the office network.
+2. As the super admin, open «الإدارة» ← «سجل التدقيق» and filter by «الدخول والأمان».
+3. **Two different public addresses:** correct.
+4. **Every entry from one address starting with `172.` or `10.`** (the Docker network): the value is too low. Raise it by one and restart the `api` service.
+5. **An address you never used** (one someone could type into a header): the value is too high. Lower it.

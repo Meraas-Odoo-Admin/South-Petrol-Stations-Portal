@@ -364,3 +364,33 @@ The «طلبات التعديل» entry (`/vehicles/change-requests`) is hidden 
   - the screen itself, the API and the forms that send a request;
   - the «طلبات تعديل بانتظار الاعتماد» figure and the row highlight on «المركبات».
 - **To bring it back:** set the switch to `has('vehicles:approve_change')` again.
+
+## After review: a richer audit log (Khalil, 15 Oct 2026)
+
+The audit log showed English codes (`UPDATE User #ab12cd34`), raw field names and JSON. It had one out-of-date type filter, never showed the stored address, and had no record of failed sign-ins.
+
+**What is recorded now:**
+- **The device of every entry** (a new `userAgent` column, additive migration `20261015120000_audit_log_context`), next to the address. Both are taken from the request automatically (`common/request-context.ts`), so none of the ~80 places that write an entry changed.
+- **Every failed sign-in** (`LOGIN_FAILED`), with its reason:
+  - a name that does not exist;
+  - an account that is switched off;
+  - a locked account;
+  - a wrong password, with the attempt number.
+
+  The name typed is kept when no such account exists.
+- **The moment an account locks** (`ACCOUNT_LOCKED`).
+- **The client's real address behind nginx.** `TRUST_PROXY_HOPS` (default 1 in `infra/docker-compose.prod.yml`) is the number of proxies in front of the API. Before this, every address was nginx's. `infra/DEPLOYMENT.md` explains how to check it from the log screen, without SQL.
+
+**What the screen shows** («الإدارة» ← «سجل التدقيق»):
+- **One sentence per entry:** who did what to which record, by name. For example «عدّل محطة وقود «محطة النصر»».
+- **The changed fields in Arabic,** old ← new.
+- **The address and the device.** Examples: «Chrome · Android (هاتف)», or «أداة آلية وليست متصفحًا» for a script.
+- **Details per entry:** every field, the record id, the full user agent.
+- **Filters:**
+  - search by person, username or address;
+  - the action, by group, including «محاولات الدخول الفاشلة فقط»;
+  - the kind of record;
+  - from and to days (Tripoli days).
+- **Failed sign-ins, lockouts and other sensitive entries are tinted.**
+
+Entries from before this change have no device, and their address is the proxy's.

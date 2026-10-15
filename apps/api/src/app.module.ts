@@ -1,7 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
@@ -30,6 +30,7 @@ import { OpsReportsModule } from './ops-reports/ops-reports.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './rbac/guards/permissions.guard';
 import { accountThrottleSkip, accountTracker } from './common/throttle/account-throttle';
+import { RequestContextInterceptor } from './common/request-context';
 
 @Module({
   imports: [
@@ -94,6 +95,11 @@ import { accountThrottleSkip, accountTracker } from './common/throttle/account-t
     {
       provide: APP_GUARD,
       useClass: PermissionsGuard,
+    },
+    // Where each request came from (address, device), for the audit log.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestContextInterceptor,
     },
   ],
 })

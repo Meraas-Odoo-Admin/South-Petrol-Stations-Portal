@@ -228,7 +228,7 @@ export function ArchiveRestoreButton({
 
   function submit() {
     if (reason.trim().length < 3) {
-      setProblem('اكتب سببًا واضحًا (ثلاثة أحرف على الأقل). يُحفظ في سجل التغييرات.');
+      setProblem('اكتب سببًا واضحًا (ثلاثة أحرف على الأقل). يُحفظ في سجل التدقيق.');
       return;
     }
     if (confirmName && !archived && typed.trim() !== confirmName) {
@@ -276,7 +276,7 @@ export function ArchiveRestoreButton({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           error={problem}
-          hint="يُحفظ السبب في سجل التغييرات مع اسمك."
+          hint="يُحفظ السبب في سجل التدقيق مع اسمك."
         />
       </Dialog>
     </>

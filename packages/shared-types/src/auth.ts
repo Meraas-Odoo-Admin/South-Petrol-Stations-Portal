@@ -44,6 +44,11 @@ export interface MeResponse {
   // Registration pivot, phase 2: the registration stations this user is
   // scoped to (registration employees/supervisors). Same shape.
   registrationStationScope: MeRegistrationStationScope[];
+  // The security directorates this user works for («مديرية أمن ‹البلدية›»),
+  // from the municipalities of their stations, offices or municipality scope.
+  // Empty for the super admin, who belongs to no one municipality. The system
+  // serves several municipalities: no screen names one in code.
+  directorates: string[];
 }
 
 export interface MeRegistrationStationScope {

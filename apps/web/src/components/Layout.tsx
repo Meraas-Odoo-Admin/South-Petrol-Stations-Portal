@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../features/auth/AuthProvider';
 import { apiClient } from '../lib/apiClient';
 import { roleLabel } from '../lib/labels';
-import { APP_NAME } from '../lib/appInfo';
+import { APP_NAME, APP_TAGLINE } from '../lib/appInfo';
 import { BrandMark } from './BrandMark';
 import { Icon, ICONS } from './icons';
 import { NAV_ACCESS, activeNavPath, singleDestination } from '../lib/navAccess';
@@ -184,7 +184,12 @@ export function Layout() {
           <BrandMark size={34} />
           <div>
             <p className="text-[17px] font-extrabold text-primary">{APP_NAME}</p>
-            <p className="text-[13px] lg:text-[12px] font-medium text-ink-faint">مديرية أمن سبها</p>
+            {/* The user's own directorate, from their places (GET /auth/me) —
+                never one municipality's name in code; the super admin, who
+                belongs to none, sees the app's tagline. */}
+            <p className="text-[13px] lg:text-[12px] font-medium text-ink-faint" data-testid="sidebar-directorate">
+              {user?.directorates?.length ? user.directorates.join('، ') : APP_TAGLINE}
+            </p>
           </div>
         </div>
         <nav className="scrollbar-none min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
