@@ -50,8 +50,8 @@ test('the web forms run the same shared checks', () => {
     'apps/web/src/features/registration/RegistrationPage.tsx',
     'apps/web/src/features/vehicles/OwnerEditForm.tsx',
     'apps/web/src/features/vehicles/VehicleEditForm.tsx',
-    'apps/web/src/features/vehicles/ChangeRequestForm.tsx',
-    'apps/web/src/features/vehicles/OwnerIdentityChangeRequestForm.tsx',
+    // (After review, 18 Oct 2026: the change-request forms are gone; the two
+    // edit forms above now change those fields, with the same shared rules.)
     'apps/web/src/features/users/UserCreatePage.tsx',
   ]) {
     assert.ok(read(file).includes(SHARED), `${file} must import its rules from ${SHARED}`);

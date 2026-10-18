@@ -128,11 +128,14 @@ test('registration employee: the 10-digit administrative number, no N, a year li
   expect(rowOverflow).toBeLessThanOrEqual(1);
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  // 1.6: the plate change uses the same digit boxes; no proof field (2).
+  // After review (18 Oct 2026): no change requests on the vehicle page. A
+  // registration employee's «تعديل» has the regular fields only; the plate,
+  // chassis, booklet, type and owner are for the office manager and above.
   await navigateInApp(page, `/vehicles/${fixtures.vehicleId}`);
-  await page.getByText('طلب تغيير رقم اللوحة').first().click();
-  await expect(page.getByTestId('change-request-plate')).toBeVisible();
-  await expect(page.getByText('رقم/مرجع الإثبات')).toHaveCount(0);
+  await expect(page.getByText('طلب تغيير رقم اللوحة')).toHaveCount(0);
+  await page.getByRole('button', { name: 'تعديل', exact: true }).first().click();
+  await expect(page.getByTestId('vehicle-edit-make')).toBeVisible();
+  await expect(page.getByTestId('vehicle-edit-plate')).toHaveCount(0);
   await context.close();
 });
 

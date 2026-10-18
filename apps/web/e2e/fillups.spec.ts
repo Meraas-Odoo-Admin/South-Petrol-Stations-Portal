@@ -58,8 +58,10 @@ test('supervisor: scan the card, confirm the vehicle, trip the gap rule and reso
   // well inside the minimum gap.
   await expect(page.getByTestId('rule-review-card-mobile')).toBeVisible();
   await expect(page.getByTestId('rule-check-VEHICLE_GAP_TOO_SHORT-mobile')).toContainText('مرفوض');
-  await page.getByTestId('fillup-submit-mobile').click();
+  // After review (18 Oct 2026): a refused fill-up offers only «تسجيلها كاستثناء»,
+  // in the bottom bar (no «تسجيل التعبئة» that would only be refused).
   await expect(page.getByTestId('rule-review-card-mobile')).toContainText('تعذر تسجيل التعبئة');
+  await expect(page.getByTestId('fillup-submit-mobile')).toHaveCount(0);
   await page.getByTestId('fillup-mobile-record-exception').click();
 
   // Exception step: the type list is dynamic; pick the first. Phase 7: there

@@ -118,15 +118,15 @@ export function ChangePasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
       <div className="w-full max-w-[480px] overflow-hidden bg-surface shadow-lg lg:rounded-lg">
-        <div className="flex flex-col items-center gap-3 bg-primary py-8 text-white lg:hidden">
-          <BrandMark variant="white" size={44} />
-          <div className="text-center">
-            <p className="text-[18px] font-black">{APP_NAME}</p>
-            <p className="mt-1 text-[13px] lg:text-[12px] font-medium opacity-90">{APP_TAGLINE}</p>
-          </div>
+        {/* After review (18 Oct 2026): on a phone the whole screen fits without
+            scrolling — a slim brand bar, no boxes around the fields, and the
+            notes that repeat what the screen says are kept for the desktop. */}
+        <div className="flex items-center justify-center gap-2.5 bg-primary py-3 text-white lg:hidden">
+          <BrandMark variant="white" size={28} />
+          <p className="text-[16px] font-black">{APP_NAME}</p>
         </div>
 
-        <div className="p-6 lg:p-10">
+        <div className="px-5 py-4 lg:p-10">
           <div className="mb-7 hidden items-center gap-3 lg:flex">
             <BrandMark />
             <div>
@@ -136,19 +136,19 @@ export function ChangePasswordPage() {
           </div>
 
           {user?.mustChangePassword && (
-            <div className="mb-2 inline-block rounded-full bg-primary-100 px-3 py-1.5 text-[13px] lg:text-[12px] font-bold text-primary-dark">
+            <div className="mb-2 hidden rounded-full bg-primary-100 px-3 py-1.5 text-[13px] lg:inline-block lg:text-[12px] font-bold text-primary-dark">
               الخطوة الأولى قبل الاستخدام
             </div>
           )}
-          <h1 className="mt-3 text-[22px] font-black text-ink">اختر كلمة مرور جديدة</h1>
-          <p className="mt-2 text-[15px] lg:text-[13px] leading-[1.7] text-ink-soft">
+          <h1 className="text-[22px] font-black text-ink lg:mt-3">اختر كلمة مرور جديدة</h1>
+          <p className="mt-1 text-[14px] leading-[1.6] text-ink-soft lg:mt-2 lg:text-[13px] lg:leading-[1.7]">
             {user?.mustChangePassword
               ? 'كلمة المرور المؤقتة التي سلّمك إياها المشرف تُستخدم مرة واحدة فقط.'
               : 'اختر كلمة مرور جديدة لحسابك.'}
           </p>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
-          <div className="rounded-md border border-line p-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-3 flex flex-col gap-3 lg:mt-6 lg:gap-4">
+          <div className="lg:rounded-md lg:border lg:border-line lg:p-4">
             <label htmlFor="cp-current" className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الحالية</label>
             <div className={fieldRowClass}>
               <input
@@ -173,7 +173,7 @@ export function ChangePasswordPage() {
             )}
           </div>
 
-          <div className="rounded-md border border-line p-4">
+          <div className="lg:rounded-md lg:border lg:border-line lg:p-4">
             <label htmlFor="cp-new" className="text-[15px] lg:text-[13px] font-bold text-ink">كلمة المرور الجديدة</label>
             <div className={fieldRowClass}>
               <input
@@ -199,7 +199,7 @@ export function ChangePasswordPage() {
                 ever fill 3 of them; the 4th stays empty even at "قوية"
                 (matches the artboard's own screenshot: 3 filled + 1 empty
                 for the strong state, not a 4th unreachable check). */}
-            <div className="mt-3.5 flex gap-1.5">
+            <div className="mt-2.5 flex gap-1.5 lg:mt-3.5">
               {[0, 1, 2, 3].map((i) => (
                 <span
                   key={i}
@@ -211,7 +211,7 @@ export function ChangePasswordPage() {
               <p className={`mt-2 text-[13px] lg:text-[12.5px] font-extrabold ${strength.tone}`}>{strength.text}</p>
             )}
 
-            <ul className="mt-3 flex flex-col gap-1.5">
+            <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 lg:mt-3 lg:flex-col lg:gap-1.5">
               {checks.map((check) => (
                 <li key={check.label} className="flex items-center gap-2 text-[13px] lg:text-[12px] text-ink-soft">
                   <span
@@ -231,7 +231,7 @@ export function ChangePasswordPage() {
             </ul>
           </div>
 
-          <div className="rounded-md border border-line p-4">
+          <div className="lg:rounded-md lg:border lg:border-line lg:p-4">
             <label htmlFor="cp-confirm" className="text-[15px] lg:text-[13px] font-bold text-ink">تأكيد كلمة المرور</label>
             <div className={fieldRowClass}>
               <input
@@ -264,7 +264,7 @@ export function ChangePasswordPage() {
             )}
           </div>
 
-          <div className="rounded-md bg-accent-100 px-4 py-3 text-[13px] lg:text-[12px] leading-[1.7] text-accent-ink">
+          <div className="hidden rounded-md bg-accent-100 px-4 py-3 text-[13px] leading-[1.7] text-accent-ink lg:block lg:text-[12px]">
             بعد الحفظ سيُطلب منك الدخول بكلمة المرور الجديدة في المرة القادمة.
           </div>
 

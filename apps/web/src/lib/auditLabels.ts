@@ -29,6 +29,9 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   RESTORE_USER: 'استعاد الحساب',
   // Vehicles, owners and cards
   PLATE_CHANGE: 'غيّر اللوحة',
+  // After review (18 Oct 2026): «تعديل» changes these directly.
+  UPDATE_IDENTITY: 'عدّل هوية المركبة (اللوحة/الشاصي/الكتيب/النوع/المالك)',
+  UPDATE_OWNER_IDENTITY: 'صحّح هوية المالك',
   VEHICLE_CHANGE_REQUESTED: 'طلب تعديل بيانات مركبة',
   VEHICLE_CHANGE_APPROVED: 'وافق على تعديل بيانات مركبة',
   VEHICLE_CHANGE_REJECTED: 'رفض تعديل بيانات مركبة',
@@ -83,6 +86,8 @@ export const AUDIT_ACTION_GROUPS: Array<{ label: string; actions: string[] }> = 
   {
     label: 'المركبات والبطاقات',
     actions: [
+      'UPDATE_IDENTITY',
+      'UPDATE_OWNER_IDENTITY',
       'PLATE_CHANGE',
       'VEHICLE_CHANGE_REQUESTED',
       'VEHICLE_CHANGE_APPROVED',
@@ -179,6 +184,11 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   revealed: 'كُشف',
   side: 'الجهة',
   failedAttempts: 'عدد المحاولات الخاطئة',
+  chassisNumber: 'رقم الشاصي',
+  registrationBooklet: 'رقم كتيب المركبة',
+  ownerId: 'المالك',
+  vehicleTypeId: 'نوع المركبة',
+  identityNumberChanged: 'تغيّر رقم الهوية',
   lockedUntil: 'مقفل حتى',
   minutes: 'المدة بالدقائق',
 };

@@ -147,7 +147,9 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
       ? 'fixed inset-0 z-50 flex flex-col bg-[#0F1E1C]'
       : variant === 'desktop'
         ? 'absolute inset-0 z-20 flex flex-col overflow-hidden rounded-md bg-[#0F1E1C] shadow-lg'
-        : 'relative flex h-[62vh] min-h-[360px] flex-col overflow-hidden rounded-md bg-[#0F1E1C]';
+        : // After review (18 Oct 2026): 40% of the screen, not 62% — on a phone the
+          // way out under it («البطاقة لا تعمل؟») now shows without scrolling.
+          'relative flex h-[40vh] min-h-[280px] max-h-[440px] flex-col overflow-hidden rounded-md bg-[#0F1E1C]';
   const outcome = stage === 'not-a-card' || stage === 'revoked' || stage === 'error' ? OUTCOME_MESSAGES[stage] : null;
 
   return (

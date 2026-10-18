@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+import { UpdateVehicleIdentityDto } from './dto/update-vehicle-identity.dto';
 import { FindVehiclesQueryDto } from './dto/find-vehicles-query.dto';
 import { PlateChangeDto } from './dto/plate-change.dto';
 import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
@@ -56,6 +57,18 @@ export class VehiclesController {
   @Get(':id/weekly-usage')
   getWeeklyUsage(@Param('id') id: string) {
     return this.vehicles.getWeeklyUsage(id);
+  }
+
+  // After review (18 Oct 2026): the identity fields, directly, for whoever
+  // may approve such changes (office manager and above).
+  @RequirePermission('vehicles:approve_change')
+  @Patch(':id/identity')
+  updateIdentity(
+    @Param('id') id: string,
+    @Body() dto: UpdateVehicleIdentityDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.vehicles.updateIdentity(id, dto, actor.id);
   }
 
   @RequirePermission('vehicles:manage')

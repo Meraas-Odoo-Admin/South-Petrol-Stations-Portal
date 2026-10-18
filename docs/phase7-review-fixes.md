@@ -394,3 +394,38 @@ The audit log showed English codes (`UPDATE User #ab12cd34`), raw field names an
 - **Failed sign-ins, lockouts and other sensitive entries are tinted.**
 
 Entries from before this change have no device, and their address is the proxy's.
+
+## After review: the station employee's screens never scroll on a phone (Khalil, 18 Oct 2026)
+
+Every screen the station employee sees fits a phone with no scrolling. This was measured in a browser at 360×640, 393×740 and 412×780 on each of these screens: sign-in, first password change, scan, «تأكيد المركبة», fuel and amount, review (accepted and refused), exception, done, and the search without a card.
+
+**Layout fixes:**
+- **The content fills what the top bar leaves.** A fixed 56 px was 4 px short of the real bar, so every page scrolled a little.
+- **The bottom button bar sits on the screen's edge when there is no bottom navigation bar,** using `--bottom-bar` set by the layout. It is exactly as tall as the space kept under the content. Its main button is 48 px.
+- **The camera takes 40% of the screen,** not 62%.
+
+**Screen by screen:**
+- **«تأكيد المركبة»:** the card's details are more compact.
+- **Review:**
+  - a rule that passed is one small badge; a refused one keeps its explanation;
+  - the note on rules that are switched off is shown only to `reports:view`, not to the employee;
+  - when the rules refuse the fill-up, «تسجيلها كاستثناء» is in the bottom bar. It used to be under the bar, and the bar offered «تسجيل التعبئة», which would only be refused.
+- **No card:** the camera closes while searching, and «رجوع إلى مسح البطاقة» was added.
+- **Sign-in and the first password change:** slimmer on a phone. The desktop is unchanged.
+
+## After review: «تعديل» edits every field; no change requests on the vehicle page (Khalil, 18 Oct 2026)
+
+**What changed on the page:**
+- **The request sections are gone.** «تعديل هوية المركبة — يتطلب اعتمادًا» and «تصحيح هوية المالك — يتطلب اعتمادًا» were removed, with their forms.
+- **The vehicle's «تعديل»:**
+  - whoever holds `vehicles:approve_change` (office manager and above) changes the plate, chassis, booklet, vehicle type and owner directly (`PATCH /vehicles/:id/identity`);
+  - whoever holds `vehicles:manage` changes the make, model, colour, year and fuel, as before.
+- **The owner's «تعديل»:** `owners:approve_change` corrects the identity type and number (`PATCH /owners/:id/identity`).
+- **A confirmation dialog** lists each change, old ← new, before anything is saved.
+
+**How the changes are kept:**
+- **History:** the plate, chassis and booklet keep their history exactly as an approved request did (`applyIdentityChange`, now shared by both paths).
+- **Checks:** the values must pass the registration's rules and must not belong to another vehicle or owner.
+- **Audit:** each save writes one audit entry, `UPDATE_IDENTITY` or `UPDATE_OWNER_IDENTITY`. The owner's numbers themselves are never written to the audit log.
+
+Requests already pending stay in the database. Nothing creates new ones from the vehicle page.

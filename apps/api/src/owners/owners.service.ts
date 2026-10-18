@@ -1,9 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { checkArabicPersonName } from '@fuel-tracking/shared-types';
+import { checkArabicPersonName, checkOwnerIdentity } from '@fuel-tracking/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { UpdateOwnerDto } from './dto/update-owner.dto';
+import { UpdateOwnerIdentityDto } from './dto/update-owner-identity.dto';
 import { FindOwnersQueryDto } from './dto/find-owners-query.dto';
 import { CreateOwnerChangeRequestDto } from './dto/create-owner-change-request.dto';
 import { RejectOwnerChangeRequestDto } from './dto/reject-owner-change-request.dto';
@@ -111,6 +112,40 @@ export class OwnersService {
       newValue: { revealed: true },
     });
     return { identityNumber: owner.identityNumber };
+  }
+
+  // After review (18 Oct 2026): the identity corrected directly, checked with
+  // the registration's rules, and refused when another owner already has it.
+  // The audit entry records the kinds, and that the number changed — not the
+  // numbers themselves.
+  async updateIdentity(id: string, dto: UpdateOwnerIdentityDto, actorId: string) {
+    const owner = await this.prisma.vehicleOwner.findUnique({ where: { id } });
+    if (!owner) throw new NotFoundException('Vehicle owner not found.');
+    const check = checkOwnerIdentity(dto.identityType, dto.identityNumber);
+    if (!check.ok) throw new BadRequestException({ message: 'IDENTITY_INVALID', details: { code: check.code } });
+    const identityNumber = check.value;
+    if (owner.identityType === dto.identityType && owner.identityNumber === identityNumber) return owner;
+
+    const conflict = await this.prisma.vehicleOwner.findUnique({
+      where: { identityType_identityNumber: { identityType: dto.identityType, identityNumber } },
+    });
+    if (conflict && conflict.id !== id) throw new ConflictException('IDENTITY_IN_USE');
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.vehicleOwner.update({ where: { id }, data: { identityType: dto.identityType, identityNumber } });
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'UPDATE_OWNER_IDENTITY',
+          entityType: 'VehicleOwner',
+          entityId: id,
+          oldValue: { identityType: owner.identityType },
+          newValue: { identityType: dto.identityType, identityNumberChanged: owner.identityNumber !== identityNumber },
+        },
+        tx,
+      );
+      return updated;
+    });
   }
 
   async update(id: string, dto: UpdateOwnerDto, actorId: string) {

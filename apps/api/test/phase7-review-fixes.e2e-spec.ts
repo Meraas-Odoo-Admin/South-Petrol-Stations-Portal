@@ -13,7 +13,7 @@ import {
   ROLE_PERMISSIONS,
   UNRESTRICTED_STATION_ACCESS_ROLES,
 } from '../prisma/rbac-catalog';
-import { randomBooklet, randomChassis, randomDigits } from './support/registration-fixtures';
+import { nationalId, randomBooklet, randomChassis, randomDigits } from './support/registration-fixtures';
 
 // Phase 7 (Mohamed's review, 14 Oct 2026), the API side:
 //  1. the administrative number is 10 digits starting with 5 or 6; a booklet
@@ -176,6 +176,8 @@ describe('Phase 7 review fixes (e2e)', () => {
     await prisma.vehicleChangeRequest.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.ownerChangeRequest.deleteMany({ where: { ownerId: { in: ownerIds } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
+    await prisma.vehicleBookletHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
+    await prisma.vehicleChassisHistory.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.vehicleOwner.deleteMany({ where: { id: { in: ownerIds } } });
     await prisma.duplicateCatch.deleteMany({ where: { userId: { in: userIds } } });
@@ -218,6 +220,58 @@ describe('Phase 7 review fixes (e2e)', () => {
       expect((await registerVehicle(owner.body.id, { registrationBooklet: `AB${randomDigits(6)}` })).status).toBe(400);
       expect((await registerVehicle(owner.body.id, { currentPlate: `7-${randomDigits(5)}N` })).status).toBe(400);
       expect((await registerVehicle(owner.body.id)).status).toBe(201);
+    });
+  });
+
+  // ── after review (18 Oct 2026): «تعديل» changes the identity directly ──
+
+  describe('direct identity edit, no change request', () => {
+    it('the office manager and above change the plate and booklet at once, with history and one audit entry', async () => {
+      const owner = await registerOwner({ identityType: 'NATIONAL_ID', identityNumber: nationalId() });
+      const vehicle = (await registerVehicle(owner.body.id)).body;
+      const newPlate = `7-${randomDigits(6).replace(/^0/, '1')}`;
+      const newBooklet = randomBooklet();
+      const res = await api()
+        .patch(`/api/v1/vehicles/${vehicle.id}/identity`)
+        .set(auth('managerA'))
+        .send({ currentPlate: newPlate, registrationBooklet: newBooklet });
+      expect(res.status).toBe(200);
+      const saved = await prisma.vehicle.findUniqueOrThrow({ where: { id: vehicle.id } });
+      expect(saved.currentPlate).toBe(newPlate);
+      expect(saved.registrationBooklet).toBe(newBooklet);
+      const plates = await prisma.vehiclePlateHistory.findMany({ where: { vehicleId: vehicle.id }, orderBy: { validFrom: 'asc' } });
+      expect(plates.map((h) => h.plate)).toEqual([vehicle.currentPlate, newPlate]);
+      expect(plates[0]!.validTo).not.toBeNull();
+      const audit = await prisma.auditLog.findMany({ where: { entityId: vehicle.id, action: 'UPDATE_IDENTITY' } });
+      expect(audit).toHaveLength(1);
+      expect(audit[0]!.newValue).toMatchObject({ currentPlate: newPlate, registrationBooklet: newBooklet });
+    });
+
+    it('refuses the registration employee, a plate another vehicle has, and an invalid booklet', async () => {
+      const owner = await registerOwner({ identityType: 'NATIONAL_ID', identityNumber: nationalId() });
+      const first = (await registerVehicle(owner.body.id)).body;
+      const second = (await registerVehicle(owner.body.id)).body;
+      const path = `/api/v1/vehicles/${second.id}/identity`;
+      expect((await api().patch(path).set(auth('registrar')).send({ registrationBooklet: randomBooklet() })).status).toBe(403);
+      const taken = await api().patch(path).set(auth('managerA')).send({ currentPlate: first.currentPlate });
+      expect(taken.status).toBe(409);
+      expect((await api().patch(path).set(auth('managerA')).send({ registrationBooklet: 'AB12' })).status).toBe(400);
+    });
+
+    it("corrects an owner's identity number directly, and refuses one another owner has", async () => {
+      const one = await registerOwner({ identityType: 'NATIONAL_ID', identityNumber: nationalId() });
+      const other = await registerOwner({ identityType: 'NATIONAL_ID', identityNumber: nationalId() });
+      const corrected = nationalId();
+      const path = `/api/v1/owners/${one.body.id}/identity`;
+      expect((await api().patch(path).set(auth('registrar')).send({ identityType: 'NATIONAL_ID', identityNumber: corrected })).status).toBe(403);
+      expect((await api().patch(path).set(auth('managerA')).send({ identityType: 'NATIONAL_ID', identityNumber: corrected })).status).toBe(200);
+      const saved = await prisma.vehicleOwner.findUniqueOrThrow({ where: { id: one.body.id } });
+      expect(saved.identityNumber).toBe(corrected);
+      const clash = await api()
+        .patch(path)
+        .set(auth('managerA'))
+        .send({ identityType: 'NATIONAL_ID', identityNumber: other.body.identityNumber ?? (await prisma.vehicleOwner.findUniqueOrThrow({ where: { id: other.body.id } })).identityNumber });
+      expect(clash.status).toBe(409);
     });
   });
 

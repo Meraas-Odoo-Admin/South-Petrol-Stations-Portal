@@ -167,7 +167,14 @@ export function Layout() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-paper lg:flex">
+    // --bottom-bar: the height the phone's bottom bar takes, for anything fixed
+    // above it (the fill-up screen's button bar) — 0 when there is no bar (the
+    // station employee, after review 18 Oct 2026), so nothing floats over a gap.
+    <div
+      dir="rtl"
+      className="flex min-h-[100dvh] flex-col bg-paper lg:min-h-screen lg:flex-row"
+      style={{ '--bottom-bar': showBottomBar ? '58px' : '0px' } as React.CSSProperties}
+    >
       {/* Desktop sidebar (end/right side) — hidden below lg.
           Order matters here: with dir="rtl" and the default flex-direction
           row, the flex main-axis start is the physical RIGHT edge — so the
@@ -291,7 +298,9 @@ export function Layout() {
           nav) is unaffected. */}
       <main
         className={`order-2 overflow-x-hidden p-3.5 lg:min-h-screen lg:flex-1 lg:p-6 ${
-          showBottomBar ? 'min-h-[calc(100vh-56px-58px)] pb-[calc(5rem+env(safe-area-inset-bottom))]' : 'min-h-[calc(100vh-56px)] pb-[calc(1rem+env(safe-area-inset-bottom))]'
+          // flex-1: the content fills what the top bar leaves, whatever its height
+          // (a fixed 56px was 4px short of the real bar: every page scrolled).
+          showBottomBar ? 'flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))]' : 'flex-1 pb-[calc(1rem+env(safe-area-inset-bottom))]'
         }`}
       >
         {showBell && (

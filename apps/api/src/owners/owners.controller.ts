@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { OwnersService } from './owners.service';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { UpdateOwnerDto } from './dto/update-owner.dto';
+import { UpdateOwnerIdentityDto } from './dto/update-owner-identity.dto';
 import { FindOwnersQueryDto } from './dto/find-owners-query.dto';
 import { CreateOwnerChangeRequestDto } from './dto/create-owner-change-request.dto';
 import { RejectOwnerChangeRequestDto } from './dto/reject-owner-change-request.dto';
@@ -50,6 +51,14 @@ export class OwnersController {
   @Post(':id/reveal-identity')
   revealIdentity(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.owners.revealIdentity(id, actor.id);
+  }
+
+  // After review (18 Oct 2026): the identity, directly, for whoever may
+  // approve such corrections (office manager and above).
+  @RequirePermission('owners:approve_change')
+  @Patch(':id/identity')
+  updateIdentity(@Param('id') id: string, @Body() dto: UpdateOwnerIdentityDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.owners.updateIdentity(id, dto, actor.id);
   }
 
   @RequirePermission('owners:manage')

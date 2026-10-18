@@ -59,7 +59,7 @@ export function LoginPage() {
         أدخل اسم المستخدم الذي سلّمك إياه مشرف محطتك.
       </p>
 
-      <div className="mt-7 flex flex-col gap-[18px]">
+      <div className="mt-5 flex flex-col gap-4 lg:mt-7 lg:gap-[18px]">
         <div>
           <label htmlFor="login-username" className="text-[15px] lg:text-[13px] font-bold text-ink">اسم المستخدم</label>
           <input
@@ -100,11 +100,11 @@ export function LoginPage() {
 
       {serverError && <p role="alert" className="mt-4 text-[15px] lg:text-[13px] text-danger-dark">{serverError}</p>}
 
-      <PillButton type="submit" size="field" disabled={isSubmitting} className="mt-7 w-full">
+      <PillButton type="submit" size="field" disabled={isSubmitting} className="mt-5 w-full lg:mt-7">
         {isSubmitting ? 'جارٍ الدخول…' : 'دخول'}
       </PillButton>
 
-      <p className="mt-6 text-[13px] lg:text-[12px] leading-[1.7] text-ink-soft lg:mt-auto lg:pt-6">
+      <p className="mt-4 text-[13px] lg:text-[12px] leading-[1.7] text-ink-soft lg:mt-auto lg:pt-6">
         إن نسيت كلمة المرور، راجع مشرف محطتك — لا يمكن استرجاعها من هذه الشاشة.
       </p>
     </form>
@@ -114,7 +114,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
       <div className="flex w-full max-w-[1140px] flex-col overflow-hidden bg-surface shadow-lg lg:h-[640px] lg:flex-row lg:rounded-lg">
         {/* Mobile: brand header */}
-        <div className="flex flex-col items-center gap-3.5 bg-primary py-9 text-white lg:hidden">
+        <div className="flex flex-col items-center gap-2 bg-primary py-5 text-white lg:hidden">
           <BrandMark variant="white" size={44} />
           <div className="text-center">
             <p className="text-[20px] font-black">{APP_NAME}</p>
@@ -142,7 +142,7 @@ export function LoginPage() {
         </div>
 
         {/* Form column */}
-        <div className="flex flex-1 flex-col rounded-t-lg bg-surface p-6 shadow-lg lg:order-1 lg:rounded-none lg:p-14 lg:shadow-none">
+        <div className="flex flex-1 flex-col rounded-t-lg bg-surface px-6 py-5 shadow-lg lg:order-1 lg:rounded-none lg:p-14 lg:shadow-none">
           <div className="mb-11 hidden items-center gap-3 lg:flex">
             <BrandMark />
             <div>

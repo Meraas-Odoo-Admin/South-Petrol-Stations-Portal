@@ -91,7 +91,8 @@ test('registration employee: fields, plate change, card desk (1.x, 3.1, 8)', asy
   });
   await step('plate change', async () => {
     await visit(page, `/vehicles/${fixtures.vehicleId}`);
-    await page.getByText('طلب تغيير رقم اللوحة').first().click();
+    // After review (18 Oct 2026): «تعديل» edits every field; no change requests.
+    await page.getByRole('button', { name: 'تعديل', exact: true }).first().click();
     await shot(page, 'p16-plate-change');
   });
   await step('vehicles list loading (skeleton)', async () => {

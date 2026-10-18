@@ -122,12 +122,31 @@ function RuleReviewChecks({
 
       {checks && (
         <div className="space-y-2">
-          {checks.map((check) => {
+          {/* After review (18 Oct 2026): a rule that passed is one small badge,
+              so the screen fits a phone without scrolling; a rule that stops
+              the fill-up keeps its full explanation below. */}
+          {checks.some((c) => !(rejection?.reason === c.reason || !c.passed)) && (
+            <ul className="flex flex-wrap gap-1.5">
+              {checks
+                .filter((c) => !(rejection?.reason === c.reason || !c.passed))
+                .map((check) => (
+                  <li
+                    key={check.reason}
+                    data-testid={`rule-check-${check.reason}${idSuffix}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-ok-100 px-2.5 py-1 text-[13px] font-bold text-ok lg:text-[12px]"
+                  >
+                    <span aria-hidden="true">✓</span> {RULE_CHECK_LABELS[check.reason]}
+                    <span className="sr-only">: مقبول</span>
+                  </li>
+                ))}
+            </ul>
+          )}
+          {checks.filter((c) => rejection?.reason === c.reason || !c.passed).map((check) => {
             // The preview's own pass/fail, UNLESS an actual submission just
             // rejected on this exact rule — that verdict (from the real
             // POST /fillups call, not this snapshot) wins, since a few
             // seconds may have passed since the preview was fetched.
-            const failed = rejection?.reason === check.reason || !check.passed;
+            const failed = true;
             return (
               <div
                 key={check.reason}
@@ -794,7 +813,9 @@ export function RecordFillUpPage() {
             )}
             {needStationFirst ? (
               <p className="text-center text-[15px] text-ink-soft lg:text-[13px]">اختر المحطة أولًا، ثم امسح بطاقة المركبة.</p>
-            ) : (
+            ) : searchOpen ? null : (
+              // Closed while searching without a card (after review, 18 Oct
+              // 2026): the search fits the phone, and the camera is released.
               <QrScanPanel
                 variant="inline"
                 autoStart
@@ -811,7 +832,7 @@ export function RecordFillUpPage() {
             )}
 
             {!needStationFirst && (
-              <div className="mt-4 border-t border-line pt-3" data-testid="fillup-nocard-area">
+              <div className={searchOpen ? '' : 'mt-4 border-t border-line pt-3'} data-testid="fillup-nocard-area">
                 {!searchOpen ? (
                   <button
                     type="button"
@@ -823,6 +844,18 @@ export function RecordFillUpPage() {
                   </button>
                 ) : (
                   <div data-testid="fillup-nocard-form" className="space-y-3">
+                    <button
+                      type="button"
+                      data-testid="fillup-nocard-back-to-scan"
+                      className="min-h-[44px] text-[15px] font-bold text-primary underline lg:text-[13px]"
+                      onClick={() => {
+                        setSearchOpen(false);
+                        setPickedVehicle(null);
+                        setPickedReason('');
+                      }}
+                    >
+                      رجوع إلى مسح البطاقة
+                    </button>
                     <p className="text-[15px] leading-[1.8] text-ink lg:text-[13px]">
                       تعمل هذه الطريقة لمركبة مسجّلة فقط. تبقى الفواصل والحدود سارية، وتُسجَّل التعبئة «بدون بطاقة» باسمك وتُحتسب في التقارير.
                     </p>
@@ -961,7 +994,7 @@ export function RecordFillUpPage() {
             <ThumbBar>
               <PillButton
                 data-testid="fillup-mobile-continue-to-fuel"
-                className="h-14 w-full text-[18px] lg:h-12 lg:text-[14px]"
+                className="h-12 w-full text-[18px] lg:text-[14px]"
                 disabled={!selectedVehicle || rulePreviewQuery.isError}
                 onClick={() => setStep('fuel')}
               >
@@ -1072,7 +1105,7 @@ export function RecordFillUpPage() {
           <ThumbBar>
             <PillButton
               data-testid="fillup-mobile-continue-to-review"
-              className="h-14 w-full text-[18px] lg:h-12 lg:text-[14px]"
+              className="h-12 w-full text-[18px] lg:text-[14px]"
               disabled={!fillUpForm.watch('quantityLiters') || !!fillUpForm.formState.errors.quantityLiters}
               onClick={() => setStep('review')}
             >
@@ -1109,7 +1142,8 @@ export function RecordFillUpPage() {
                     تنبيه: المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[vehicleFuelType]} والوقود المختار مختلف. سيُسجَّل التنبيه للمشرف.
                   </p>
                 )}
-                {rulePreviewQuery.data && (rulePreviewQuery.data.disabledRules?.length ?? 0) > 0 && (
+                {/* For whoever runs the station (reports:view), not the employee at the pump. */}
+                {canViewReports && rulePreviewQuery.data && (rulePreviewQuery.data.disabledRules?.length ?? 0) > 0 && (
                   <p className="mt-3 text-[15px] leading-[1.7] text-ink-soft lg:text-[13px]" data-testid="fillup-disabled-rules">
                     قواعد غير مفعّلة حاليًا ولا تُطبَّق: {rulePreviewQuery.data.disabledRules!.map((r) => RULE_CHECK_LABELS[r]).join('، ')}.
                   </p>
@@ -1122,32 +1156,36 @@ export function RecordFillUpPage() {
                 </p>
               )}
 
-              {!rejection && (
+              {/* After review (18 Oct 2026): when the rules refuse it, the one thing
+                  to do — record it as an exception — is in the bottom bar, not
+                  under it where it had to be scrolled to. */}
+              {effectiveRejection && canRecordException ? (
+                <ThumbBar>
+                  <PillButton
+                    type="button"
+                    data-testid="fillup-mobile-record-exception"
+                    variant="danger"
+                    size="md"
+                    className="h-12 w-full text-[18px] lg:text-[15px]"
+                    onClick={() => setStep('exception')}
+                  >
+                    تسجيلها كاستثناء
+                  </PillButton>
+                </ThumbBar>
+              ) : !rejection && (
                 <ThumbBar>
                   <PillButton
                     type="submit"
                     data-testid="fillup-submit-mobile"
                     disabled={fillUpForm.formState.isSubmitting || rulePreviewQuery.isLoading}
                     size="md"
-                    className="h-14 w-full text-[18px] lg:text-[15px]"
+                    className="h-12 w-full text-[18px] lg:text-[15px]"
                   >
                     {fillUpForm.formState.isSubmitting ? 'جارٍ التسجيل…' : 'تسجيل التعبئة'}
                   </PillButton>
                 </ThumbBar>
               )}
             </form>
-
-            {effectiveRejection && canRecordException && (
-              <PillButton
-                data-testid="fillup-mobile-record-exception"
-                variant="danger"
-                size="field"
-                className="mt-3 w-full"
-                onClick={() => setStep('exception')}
-              >
-                تسجيلها كاستثناء
-              </PillButton>
-            )}
           </>
         )}
 
@@ -1174,8 +1212,10 @@ export function RecordFillUpPage() {
 function ThumbBar({ children }: { children: React.ReactNode }) {
   return (
     <>
+      {/* Exactly the bar's height (8 + 48 + 4 + 44 + 8 = 112px), so the end of the
+          content is never left under it (after review, 18 Oct 2026). */}
       <div className="h-28 lg:hidden" aria-hidden="true" />
-      <div className="fixed inset-x-0 bottom-[calc(58px+env(safe-area-inset-bottom))] z-20 border-t border-line bg-paper/95 px-3.5 pb-2.5 pt-2.5 backdrop-blur lg:static lg:z-auto lg:mt-3 lg:border-0 lg:bg-transparent lg:p-0">
+      <div className="fixed inset-x-0 bottom-[calc(var(--bottom-bar,58px)+env(safe-area-inset-bottom))] z-20 border-t border-line bg-paper/95 px-3.5 pb-2 pt-2 backdrop-blur lg:static lg:z-auto lg:mt-3 lg:border-0 lg:bg-transparent lg:p-0">
         <div className="mx-auto w-full max-w-xl">{children}</div>
       </div>
     </>
@@ -1215,17 +1255,18 @@ function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onC
     { label: 'رقم البطاقة', value: card.cardNumber, ltr: true, testId: 'card' },
   ];
   return (
-    <Card className="p-5 text-center" data-testid="fillup-scan-confirm">
-      <p className="text-[16px] font-bold text-ink-soft lg:text-[14px]">هل هذه هي المركبة التي أمامك؟</p>
-      <p className="mt-3 text-[44px] font-black leading-none text-ink" data-testid="fillup-scan-confirm-plate">
+    <Card className="p-4 text-center lg:p-5" data-testid="fillup-scan-confirm">
+      <p className="text-[15px] font-bold text-ink-soft lg:text-[14px]">هل هذه هي المركبة التي أمامك؟</p>
+      <p className="mt-2 text-[40px] font-black leading-none text-ink lg:text-[44px]" data-testid="fillup-scan-confirm-plate">
         <LtrText>{formatLicensePlate(v.currentPlate)}</LtrText>
       </p>
-      {v.vehicleType && <p className="mt-2 text-[15px] text-ink-soft lg:text-[13px]">{v.vehicleType.name}</p>}
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-sm bg-surface-alt p-4 text-start" data-testid="fillup-scan-confirm-details">
+      {v.vehicleType && <p className="mt-1 text-[14px] text-ink-soft lg:text-[13px]">{v.vehicleType.name}</p>}
+      {/* One screen on a phone, no scrolling (after review, 18 Oct 2026). */}
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-sm bg-surface-alt px-3.5 py-2.5 text-start" data-testid="fillup-scan-confirm-details">
         {details.map((d) => (
           <div key={d.testId} className={d.wide ? 'col-span-2' : ''} data-testid={`fillup-scan-confirm-${d.testId}`}>
-            <dt className="text-[14px] font-bold text-ink-soft lg:text-[12px]">{d.label}</dt>
-            <dd className="mt-0.5 break-words text-[18px] font-extrabold text-ink lg:text-[15px]">
+            <dt className="text-[13px] font-bold leading-tight text-ink-soft lg:text-[12px]">{d.label}</dt>
+            <dd className="break-words text-[16px] font-extrabold leading-snug text-ink lg:text-[15px]">
               {d.value ? d.ltr ? <LtrText>{d.value}</LtrText> : d.value : '—'}
             </dd>
           </div>
@@ -1240,7 +1281,7 @@ function ScanConfirmView({ card, onConfirm, onReject }: { card: ScannedCard; onC
         </div>
       )}
       <ThumbBar>
-        <PillButton data-testid="fillup-scan-confirm-yes" className="h-14 w-full text-[18px] lg:text-[16px]" onClick={onConfirm}>
+        <PillButton data-testid="fillup-scan-confirm-yes" className="h-12 w-full text-[18px] lg:text-[16px]" onClick={onConfirm}>
           نعم، هذه هي المركبة
         </PillButton>
         <button type="button" onClick={onReject} className="mt-1 block h-11 w-full text-center text-[16px] font-bold text-ink-soft lg:text-[13px]">

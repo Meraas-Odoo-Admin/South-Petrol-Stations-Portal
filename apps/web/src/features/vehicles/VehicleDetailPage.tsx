@@ -10,7 +10,6 @@ import { maskIdentityNumber } from '../../lib/masking';
 import { formatLicensePlate } from '../../lib/libyanFormats';
 import {
   fuelTypeLabel,
-  vehicleChangeTypeLabel,
   identityTypeLabel,
 } from '../../lib/labels';
 import { VehicleBrandLogo } from '../../components/VehicleBrandLogo';
@@ -24,15 +23,12 @@ import { StatusPill } from '../../components/design/StatusPill';
 import { CodeText } from '../../components/design/CodeText';
 import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
-import { ChangeRequestForm } from './ChangeRequestForm';
 import { VehicleEditForm } from './VehicleEditForm';
 import { OwnerEditForm } from './OwnerEditForm';
-import { OwnerIdentityChangeRequestForm } from './OwnerIdentityChangeRequestForm';
 import type { VehicleBasicInfo } from './types';
 import { SkeletonRows } from '../../components/design/Skeleton';
 import { LIST_PAGE_SIZE } from '../../lib/pageSize';
 
-type ChangeFormType = 'CHASSIS_CHANGE' | 'BOOKLET_CHANGE' | 'OWNER_CHANGE' | 'PLATE_CHANGE' | 'VEHICLE_TYPE_CHANGE';
 
 const TAKE = LIST_PAGE_SIZE;
 
@@ -51,16 +47,16 @@ export function VehicleDetailPage() {
   const { vehicleId } = useParams<{ vehicleId: string }>();
   const { user, hasPermission } = useAuth();
   const permissions = user?.permissions ?? [];
-  const canRequestChange = hasPermission('vehicles:request_change');
+  // After review (18 Oct 2026): one «تعديل» for every field, no change
+  // requests. The identity fields need what approving a request needed.
   const canEditVehicle = hasPermission('vehicles:manage');
+  const canEditVehicleIdentity = hasPermission('vehicles:approve_change');
   const canReadCards = hasPermission('cards:read');
   const canEditOwner = hasPermission('owners:manage');
-  const canRequestOwnerChange = hasPermission('owners:request_change');
+  const canEditOwnerIdentity = hasPermission('owners:approve_change');
   const [skip, setSkip] = useState(0);
-  const [openChangeForm, setOpenChangeForm] = useState<ChangeFormType | null>(null);
   const [editingCosmetic, setEditingCosmetic] = useState(false);
   const [editingOwner, setEditingOwner] = useState(false);
-  const [requestingOwnerIdentityChange, setRequestingOwnerIdentityChange] = useState(false);
   // Matches design 5d — mobile gets tabs (identity / plate history /
   // fill-up history) instead of everything stacked with scrolling tables.
   // Desktop ignores this entirely: sections stay permanently visible via
@@ -147,7 +143,7 @@ export function VehicleDetailPage() {
                   <p className="truncate text-[13px] lg:text-[12px] text-ink-faint">{vehicle.vehicleType?.name ?? 'نوع غير محدَّد'}</p>
                 </div>
               </div>
-              {canEditVehicle && !editingCosmetic && (
+              {(canEditVehicle || canEditVehicleIdentity) && !editingCosmetic && (
                 <PillButton
                   variant="secondary"
                   size="sm"
@@ -160,7 +156,12 @@ export function VehicleDetailPage() {
             </div>
             {editingCosmetic ? (
               <div className="p-4">
-                <VehicleEditForm vehicle={vehicle} onDone={() => setEditingCosmetic(false)} />
+                <VehicleEditForm
+                  vehicle={vehicle}
+                  canEditIdentity={canEditVehicleIdentity}
+                  canEditDetails={canEditVehicle}
+                  onDone={() => setEditingCosmetic(false)}
+                />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3">
@@ -188,13 +189,16 @@ export function VehicleDetailPage() {
                         ownerId={vehicle.owner.id}
                         fullName={vehicle.owner.fullName}
                         phone={vehicle.owner.phone}
+                        identityType={vehicle.owner.identityType}
+                        canEditDetails={canEditOwner}
+                        canEditIdentity={canEditOwnerIdentity}
                         onDone={() => setEditingOwner(false)}
                       />
                     </div>
                   ) : (
                     <>
                       {vehicle.owner?.fullName ?? '—'}
-                      {vehicle.owner && canEditOwner && (
+                      {vehicle.owner && (canEditOwner || canEditOwnerIdentity) && (
                         <button
                           type="button"
                           onClick={() => setEditingOwner(true)}
@@ -259,84 +263,6 @@ export function VehicleDetailPage() {
                   width: `${Math.min(100, (weeklyUsageQuery.data.used / Math.max(1, weeklyUsageQuery.data.max)) * 100)}%`,
                 }}
               />
-            </div>
-          </Card>
-        )}
-
-        {canRequestChange && (
-          <Card
-            className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}
-            style={{ animationDelay: '140ms' }}
-          >
-            <CardHeader title="تعديل هوية المركبة — يتطلب اعتمادًا" />
-            <div className="p-4">
-              {openChangeForm ? (
-                <ChangeRequestForm
-                  vehicleId={vehicle.id}
-                  changeType={openChangeForm}
-                  label={vehicleChangeTypeLabel(openChangeForm)}
-                  onDone={() => setOpenChangeForm(null)}
-                />
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('PLATE_CHANGE')}>
-                    طلب تغيير رقم اللوحة
-                  </PillButton>
-                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('CHASSIS_CHANGE')}>
-                    طلب تغيير رقم الشاصي
-                  </PillButton>
-                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('BOOKLET_CHANGE')}>
-                    طلب تغيير رقم كتيب المركبة
-                  </PillButton>
-                  {/* Round 12/14: every one of these affects fill-up rule
-                      eligibility (see VehicleChangeType's schema comment),
-                      so they all go through this same approval flow
-                      instead of the immediate-save cosmetic form above —
-                      requestable by any station employee
-                      (vehicles:request_change), approved only by
-                      supervisor/directorate-admin/system-admin
-                      (vehicles:approve_change, gating the buttons this
-                      form's own queue page shows). */}
-                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('OWNER_CHANGE')}>
-                    طلب تغيير المالك
-                  </PillButton>
-                  <PillButton variant="secondary" onClick={() => setOpenChangeForm('VEHICLE_TYPE_CHANGE')}>
-                    طلب تغيير نوع المركبة
-                  </PillButton>
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
-
-        {canRequestOwnerChange && vehicle.owner && (
-          <Card
-            className={`animate-fade-in-up ${mobileTab === 'identity' ? '' : 'hidden sm:!block'}`}
-            style={{ animationDelay: '160ms' }}
-          >
-            <CardHeader title="تصحيح هوية المالك — يتطلب اعتمادًا" />
-            <div className="p-4">
-              {requestingOwnerIdentityChange ? (
-                <OwnerIdentityChangeRequestForm
-                  ownerId={vehicle.owner.id}
-                  currentIdentityType={vehicle.owner.identityType}
-                  onDone={() => setRequestingOwnerIdentityChange(false)}
-                />
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {/* Round 20: correcting a typo'd owner NAME is a direct
-                      OwnerEditForm edit above (no approval) — only the
-                      identity number/type itself (the field fill-up quotas
-                      key on) goes through this approval-gated request,
-                      requestable by any station employee
-                      (owners:request_change), approved only by
-                      supervisor/directorate-admin/system-admin
-                      (owners:approve_change). */}
-                  <PillButton variant="secondary" onClick={() => setRequestingOwnerIdentityChange(true)}>
-                    طلب تصحيح رقم الهوية
-                  </PillButton>
-                </div>
-              )}
             </div>
           </Card>
         )}

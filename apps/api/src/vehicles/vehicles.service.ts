@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, VehicleChangeType, VehicleUsageType } from '@prisma/client';
-import { normalizePlate, plateSearchTerm } from '@fuel-tracking/shared-types';
+import { checkBooklet, checkChassis, normalizeBooklet, normalizeChassis, normalizePlate, plateSearchTerm } from '@fuel-tracking/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+import { UpdateVehicleIdentityDto } from './dto/update-vehicle-identity.dto';
 import { FindVehiclesQueryDto, OwnerIdentityStatusFilter, VehicleSortField } from './dto/find-vehicles-query.dto';
 import { PlateChangeDto } from './dto/plate-change.dto';
 import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
@@ -109,6 +110,77 @@ function buildChangeUpdateData(changeType: VehicleChangeType, value: string): Pr
     case VehicleChangeType.VEHICLE_TYPE_CHANGE:
       return { vehicleType: { connect: { id: value } } };
   }
+}
+
+// Writes one identity change and keeps its history: the plate, chassis and
+// booklet each close their current history row and open a new one, so fill-up
+// history is never orphaned. Shared by an approved change request and by the
+// direct edit (after review, 18 Oct 2026). Uniqueness is checked by the caller.
+async function applyIdentityChange(tx: Prisma.TransactionClient, vehicleId: string, changeType: VehicleChangeType, value: string) {
+  if (changeType === VehicleChangeType.CHASSIS_CHANGE) {
+    const currentHistoryRow = await tx.vehicleChassisHistory.findFirst({
+      where: { vehicleId: vehicleId, validTo: null },
+      orderBy: { validFrom: 'desc' },
+    });
+    if (currentHistoryRow) {
+      await tx.vehicleChassisHistory.update({
+        where: { id: currentHistoryRow.id },
+        data: { validTo: new Date() },
+      });
+    }
+    await tx.vehicleChassisHistory.create({
+      data: { vehicleId: vehicleId, chassisNumber: value },
+    });
+    // The tick that lets a chassis number be non-standard follows the
+    // value now on the vehicle (not 17 characters, or holding I/O/Q).
+    await tx.vehicle.update({
+      where: { id: vehicleId },
+      data: {
+        chassisNonStandard:
+          value.length !== 17 || /[IOQ]/.test(value),
+      },
+    });
+  } else if (changeType === VehicleChangeType.BOOKLET_CHANGE) {
+    const currentHistoryRow = await tx.vehicleBookletHistory.findFirst({
+      where: { vehicleId: vehicleId, validTo: null },
+      orderBy: { validFrom: 'desc' },
+    });
+    if (currentHistoryRow) {
+      await tx.vehicleBookletHistory.update({
+        where: { id: currentHistoryRow.id },
+        data: { validTo: new Date() },
+      });
+    }
+    await tx.vehicleBookletHistory.create({
+      data: { vehicleId: vehicleId, registrationBooklet: value },
+    });
+  } else if (changeType === VehicleChangeType.PLATE_CHANGE) {
+    // Same close-old/open-new pattern as changePlate() below — a
+    // change-request-approved plate change must leave the same
+    // unbroken VehiclePlateHistory trail a direct change would.
+    const currentHistoryRow = await tx.vehiclePlateHistory.findFirst({
+      where: { vehicleId: vehicleId, validTo: null },
+      orderBy: { validFrom: 'desc' },
+    });
+    if (currentHistoryRow) {
+      await tx.vehiclePlateHistory.update({
+        where: { id: currentHistoryRow.id },
+        data: { validTo: new Date() },
+      });
+    }
+    await tx.vehiclePlateHistory.create({
+      data: { vehicleId: vehicleId, plate: value },
+    });
+  }
+  // OWNER_CHANGE/USAGE_TYPE_CHANGE/VEHICLE_TYPE_CHANGE: no dedicated
+  // history table (see CHANGE_TYPE_FIELD's own comment) — the field
+  // update below plus this request row's own audit trail is the
+  // complete record.
+
+  await tx.vehicle.update({
+    where: { id: vehicleId },
+    data: buildChangeUpdateData(changeType, value),
+  });
 }
 
 @Injectable()
@@ -523,6 +595,75 @@ export class VehiclesService {
     });
   }
 
+  // After review (18 Oct 2026): «تعديل» changes the identity fields directly
+  // for whoever may approve such changes — no request. Each field sent and
+  // different is checked with the registration's rules, must not belong to
+  // another vehicle, and is written with its history (applyIdentityChange),
+  // all in one transaction with one audit entry naming every change.
+  async updateIdentity(id: string, dto: UpdateVehicleIdentityDto, actorId: string) {
+    const before = await this.findOne(id);
+    const changes: Array<{ type: VehicleChangeType; field: string; from: string | null; to: string }> = [];
+
+    if (dto.currentPlate !== undefined && dto.currentPlate.trim() !== before.currentPlate) {
+      const plate = dto.currentPlate.trim();
+      if (!normalizePlate(plate)) throw new BadRequestException('PLATE_INVALID');
+      if (normalizePlate(plate) !== normalizePlate(before.currentPlate)) {
+        changes.push({ type: VehicleChangeType.PLATE_CHANGE, field: 'currentPlate', from: before.currentPlate, to: plate });
+      }
+    }
+    if (dto.chassisNumber !== undefined) {
+      const chassis = normalizeChassis(dto.chassisNumber);
+      if (chassis !== (before.chassisNumber ?? '')) {
+        const check = checkChassis(chassis, dto.chassisNonStandard === true);
+        if (!check.ok) throw new BadRequestException({ message: 'CHASSIS_INVALID', details: { code: check.code } });
+        changes.push({ type: VehicleChangeType.CHASSIS_CHANGE, field: 'chassisNumber', from: before.chassisNumber, to: chassis });
+      }
+    }
+    if (dto.registrationBooklet !== undefined) {
+      const booklet = normalizeBooklet(dto.registrationBooklet);
+      if (booklet !== (before.registrationBooklet ?? '')) {
+        const check = checkBooklet(booklet);
+        if (!check.ok) throw new BadRequestException({ message: 'BOOKLET_INVALID', details: { code: check.code } });
+        changes.push({ type: VehicleChangeType.BOOKLET_CHANGE, field: 'registrationBooklet', from: before.registrationBooklet, to: booklet });
+      }
+    }
+    if (dto.ownerId !== undefined && dto.ownerId !== (before.ownerId ?? '')) {
+      const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: dto.ownerId } });
+      if (!owner) throw new NotFoundException('Vehicle owner not found.');
+      changes.push({ type: VehicleChangeType.OWNER_CHANGE, field: 'ownerId', from: before.ownerId, to: dto.ownerId });
+    }
+    if (dto.vehicleTypeId !== undefined && dto.vehicleTypeId !== (before.vehicleTypeId ?? '')) {
+      const type = await this.prisma.vehicleType.findUnique({ where: { id: dto.vehicleTypeId } });
+      if (!type) throw new NotFoundException('Vehicle type not found.');
+      changes.push({ type: VehicleChangeType.VEHICLE_TYPE_CHANGE, field: 'vehicleTypeId', from: before.vehicleTypeId, to: dto.vehicleTypeId });
+    }
+    if (changes.length === 0) return before;
+
+    for (const change of changes) {
+      if (!UNIQUE_CHANGE_TYPES.has(change.type)) continue;
+      const existing = await findVehicleByChangeValue(this.prisma, change.type, change.to);
+      if (existing && existing.id !== id) {
+        throw new ConflictException({ message: 'IDENTITY_IN_USE', details: { field: change.field } });
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const change of changes) await applyIdentityChange(tx, id, change.type, change.to);
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'UPDATE_IDENTITY',
+          entityType: 'Vehicle',
+          entityId: id,
+          oldValue: Object.fromEntries(changes.map((c) => [c.field, c.from])),
+          newValue: Object.fromEntries(changes.map((c) => [c.field, c.to])),
+        },
+        tx,
+      );
+    });
+    return this.findOne(id);
+  }
+
   // Dedicated endpoint, not part of general update(): closes the current
   // VehiclePlateHistory row and opens a new one atomically with the
   // Vehicle.currentPlate write, so fill-up history never gets orphaned by a
@@ -781,70 +922,7 @@ export class VehiclesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      if (request.changeType === VehicleChangeType.CHASSIS_CHANGE) {
-        const currentHistoryRow = await tx.vehicleChassisHistory.findFirst({
-          where: { vehicleId: request.vehicleId, validTo: null },
-          orderBy: { validFrom: 'desc' },
-        });
-        if (currentHistoryRow) {
-          await tx.vehicleChassisHistory.update({
-            where: { id: currentHistoryRow.id },
-            data: { validTo: new Date() },
-          });
-        }
-        await tx.vehicleChassisHistory.create({
-          data: { vehicleId: request.vehicleId, chassisNumber: request.requestedValue },
-        });
-        // The tick that lets a chassis number be non-standard follows the
-        // value now on the vehicle (not 17 characters, or holding I/O/Q).
-        await tx.vehicle.update({
-          where: { id: request.vehicleId },
-          data: {
-            chassisNonStandard:
-              request.requestedValue.length !== 17 || /[IOQ]/.test(request.requestedValue),
-          },
-        });
-      } else if (request.changeType === VehicleChangeType.BOOKLET_CHANGE) {
-        const currentHistoryRow = await tx.vehicleBookletHistory.findFirst({
-          where: { vehicleId: request.vehicleId, validTo: null },
-          orderBy: { validFrom: 'desc' },
-        });
-        if (currentHistoryRow) {
-          await tx.vehicleBookletHistory.update({
-            where: { id: currentHistoryRow.id },
-            data: { validTo: new Date() },
-          });
-        }
-        await tx.vehicleBookletHistory.create({
-          data: { vehicleId: request.vehicleId, registrationBooklet: request.requestedValue },
-        });
-      } else if (request.changeType === VehicleChangeType.PLATE_CHANGE) {
-        // Same close-old/open-new pattern as changePlate() below — a
-        // change-request-approved plate change must leave the same
-        // unbroken VehiclePlateHistory trail a direct change would.
-        const currentHistoryRow = await tx.vehiclePlateHistory.findFirst({
-          where: { vehicleId: request.vehicleId, validTo: null },
-          orderBy: { validFrom: 'desc' },
-        });
-        if (currentHistoryRow) {
-          await tx.vehiclePlateHistory.update({
-            where: { id: currentHistoryRow.id },
-            data: { validTo: new Date() },
-          });
-        }
-        await tx.vehiclePlateHistory.create({
-          data: { vehicleId: request.vehicleId, plate: request.requestedValue },
-        });
-      }
-      // OWNER_CHANGE/USAGE_TYPE_CHANGE/VEHICLE_TYPE_CHANGE: no dedicated
-      // history table (see CHANGE_TYPE_FIELD's own comment) — the field
-      // update below plus this request row's own audit trail is the
-      // complete record.
-
-      await tx.vehicle.update({
-        where: { id: request.vehicleId },
-        data: buildChangeUpdateData(request.changeType, request.requestedValue),
-      });
+      await applyIdentityChange(tx, request.vehicleId, request.changeType, request.requestedValue);
 
       const updatedRequest = await tx.vehicleChangeRequest.update({
         where: { id },
