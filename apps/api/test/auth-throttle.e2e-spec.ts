@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Login is limited per USERNAME (and refresh per refresh token), with a looser
 // per-IP ceiling as a backstop. An office behind one gateway shares one IP, so
@@ -40,7 +41,7 @@ describe('Auth throttling is per account, not per address (e2e)', () => {
     const users = await prisma.user.findMany({ where: { username: { startsWith: prefix } }, select: { id: true } });
     const ids = users.map((u) => u.id);
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: ids } }, { entityId: { in: ids } }] } });
+    await deleteAuditRows(prisma, { where: { OR: [{ userId: { in: ids } }, { entityId: { in: ids } }] } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await app.close();
   });

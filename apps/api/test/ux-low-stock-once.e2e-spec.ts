@@ -11,6 +11,7 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { ROLE_PERMISSIONS } from '../prisma/rbac-catalog';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // UX round: ONE event reaches each person ONCE, however many levels they belong
 // to. A person who is scoped to the station AND to its municipality (so they are
@@ -103,7 +104,7 @@ describe('One notification per person per event (e2e)', () => {
     }
     await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.fillUpTransaction.deleteMany({ where: { stationId } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userMunicipalityScope.deleteMany({ where: { userId: { in: userIds } } });

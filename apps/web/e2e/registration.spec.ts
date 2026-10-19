@@ -13,15 +13,18 @@ async function fillVehicleDetails(page: import('@playwright/test').Page) {
   await page.getByTestId('registration-booklet-input').fill(digits(8));
   await page.getByTestId('registration-make').fill('تويوتا');
   await page.getByTestId('registration-model').fill('هايلكس');
-  await page.getByTestId('registration-color').selectOption('ابيض');
-  await page.getByTestId('registration-year').selectOption('2020');
+  // After review (19 Oct 2026): typed fields.
+  await page.getByTestId('registration-color').fill('ابيض');
+  await page.getByTestId('registration-year').fill('2020');
   await page.getByTestId('registration-fuel').selectOption('PETROL');
+  // Required (after review, 19 Oct 2026): the first type in the list.
+  await page.getByTestId('registration-vehicle-type').selectOption({ index: 1 });
 }
 
 // Registration pivot, phase 2 — the registration employee's workspace.
 // One login for the whole flow (POST /auth/login is throttled to 5/min per
 // app instance — see the other specs' notes).
-test('registration employee registers a new owner and vehicle, and a duplicate plate is caught', async ({ page }) => {
+test('registration employee registers a new owner and vehicle, and a plate another vehicle has is flagged', async ({ page }) => {
   await loginAs(page, fixtures.registrarUsername, fixtures.registrarPassword);
 
   // Separation of duties: a registration employee has no fill-up screen.
@@ -91,14 +94,13 @@ test('registration employee registers a new owner and vehicle, and a duplicate p
   await fillDigitBoxes(page, 'registration-plate-input', plateSeq, 2);
   await fillVehicleDetails(page);
 
-  // Flagged before saving, naming the vehicle it already belongs to.
-  const warning = page.getByTestId('registration-duplicate-currentPlate');
-  await expect(warning).toBeVisible();
-  await expect(warning).toContainText('رقم اللوحة مسجّل مسبقًا');
-  await expect(warning).toContainText(`7 - ${plateSeq}`);
-
-  // And saving is refused with a clear message.
+  // After review (19 Oct 2026): a plate repeats once, for a vehicle of a
+  // different type — the notice names the other vehicle, and saving without a
+  // different type is refused with the reason.
+  const notice = page.getByTestId('registration-same-plate');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('مسجّل لمركبة أخرى');
   await page.getByTestId('registration-vehicle-save').click();
-  await expect(page.getByTestId('registration-vehicle-error')).toContainText('مسجّلة مسبقًا');
+  await expect(page.getByTestId('registration-vehicle-error')).toContainText('رقم اللوحة');
   await expect(page.getByTestId('registration-success')).toHaveCount(0);
 });

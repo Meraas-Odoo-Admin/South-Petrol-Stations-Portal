@@ -5,6 +5,7 @@ import { cleanOptions, runRemoval } from '../src/golive/cli';
 import { buildPlan, executePlan, type Roots } from '../src/golive/removal';
 import { goliveRoots, nonSabhaRoots } from '../src/golive/roots';
 import { SABHA, importStations, parseStationRows } from '../src/golive/stations-import';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Phase 5C: the import, the two clean-up commands, the insert-only guard and
 // the NOT NULL migration's null check. Every row these tests make is their
@@ -40,7 +41,7 @@ describe('Phase 5C go-live (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.auditLog.deleteMany({
+    await deleteAuditRows(prisma, {
       where: { action: { in: ['IMPORT_STATIONS', 'TEST_DATA_REMOVAL'] }, createdAt: { gte: startedAt } },
     });
     if (createdSabha) await prisma.municipality.deleteMany({ where: { name: SABHA } });

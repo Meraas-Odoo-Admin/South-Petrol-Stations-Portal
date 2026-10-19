@@ -1,7 +1,7 @@
 import { VEHICLE_FUEL_TYPE_LABELS_AR } from '@fuel-tracking/shared-types';
 import { formatDate, formatDateTime } from '../../lib/dateFormat';
 import { useState, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { FillUpHistoryResponse } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
@@ -99,7 +99,22 @@ export function VehicleDetailPage() {
 
   return (
     <div>
-      <PageHeader title={vehicle.internalCode} subtitle={formatLicensePlate(vehicle.currentPlate)} />
+      <PageHeader
+        title={vehicle.internalCode}
+        subtitle={formatLicensePlate(vehicle.currentPlate)}
+        actions={
+          // Oversight (after review, 19 Oct 2026): everything done to this vehicle.
+          hasPermission('audit:view') ? (
+            <Link
+              className="rounded-full border border-line bg-surface-alt px-3 py-1.5 text-[14px] font-bold text-ink hover:border-primary lg:text-[12px]"
+              data-testid="vehicle-audit-link"
+              to={`/admin/audit-log?${new URLSearchParams({ entityType: 'Vehicle', entityId: vehicle.id, what: vehicle.currentPlate ?? vehicle.internalCode })}`}
+            >
+              سجل التدقيق لهذه المركبة
+            </Link>
+          ) : undefined
+        }
+      />
 
       <div className="mb-4 scrollbar-none flex gap-1.5 overflow-x-auto sm:hidden">
         {MOBILE_TABS.filter((tab) => tab.id !== 'card' || canReadCards).map((tab) => (
@@ -180,6 +195,23 @@ export function VehicleDetailPage() {
               )}
               <Field label="اللون" value={vehicle.color ?? '—'} />
               <Field label="سنة الصنع" value={vehicle.manufactureYear?.toString() ?? '—'} />
+              {/* After review (19 Oct 2026, oversight): who registered it, where, when. */}
+              <Field
+                label="سجّلها"
+                value={
+                  <span data-testid="vehicle-registered-by">
+                    {vehicle.registeredBy ? (
+                      <>
+                        {vehicle.registeredBy.fullName} <LtrText className="text-ink-faint">@{vehicle.registeredBy.username}</LtrText>
+                      </>
+                    ) : (
+                      'غير معروف'
+                    )}
+                    {vehicle.registeredAtRegistrationStation && <span className="block text-ink-soft">{vehicle.registeredAtRegistrationStation.name}</span>}
+                    {vehicle.createdAt && <span className="block text-ink-soft">{formatDateTime(vehicle.createdAt)}</span>}
+                  </span>
+                }
+              />
               <Field
                 label="المالك"
                 value={

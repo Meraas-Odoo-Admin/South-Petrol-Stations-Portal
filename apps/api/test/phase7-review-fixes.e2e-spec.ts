@@ -14,6 +14,7 @@ import {
   UNRESTRICTED_STATION_ACCESS_ROLES,
 } from '../prisma/rbac-catalog';
 import { nationalId, randomBooklet, randomChassis, randomDigits } from './support/registration-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Phase 7 (Mohamed's review, 14 Oct 2026), the API side:
 //  1. the administrative number is 10 digits starting with 5 or 6; a booklet
@@ -118,6 +119,7 @@ describe('Phase 7 review fixes (e2e)', () => {
         color: 'ابيض',
         manufactureYear: 2020,
         fuelType: 'PETROL',
+        vehicleTypeId: process.env.E2E_VEHICLE_TYPE_ID,
         ...body,
       });
     if (res.status === 201) vehicleIds.push(res.body.id);
@@ -181,7 +183,7 @@ describe('Phase 7 review fixes (e2e)', () => {
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.vehicleOwner.deleteMany({ where: { id: { in: ownerIds } } });
     await prisma.duplicateCatch.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userMunicipalityScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
@@ -247,14 +249,16 @@ describe('Phase 7 review fixes (e2e)', () => {
       expect(audit[0]!.newValue).toMatchObject({ currentPlate: newPlate, registrationBooklet: newBooklet });
     });
 
-    it('refuses the registration employee, a plate another vehicle has, and an invalid booklet', async () => {
+    it('refuses the registration employee, an invalid booklet, and a plate shared with a vehicle of the same type', async () => {
       const owner = await registerOwner({ identityType: 'NATIONAL_ID', identityNumber: nationalId() });
       const first = (await registerVehicle(owner.body.id)).body;
       const second = (await registerVehicle(owner.body.id)).body;
       const path = `/api/v1/vehicles/${second.id}/identity`;
       expect((await api().patch(path).set(auth('registrar')).send({ registrationBooklet: randomBooklet() })).status).toBe(403);
       const taken = await api().patch(path).set(auth('managerA')).send({ currentPlate: first.currentPlate });
+      // After review (19 Oct 2026): a plate repeats once, between vehicles of different types.
       expect(taken.status).toBe(409);
+      expect(taken.body.message).toBe('PLATE_SHARED_SAME_TYPE'); // both of the test type
       expect((await api().patch(path).set(auth('managerA')).send({ registrationBooklet: 'AB12' })).status).toBe(400);
     });
 
@@ -286,31 +290,19 @@ describe('Phase 7 review fixes (e2e)', () => {
       vehicleId = (await registerVehicle(ownerId)).body.id;
     });
 
-    it('a vehicle change request needs only the value and a reason', async () => {
-      const res = await api()
+    // After review (19 Oct 2026): no job sends change requests any more —
+    // «تعديل» changes the fields directly (office manager and above).
+    it('the registration employee can no longer send a vehicle or owner change request', async () => {
+      const vehicleRequest = await api()
         .post(`/api/v1/vehicles/${vehicleId}/change-requests`)
         .set(auth('registrar'))
         .send({ changeType: 'BOOKLET_CHANGE', requestedValue: randomBooklet(), reason: 'خطأ في الإدخال' });
-      expect(res.status).toBe(201);
-      const stored = await prisma.vehicleChangeRequest.findFirstOrThrow({ where: { vehicleId } });
-      expect(stored.proofReference).toBeNull();
-    });
-
-    it('refuses a proofReference sent anyway (no such field)', async () => {
-      const res = await api()
-        .post(`/api/v1/vehicles/${vehicleId}/change-requests`)
-        .set(auth('registrar'))
-        .send({ changeType: 'BOOKLET_CHANGE', requestedValue: randomBooklet(), reason: 'x', proofReference: 'REF-1' });
-      expect(res.status).toBe(400);
-    });
-
-    it('an owner identity correction needs no proof reference', async () => {
-      const res = await api()
+      expect(vehicleRequest.status).toBe(403);
+      const ownerRequest = await api()
         .post(`/api/v1/owners/${ownerId}/change-requests`)
         .set(auth('registrar'))
         .send({ identityType: 'ADMINISTRATIVE_ID', identityNumber: `5${randomDigits(9)}`, reason: 'تصحيح' });
-      expect(res.status).toBe(201);
-      expect(res.body.proofReference).toBeNull();
+      expect(ownerRequest.status).toBe(403);
     });
 
     it('an exception type has no «يتطلب مرجع إثبات» switch', async () => {

@@ -12,6 +12,7 @@ import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { AuditedExport } from '../audit/audited-export';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -28,6 +29,7 @@ export class ReportsController {
   }
 
   @RequirePermission('reports:view')
+  @AuditedExport('daily')
   @Get('daily/export')
   async exportDailyReport(
     @Query() query: DailyReportExportQueryDto,
@@ -66,6 +68,7 @@ export class ReportsController {
   }
 
   @RequirePermission('reports:view')
+  @AuditedExport('violations')
   @Get('violations/export')
   async exportViolations(
     @Query() query: ViolationsExportQueryDto,

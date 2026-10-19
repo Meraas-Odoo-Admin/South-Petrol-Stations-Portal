@@ -157,16 +157,10 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    const pair = await this.issueTokenPair(existing.user.id, existing.user.username);
-
-    await this.audit.log({
-      userId: existing.user.id,
-      action: 'ROTATE',
-      entityType: 'RefreshToken',
-      entityId: existing.id,
-    });
-
-    return pair;
+    // Not audited (after review, 19 Oct 2026): every signed-in session renews
+    // every 15 minutes, which buried the audit log in noise. Sign-in, sign-out,
+    // failed attempts and lock-outs are what oversight reads.
+    return this.issueTokenPair(existing.user.id, existing.user.username);
   }
 
   async logout(rawRefreshToken: string, userId: string | null): Promise<void> {

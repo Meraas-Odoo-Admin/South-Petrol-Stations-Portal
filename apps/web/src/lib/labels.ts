@@ -203,6 +203,8 @@ export interface SettingLabel {
   unit?: CountUnitKey;
   /** What the number is counted against, after the unit: «في الأسبوع», «للتر». */
   per?: string;
+  /** How 0 reads when 0 means "no limit": «بلا حد». */
+  zeroText?: string;
 }
 
 export const SYSTEM_SETTING_LABELS: Record<string, SettingLabel> = {
@@ -241,6 +243,13 @@ export const SYSTEM_SETTING_LABELS: Record<string, SettingLabel> = {
     description:
       'عندما ينزل أي نوع وقود في محطة تحت هذا العدد من اللترات يُنبَّه مشرف المحطة ومدير البلدية، مرة عند الانخفاض ومرة أخرى بعد إعادة التعبئة وانخفاضه من جديد.',
     unit: 'liter',
+  },
+  // After review (19 Oct 2026): «ضوابط المالك».
+  'registration.max_vehicles_per_owner': {
+    label: 'أقصى عدد مركبات للمالك الواحد',
+    description: 'أقصى عدد مركبات يمكن تسجيلها باسم مالك واحد (برقم هويته). 0 تعني بلا حد. لا يمسّ المركبات المسجّلة سابقًا.',
+    unit: 'vehicle',
+    zeroText: 'بلا حد',
   },
   'fillup.max_liters_per_week_per_owner': {
     label: 'الحد الأسبوعي للترات مالك المركبة',
@@ -281,8 +290,9 @@ export function systemSettingLabel(key: string): SettingLabel {
 // A setting's value as a person reads it: «3 تعبئات في الأسبوع», «يومان»,
 // «1000 لتر», «0.15 دينار للتر». A value with no unit is shown as it is.
 export function settingValueText(key: string, value: string | number): string {
-  const { unit, per } = systemSettingLabel(key);
+  const { unit, per, zeroText } = systemSettingLabel(key);
   const n = Number(value);
+  if (zeroText && n === 0) return zeroText;
   if (!unit || !Number.isFinite(n)) return String(value);
   return [arabicCount(n, unit), per].filter(Boolean).join(' ');
 }

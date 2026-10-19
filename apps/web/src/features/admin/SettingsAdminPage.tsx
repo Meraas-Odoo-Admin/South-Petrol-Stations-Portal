@@ -29,6 +29,7 @@ const STEPPER_KEYS: Record<string, { step: number; decimals: number }> = {
   'fillup.max_per_week_per_owner': { step: 1, decimals: 0 },
   'fillup.min_gap_days_per_owner': { step: 1, decimals: 0 },
   'fillup.max_liters_per_week_per_owner': { step: 10, decimals: 0 },
+  'registration.max_vehicles_per_owner': { step: 1, decimals: 0 },
   'stock.low_threshold_liters': { step: 100, decimals: 0 },
   'fillup.price_per_liter.PETROL_95': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.DIESEL': { step: 0.01, decimals: 2 },
@@ -40,6 +41,15 @@ const STEPPER_KEYS: Record<string, { step: number; decimals: number }> = {
 // other setting shows a plain save button with no banner, rather than a
 // generic warning pretending to be a computed one.
 const IMPACT_KEYS = new Set(['fillup.max_per_week', 'fillup.max_per_week_per_owner']);
+
+// After review (19 Oct 2026): «ضوابط المالك» — what one owner may have and
+// fill up across all their vehicles, together in one section.
+const OWNER_KEYS = [
+  'registration.max_vehicles_per_owner',
+  'fillup.max_per_week_per_owner',
+  'fillup.min_gap_days_per_owner',
+  'fillup.max_liters_per_week_per_owner',
+];
 
 // «الإعدادات وقواعد التعبئة». Phase 7 (section 6), clear and simple:
 //  - no «+ إضافة قاعدة رقمية جديدة»: adding raw numeric rules was too
@@ -92,7 +102,8 @@ export function SettingsAdminPage() {
 
   const numericSettings = data?.filter((s) => STEPPER_KEYS[s.key]) ?? [];
   const priceSettings = numericSettings.filter((s) => s.key.startsWith('fillup.price_per_liter.'));
-  const otherNumericSettings = numericSettings.filter((s) => !s.key.startsWith('fillup.price_per_liter.'));
+  const ownerSettings = OWNER_KEYS.map((key) => numericSettings.find((s) => s.key === key)).filter((s): s is SystemSettingRow => Boolean(s));
+  const otherNumericSettings = numericSettings.filter((s) => !s.key.startsWith('fillup.price_per_liter.') && !OWNER_KEYS.includes(s.key));
   const isDirty = (key: string) => editing[key] !== undefined && editing[key] !== byKey.get(key)?.value;
 
   return (
@@ -201,6 +212,31 @@ export function SettingsAdminPage() {
               ))}
             </div>
           </section>
+
+          {ownerSettings.length > 0 && (
+            <section aria-labelledby="settings-owner" className="space-y-3" data-testid="settings-owner">
+              <h3 id="settings-owner" className="text-[17px] font-extrabold text-primary-dark lg:text-[14px]">
+                ضوابط المالك
+              </h3>
+              <p className="text-[15px] text-ink-soft lg:text-[13px]">
+                لكل مالك على جميع مركباته معًا. قواعد التعبئة الثلاث تُطبَّق فقط عندما تكون مفعّلة في «قواعد التعبئة» أعلاه.
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {ownerSettings.map((setting) => (
+                  <StepperSettingCard
+                    key={setting.key}
+                    setting={setting}
+                    staged={editing[setting.key]}
+                    onStage={(v) => stage(setting.key, v)}
+                    onSave={(value) => mutation.mutate({ key: setting.key, value })}
+                    pending={mutation.isPending}
+                    saved={savedKey === setting.key}
+                    showImpact={IMPACT_KEYS.has(setting.key)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {priceSettings.length > 0 && (
             <section aria-labelledby="settings-prices" className="space-y-3">

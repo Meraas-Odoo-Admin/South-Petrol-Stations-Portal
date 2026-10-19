@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Round 4 client feedback: new endpoints added to support new frontend
 // behavior (fuel-price-driven cost field, vehicle weekly-usage bar, the
@@ -169,7 +170,7 @@ describe('Round 4 features (e2e)', () => {
     const allUserIds = [fillupCreatorUserId, settingsAdminUserId, noPermUserId];
     await prisma.standingException.deleteMany({ where: { ownerId: { in: [ownerWithExceptionId] } } });
     await prisma.user.deleteMany({ where: { username: `e2e_r4_granter_${runId}` } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });

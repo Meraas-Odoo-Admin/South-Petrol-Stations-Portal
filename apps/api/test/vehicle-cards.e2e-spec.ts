@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 import { CARD_NUMBER_REGEX } from '../src/cards/card-number';
 import { isExactCardSize, pdfPageSizesMm } from '../src/cards/render/pdf-page-size';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Registration pivot, phase 3 — the printed vehicle card, end to end:
 // issuing (one active card per vehicle, enforced by the database), card
@@ -111,7 +112,7 @@ describe('Vehicle cards (e2e)', () => {
     await prisma.cardPrint.deleteMany({ where: { registrationStationId: { in: [stationId, otherStationId] } } });
     await prisma.vehicleCard.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: ids } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: ids } } });

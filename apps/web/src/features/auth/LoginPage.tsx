@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { isAxiosError } from 'axios';
 import { APP_NAME, APP_TAGLINE } from '../../lib/appInfo';
@@ -107,12 +107,23 @@ export function LoginPage() {
       <p className="mt-4 text-[13px] lg:text-[12px] leading-[1.7] text-ink-soft lg:mt-auto lg:pt-6">
         إن نسيت كلمة المرور، راجع مشرف محطتك — لا يمكن استرجاعها من هذه الشاشة.
       </p>
+      {/* The citizen's own check, without an account (after review, 19 Oct 2026). */}
+      <Link
+        to="/check"
+        data-testid="login-citizen-check"
+        className="mt-3 inline-flex min-h-[44px] items-center text-[15px] font-bold text-primary underline lg:text-[13px]"
+      >
+        مواطن؟ تحقّق من بطاقة مركبتك
+      </Link>
     </form>
   );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper p-0 lg:p-8">
-      <div className="flex w-full max-w-[1140px] flex-col overflow-hidden bg-surface shadow-lg lg:h-[640px] lg:flex-row lg:rounded-lg">
+    // On a phone the sign-in fills the screen, edge to edge, with nothing to
+    // scroll (after review, 19 Oct 2026): the green header on top and the form
+    // down to the bottom. The desktop keeps its centred two-panel card.
+    <div className="flex min-h-[100dvh] justify-center bg-paper p-0 lg:min-h-screen lg:items-center lg:p-8">
+      <div className="flex min-h-[100dvh] w-full max-w-[1140px] flex-col overflow-hidden bg-surface shadow-lg lg:h-[640px] lg:min-h-0 lg:flex-row lg:rounded-lg">
         {/* Mobile: brand header */}
         <div className="flex flex-col items-center gap-2 bg-primary py-5 text-white lg:hidden">
           <BrandMark variant="white" size={44} />

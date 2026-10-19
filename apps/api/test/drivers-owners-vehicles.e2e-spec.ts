@@ -8,6 +8,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { nationalIdTail, randomDigits, vehicleBody } from './support/registration-fixtures';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // M2 (docs/IMPLEMENTATION_PLAN.md §11): Owners, Vehicles CRUD and plate
 // history tracking. The one explicit acceptance bar the plan states is that
@@ -194,7 +195,7 @@ describe('Owners/Vehicles (e2e)', () => {
     }
 
     const allUserIds = [managerUserId, noPermUserId];
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
@@ -635,7 +636,9 @@ describe('Owners/Vehicles (e2e)', () => {
     expect(vehicle.currentPlate).toBe(newPlate);
   });
 
-  it('rejects a plate-change to the vehicle\'s own current plate, and to a plate already used by another vehicle', async () => {
+  // After review (19 Oct 2026): a plate is shared only by two vehicles of
+  // different types — these two are of the same type, so the change is refused.
+  it('rejects a plate-change to the vehicle\'s own current plate, and to a plate another vehicle of the same type has', async () => {
     const accessToken = await loginAsManager();
     const server = app.getHttpServer();
 

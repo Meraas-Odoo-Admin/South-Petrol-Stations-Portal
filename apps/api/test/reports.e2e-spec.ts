@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // M4 (docs/IMPLEMENTATION_PLAN.md §11): reporting API + export. All fixture
 // fill-ups below are inserted directly via Prisma (not through POST
@@ -296,7 +297,7 @@ describe('Reports (e2e)', () => {
     await prisma.fillUpTransaction.deleteMany({ where: { id: { in: fillUpIds } } });
 
     const allUserIds = [scopedUserId, allStationsUserId, noPermUserId];
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });

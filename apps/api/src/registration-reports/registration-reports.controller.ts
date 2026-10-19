@@ -11,6 +11,7 @@ import { DateRangeQueryDto } from '../common/dto/date-range-query.dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { AuditedExport } from '../audit/audited-export';
 
 // Phase 4c: registration-office monitoring. Registration employees hold no
 // permission here; a registration supervisor sees only their own offices
@@ -31,6 +32,7 @@ export class RegistrationReportsController {
 
   // Declared before the ':officeId' routes.
   @RequirePermission('registration_reports:view')
+  @AuditedExport('registration-offices')
   @Get('offices/export')
   async exportOffices(
     @Query() query: OfficesExportQueryDto,

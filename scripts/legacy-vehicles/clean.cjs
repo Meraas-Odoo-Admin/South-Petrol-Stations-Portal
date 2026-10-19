@@ -14,8 +14,9 @@
 //    Libyan plates carry no letter). No valid plate -> not imported.
 //  - owner: a valid national number (12 digits) or administrative number
 //    (10 digits, 5/6) and a name. Otherwise the vehicle is NOT imported.
-//  - a plate, or a chassis number, found on more than one row: EVERY one of
-//    those rows is dropped (none is imported).
+//  - a chassis number, or a plate, found on more than one row: EVERY one of
+//    those rows is dropped. (A plate may repeat once in the system, between
+//    vehicles of different types — the export has no vehicle type to show it.)
 //  - chassis: 17 standard characters, or 6-20 marked non-standard; anything
 //    else is left empty (the vehicle is still imported, with a warning).
 //  - manufacture year 1950..next year, else empty; fuel بنزين/ديزل; colour
@@ -190,7 +191,7 @@ const REASONS = {
   OWNER_ID_MISSING: 'رقم هوية المالك فارغ',
   OWNER_ID_INVALID: 'رقم هوية المالك لا يطابق الرقم الوطني ولا الإداري',
   OWNER_NAME_MISSING: 'اسم المالك فارغ أو غير صالح',
-  DUPLICATE_PLATE: 'اللوحة مكررة في الملف (حُذفت كل نسخها)',
+  DUPLICATE_PLATE: 'اللوحة مكررة، والملف لا يحمل نوع المركبة الذي يسمح بتكرارها',
   DUPLICATE_CHASSIS: 'رقم الهيكل مكرر في الملف (حُذفت كل نسخه)',
 };
 const WARNINGS = {
@@ -278,6 +279,10 @@ function writeCsv(file, header, rows) {
   const plateCount = countBy('plate');
   const chassisCount = countBy('chassis');
   for (const r of records) {
+    // After review (19 Oct 2026): a plate repeats once, between vehicles of
+    // DIFFERENT vehicle types. The old system's export has no vehicle type
+    // (only make and model), so no repeated plate in it can meet the rule:
+    // every row of a repeated plate is dropped, to be registered at an office.
     if (r.plate && plateCount.get(r.plate) > 1) r.reasons.push('DUPLICATE_PLATE');
     if (r.chassis && chassisCount.get(r.chassis) > 1) r.reasons.push('DUPLICATE_CHASSIS');
   }

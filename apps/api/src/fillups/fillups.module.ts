@@ -1,3 +1,4 @@
+import { CitizenStatusController } from './citizen-status.controller';
 import { Module } from '@nestjs/common';
 import { FillUpsController } from './fillups.controller';
 import { FillUpsService } from './fillups.service';
@@ -10,7 +11,7 @@ import { FuelStockModule } from '../fuel-stock/fuel-stock.module';
 
 @Module({
   imports: [SystemSettingsModule, RegistrationStationsModule, FuelStockModule],
-  controllers: [FillUpsController, ExceptionsController],
+  controllers: [FillUpsController, ExceptionsController, CitizenStatusController],
   providers: [FillUpsService, FillUpsRepository, ExceptionsService],
   exports: [FillUpsService, ExceptionsService],
 })

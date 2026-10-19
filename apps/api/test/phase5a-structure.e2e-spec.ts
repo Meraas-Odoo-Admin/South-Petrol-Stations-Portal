@@ -17,6 +17,7 @@ import {
 } from '../prisma/rbac-catalog';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 import { nationalId, randomChassis, randomDigits, vehicleBody } from './support/registration-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Phase 5A — municipalities are the core, each level owns the level below it,
 // rules can be switched, owners and vehicles follow the final field rules.
@@ -205,7 +206,7 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.vehicleOwner.deleteMany({ where: { id: { in: ownerIds } } });
     await prisma.duplicateCatch.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.auditLog.deleteMany({
+    await deleteAuditRows(prisma, {
       where: {
         OR: [
           { userId: { in: ids } },
@@ -859,7 +860,10 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
       post('regEmp', '/vehicles', vehicleBody({ registrationStationId: office.r1a, ownerId, ...over }));
 
     // Phase 7: a plate is digits only - the trailing N of Phase 5A is gone.
-    it('refuses a plate typed with an N, and still catches the same plate typed differently', async () => {
+    // After review (19 Oct 2026): a plate may be shared only by two vehicles
+    // of different types — the same plate typed differently is still found to
+    // be the same plate (refused here: both are of the same type).
+    it('refuses a plate typed with an N, and finds the same plate typed differently', async () => {
       const serial = randomDigits(6).replace(/^0/, '1');
       const plain = await register({ currentPlate: `5-${serial}` });
       expect(plain.status).toBe(201);
@@ -872,8 +876,7 @@ describe('Phase 5A — structure, rules, owners and vehicles (e2e)', () => {
 
       const again = await register({ currentPlate: `5 ${serial}` });
       expect(again.status).toBe(409);
-      expect(again.body.message).toBe('VEHICLE_DUPLICATE');
-      expect(again.body.details.conflicts[0].vehicle.id).toBe(plain.body.id);
+      expect(again.body.message).toBe('PLATE_SHARED_SAME_TYPE'); // both of the test type
     });
 
     it('accepts a non-standard chassis only with the tick, and records the tick', async () => {

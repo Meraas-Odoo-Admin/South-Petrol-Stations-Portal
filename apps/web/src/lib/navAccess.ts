@@ -45,6 +45,9 @@ export const NAV_ACCESS = {
   //    and «القوائم» (Phase 7: a tab here, not its own menu item), which a
   //    municipality manager opens too.
   manage: (has: HasPermission) => has('stations:create') || has('registration_stations:manage'),
+  // After review (19 Oct 2026): «مراقبة المحطات» — the stations' fuel, for
+  // whoever records the deliveries or resets a level (municipality managers).
+  monitoring: (has: HasPermission) => has('fuel_stock:deliver') || has('fuel_stock:reset'),
   myStation: (has: HasPermission) =>
     has('users:manage_staff') && has('stations:manage') && !has('stations:create'),
   myOffice: (has: HasPermission) =>
@@ -72,6 +75,7 @@ const DESTINATION_PATHS: Partial<Record<NavKey, string>> = {
   reports: '/reports',
   dailyReport: '/reports/daily',
   manage: '/manage',
+  monitoring: '/monitoring',
   myStation: '/my-station',
   myOffice: '/my-office',
   stations: '/stations',
@@ -102,6 +106,7 @@ export const NAV_PATHS = [
   '/reports',
   '/reports/daily',
   '/manage',
+  '/monitoring',
   '/my-station',
   '/my-office',
   '/stations',

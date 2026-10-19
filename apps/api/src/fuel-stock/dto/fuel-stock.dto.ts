@@ -135,3 +135,13 @@ export class StockEntriesQueryDto {
   @Max(100)
   take?: number;
 }
+
+// «مراقبة المحطات» (after review, 19 Oct 2026): the stations of one
+// municipality (the super admin picks it; a manager's scope is theirs anyway).
+export class StockOverviewQueryDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  municipalityId?: string;
+}

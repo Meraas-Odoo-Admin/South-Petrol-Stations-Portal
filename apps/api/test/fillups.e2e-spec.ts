@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // M3 (docs/IMPLEMENTATION_PLAN.md §11): fill-up transactions + rule engine.
 // The rule engine itself is unit-tested independently (rule-engine/*.spec.ts)
@@ -253,7 +254,7 @@ describe('Fill-ups (e2e)', () => {
     // user rows are deleted, not after.
     await prisma.exception.deleteMany({ where: { fillUpTransaction: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } } });
     await prisma.fillUpTransaction.deleteMany({ where: { vehicleId: { in: [vehicle1Id, vehicle2Id, vehicle3Id, vehicle4Id] } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });

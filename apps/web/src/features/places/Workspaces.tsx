@@ -118,7 +118,8 @@ export function StationWorkspace({
 
       {canFuel && (
         <TabPanel tab="fuel" value={tab}>
-          <FuelStockPanel stationId={stationId} stationName={stationName} />
+          {/* Read-only here (after review, 19 Oct 2026): the work is in «مراقبة المحطات». */}
+          <FuelStockPanel stationId={stationId} stationName={stationName} readOnly />
         </TabPanel>
       )}
 

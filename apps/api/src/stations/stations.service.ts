@@ -105,7 +105,18 @@ export class StationsService {
       throw new ConflictException('This company already has a station with that stationNumber.');
     }
 
-    const { fuelTypes, ...rest } = dto;
+    const { fuelTypes, tanks, ...rest } = dto;
+    // After review (19 Oct 2026): every fuel the station sells has its tank
+    // capacity, and no tank is given for a fuel it does not sell.
+    const sold = new Set(fuelTypes ?? []);
+    const tankOf = new Map((tanks ?? []).map((t) => [t.fuelType, t]));
+    if (tankOf.size !== (tanks ?? []).length) throw new BadRequestException('TANK_REPEATED');
+    for (const fuelType of sold) {
+      if (!tankOf.has(fuelType)) throw new BadRequestException('TANK_CAPACITY_REQUIRED');
+    }
+    for (const fuelType of tankOf.keys()) {
+      if (!sold.has(fuelType)) throw new BadRequestException('TANK_FOR_UNSOLD_FUEL');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const station = await tx.station.create({
@@ -130,6 +141,37 @@ export class StationsService {
         },
         tx,
       );
+
+      // The tanks, empty from this moment (the same rows and audit entry as
+      // «ضبط الخزان» in «مراقبة المحطات»).
+      for (const tank of tankOf.values()) {
+        const storage = await tx.stationFuelStorage.create({
+          data: {
+            stationId: station.id,
+            fuelType: tank.fuelType,
+            capacityLiters: tank.capacityLiters,
+            openingLevelLiters: 0,
+            openedAt: station.createdAt,
+            createdById: actorId,
+          },
+        });
+        await this.audit.log(
+          {
+            userId: actorId,
+            action: 'FUEL_STORAGE_SETUP',
+            entityType: 'StationFuelStorage',
+            entityId: storage.id,
+            newValue: {
+              stationId: station.id,
+              fuelType: tank.fuelType,
+              capacityLiters: tank.capacityLiters,
+              openingLevelLiters: 0,
+              openedAt: station.createdAt.toISOString(),
+            },
+          },
+          tx,
+        );
+      }
 
       return station;
     });

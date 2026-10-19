@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Registration pivot, phase 1 — the municipality foundation, end to end
 // through the real Prisma-backed repository (the rule engine's own
@@ -157,7 +158,7 @@ describe('Municipality foundation (e2e)', () => {
     const userIds = [recorderUserId, adminUserId];
     await prisma.exception.deleteMany({ where: { fillUpTransaction: { vehicleId: { in: vehicleIds } } } });
     await prisma.fillUpTransaction.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
@@ -354,7 +355,8 @@ describe('Municipality foundation (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/municipalities')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name })
+        // The card code is required (after review, 19 Oct 2026); unique, so random.
+        .send({ name, code: Array.from({ length: 5 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('') })
         .expect(201);
       createdMunicipalityIds.push(res.body.id);
       expect(res.body.status).toBe('PREPARING');

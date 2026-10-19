@@ -1,4 +1,6 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
+import { AuditedExport } from './audited-export';
 import { ApiTags } from '@nestjs/swagger';
 import { AuditQueryDto } from './audit-query.dto';
 import { AuditReadService } from './audit-read.service';
@@ -18,5 +20,27 @@ export class AuditController {
   @Get()
   findAll(@Query() query: AuditQueryDto) {
     return this.audit.list(query);
+  }
+
+  // After review (19 Oct 2026): the counts behind the same filters.
+  @RequirePermission('audit:view')
+  @Get('summary')
+  summary(@Query() query: AuditQueryDto) {
+    return this.audit.summary(query);
+  }
+
+  // After review (19 Oct 2026): the same entries as a file — and that export
+  // is itself in the audit log.
+  @RequirePermission('audit:view')
+  @AuditedExport('audit-log')
+  @Get('export')
+  async export(@Query() query: AuditQueryDto, @Res({ passthrough: true }) res: Response) {
+    const { csv, truncated } = await this.audit.exportCsv(query);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="audit-log-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'X-Truncated': truncated ? 'true' : 'false',
+    });
+    return new StreamableFile(Buffer.from(csv, 'utf-8'));
   }
 }

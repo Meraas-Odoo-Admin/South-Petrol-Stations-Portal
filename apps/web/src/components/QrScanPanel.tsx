@@ -30,12 +30,19 @@ export interface ScannedCard {
   };
 }
 
-interface QrScanPanelProps {
+type OutcomeStage = 'not-a-card' | 'revoked' | 'error';
+
+interface QrScanPanelProps<T> {
   // 'inline': the scan-first plate step's embedded viewfinder. 'phone' /
   // 'desktop': the full-screen / in-panel overlays.
   variant: 'inline' | 'phone' | 'desktop';
   autoStart?: boolean;
-  onResolved: (card: ScannedCard) => void;
+  // Where a read code is looked up (after review, 19 Oct 2026: the citizen's
+  // check uses the public endpoint). Default: the pump's GET /cards/scan.
+  lookUpPath?: (code: string) => string;
+  // The outcome texts, when the reader is not the pump employee.
+  outcomeMessages?: Partial<Record<OutcomeStage, { title: string; body: string }>>;
+  onResolved: (card: T) => void;
   onCancel: () => void;
   onCameraUnavailable: () => void;
 }
@@ -62,7 +69,15 @@ const OUTCOME_MESSAGES: Record<'not-a-card' | 'revoked' | 'error', { title: stri
 // One scanner for every home — the same state machine; only the wrapping
 // chrome differs by `variant`. Decoding is continuous: most video frames
 // simply find nothing, which isn't an error.
-export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, onCameraUnavailable }: QrScanPanelProps) {
+export function QrScanPanel<T = ScannedCard>({
+  variant,
+  autoStart = false,
+  lookUpPath = (code) => `/cards/scan/${encodeURIComponent(code)}`,
+  outcomeMessages,
+  onResolved,
+  onCancel,
+  onCameraUnavailable,
+}: QrScanPanelProps<T>) {
   const [stage, setStage] = useState<Stage>(autoStart ? 'scanning' : 'pre-permission');
   const [decodedCode, setDecodedCode] = useState<string | null>(null);
   const [torchAvailable, setTorchAvailable] = useState(false);
@@ -71,17 +86,17 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
   // The scan in progress. Everything about the camera (opening it, the decode
   // loop, releasing every track, "done after the first card") lives in
   // ScanSession; this panel only shows its state.
-  const sessionRef = useRef<ScanSession<ScannedCard> | null>(null);
+  const sessionRef = useRef<ScanSession<T> | null>(null);
   // The latest session's "fully released" promise: a new session (React
   // StrictMode mounts twice in dev, or the screen reopens) waits for it.
   const latestClosedRef = useRef<Promise<void> | undefined>(undefined);
 
   async function openCamera() {
-    const session = new ScanSession<ScannedCard>(
+    const session = new ScanSession<T>(
       {
         getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
         createReader: () => new BrowserQRCodeReader(),
-        lookUp: async (text) => (await apiClient.get<ScannedCard>(`/cards/scan/${encodeURIComponent(text)}`)).data,
+        lookUp: async (text) => (await apiClient.get<T>(lookUpPath(text))).data,
       },
       {
         // Exactly once per scan; the session has already released the camera.
@@ -147,10 +162,14 @@ export function QrScanPanel({ variant, autoStart = false, onResolved, onCancel, 
       ? 'fixed inset-0 z-50 flex flex-col bg-[#0F1E1C]'
       : variant === 'desktop'
         ? 'absolute inset-0 z-20 flex flex-col overflow-hidden rounded-md bg-[#0F1E1C] shadow-lg'
-        : // After review (18 Oct 2026): 40% of the screen, not 62% — on a phone the
-          // way out under it («البطاقة لا تعمل؟») now shows without scrolling.
-          'relative flex h-[40vh] min-h-[280px] max-h-[440px] flex-col overflow-hidden rounded-md bg-[#0F1E1C]';
-  const outcome = stage === 'not-a-card' || stage === 'revoked' || stage === 'error' ? OUTCOME_MESSAGES[stage] : null;
+        : // After review (19 Oct 2026): as tall as the phone allows — the visible
+          // height (dvh) less what sits above and below it on the fill-up screen
+          // (top bar, title, progress, «البطاقة لا تعمل؟»: ~260px, plus the
+          // bottom bar's share for the roles that have one, --chrome-extra). A
+          // big camera reads the QR easily; nothing has to be scrolled to.
+          'relative flex h-[calc(100dvh-260px-var(--chrome-extra,0px))] min-h-[260px] flex-col overflow-hidden rounded-md bg-[#0F1E1C] lg:h-[62vh] lg:min-h-[360px]';
+  const outcome =
+    stage === 'not-a-card' || stage === 'revoked' || stage === 'error' ? (outcomeMessages?.[stage] ?? OUTCOME_MESSAGES[stage]) : null;
 
   return (
     <div className={overlayClass} data-testid="qr-scan-panel">

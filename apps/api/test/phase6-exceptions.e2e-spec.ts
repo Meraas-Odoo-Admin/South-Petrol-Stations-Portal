@@ -8,6 +8,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { tripoliDay } from '../src/common/utils/grace-stage';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Phase 6: exception types with daily limits per station (no approval step),
 // the strict switch, the unreasonable-station flag, and the «بدون بطاقة» pump
@@ -205,7 +206,7 @@ describe('Phase 6 exceptions and the no-card fallback (e2e)', () => {
     await prisma.vehicleCard.deleteMany({ where: { vehicleId: { in: vIds } } });
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: vIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userMunicipalityScope.deleteMany({ where: { userId: { in: userIds } } });

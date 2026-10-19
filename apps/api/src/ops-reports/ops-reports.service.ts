@@ -856,8 +856,7 @@ export class OpsReportsService {
         dispensed: recon.dispensed,
         resetWrittenOff: recon.resetWrittenOff,
         level: recon.endLevel < 0 ? null : recon.endLevel,
-        unaccounted: recon.unaccounted,
-        status: recon.unaccounted > 0 ? 'وقود غير مبرَّر' : 'سليم',
+        status: STOCK_STATUS_AR[status] ?? '',
       });
       if (status !== 'OK') {
         lowRows.push({
@@ -943,20 +942,18 @@ export class OpsReportsService {
         {
           id: 'fuel-reconciliation',
           title: 'مطابقة الوقود لكل محطة',
-          note: 'أول الفترة + التوريد − المصروف − ما صفّره المشرف = المستوى الآن. «غير المبرَّر» هو ما صُرف أكثر مما وُرّد أو ما أُسقط بالتصفير.',
+          note: 'أول الفترة + التوريد − المصروف − ما صُفِّر = المستوى الآن.',
           columns: [
             col('station', 'المحطة'),
             col('fuel', 'الوقود'),
             col('start', 'أول الفترة', 'liters'),
             col('delivered', 'التوريد', 'liters'),
             col('dispensed', 'المصروف', 'liters'),
-            col('resetWrittenOff', 'أُسقط بالتصفير', 'liters'),
+            col('resetWrittenOff', 'صُفِّر', 'liters'),
             col('level', 'المستوى الآن', 'liters'),
-            col('unaccounted', 'وقود غير مبرَّر', 'liters'),
             col('status', 'الحالة', 'status'),
           ],
           rows: reconRows,
-          flagKey: 'unaccounted',
         },
         {
           id: 'low-stock',
@@ -1021,14 +1018,14 @@ export class OpsReportsService {
 
   // ── the short row at the top of a municipality's page ────────────────
 
-  // Registration: cards issued today, offices working, blank cards that are
-  // unaccounted for. Fuel: stations low on stock, fuel unaccounted for (last 30
-  // days). Counted over what the caller may see inside the municipality.
+  // Registration: cards issued today, offices working. Fuel: stations low on
+  // stock, and the liters dispensed today (after review, 19 Oct 2026: in place
+  // of «وقود غير مبرَّر», which is gone). Counted over what the caller may see
+  // inside the municipality.
   async municipalitySummary(query: OpsReportQueryDto, actorId: string) {
     const { chosen, visible } = await this.chooseMunicipality(actorId, query.municipalityId);
     const today = tripoliDay(new Date());
     const todayRange = resolveReportRange({ from: today, to: today }, 1);
-    const monthRange = resolveReportRange({ from: addDays(today, -29), to: today }, 30);
 
     const stations = await this.stationsInScope(actorId, { municipalityId: chosen.id });
     const offices = await this.officesInScope(actorId, { municipalityId: chosen.id });
@@ -1049,23 +1046,11 @@ export class OpsReportsService {
         })
       : 0;
 
-    const threshold = await this.settings.getNumber('stock.low_threshold_liters');
-    const storages = stations.length
-      ? await this.prisma.stationFuelStorage.findMany({ where: { stationId: { in: stations.map((s) => s.id) } } })
-      : [];
-    const lowStations = new Set<string>();
-    let unaccountedFuel = 0;
-    for (const storage of storages) {
-      const recon = await this.fuelStock.reconcile(
-        storage.stationId,
-        storage.fuelType,
-        monthRange.start,
-        new Date(monthRange.endExclusive.getTime() - 1),
-      );
-      if (!recon) continue;
-      unaccountedFuel += recon.unaccounted;
-      if (statusOf(recon.endLevel, threshold) !== 'OK') lowStations.add(storage.stationId);
-    }
+    // The tanks as «مراقبة المحطات» shows them (sums, not fill-up rows).
+    const stock = await this.fuelStock.overview({ municipalityId: chosen.id }, actorId);
+    const lowStations = stock.stations.filter((s) =>
+      s.tanks.some((t) => t.status === 'LOW' || t.status === 'EMPTY' || t.status === 'DATA_WARNING'),
+    ).length;
 
     return {
       municipality: { id: chosen.id, name: chosen.name },
@@ -1073,9 +1058,8 @@ export class OpsReportsService {
       registration: { cardsToday, activeOffices, offices: officeIds.length },
       fuel: {
         stations: activeStations,
-        lowStockStations: lowStations.size,
-        unaccountedFuel: Math.round(unaccountedFuel),
-        windowDays: 30,
+        lowStockStations: lowStations,
+        dispensedToday: stock.totals.dispensedToday,
       },
     };
   }

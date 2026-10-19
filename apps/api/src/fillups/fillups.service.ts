@@ -134,6 +134,47 @@ export class FillUpsService {
     };
   }
 
+  // The citizen's check (public, no sign-in): may the vehicle of this card fill
+  // up now? The same card identification and the same rule engine as the pump
+  // (an unknown card is CARD_NOT_FOUND, a cancelled or replaced one
+  // CARD_REVOKED), counted in the municipality of the office that issued the
+  // card — the vehicle's own. Only what the card shows comes back: no owner.
+  async citizenCardStatus(rawCardNumber: string) {
+    const subject = await this.resolveSubject({ cardNumber: rawCardNumber });
+    const card = await this.prisma.vehicleCard.findUniqueOrThrow({
+      where: { cardNumber: normalizeScannedCardNumber(rawCardNumber)! },
+      select: { cardNumber: true, registrationStation: { select: { municipalityId: true } } },
+    });
+    const municipalityId = card.registrationStation.municipalityId;
+    const now = new Date();
+    const { checks } = await this.ruleEngine.evaluateSubjectWithChecks(this.toRuleSubject(subject), municipalityId, now);
+    const v = subject.vehicle;
+    // The last fill-ups the gap rules count from (same query, same window as
+    // the engine), so the citizen sees the date and the hour, and exactly when
+    // filling is allowed again: the gap is whole 24-hour periods after it.
+    const lastVehicle = (await this.repo.getRecentForVehicle(v.id, municipalityId, now, 14))[0]?.occurredAt ?? null;
+    const lastOwner = v.ownerId ? ((await this.repo.getRecentForOwner(v.ownerId, municipalityId, now, 14))[0]?.occurredAt ?? null) : null;
+    const DAY = 24 * 60 * 60 * 1000;
+    const nextAfter = (last: Date | null, days: number) => (last ? new Date(last.getTime() + days * DAY).toISOString() : null);
+    return {
+      cardNumber: card.cardNumber,
+      canFill: checks.every((c) => c.passed),
+      checks: checks.map((c) => ({
+        ...c,
+        // Gap rules only: from when this rule lets the vehicle fill up.
+        nextAllowedAt:
+          c.reason === 'VEHICLE_GAP_TOO_SHORT'
+            ? nextAfter(lastVehicle, c.limit)
+            : c.reason === 'OWNER_GAP_TOO_SHORT'
+              ? nextAfter(lastOwner, c.limit)
+              : null,
+      })),
+      lastVehicleFillUpAt: lastVehicle ? lastVehicle.toISOString() : null,
+      lastOwnerFillUpAt: lastOwner ? lastOwner.toISOString() : null,
+      vehicle: { plate: v.currentPlate, make: v.make, model: v.model, color: v.color, fuelType: v.fuelType },
+    };
+  }
+
   // The municipality a fill-up at this station is recorded in — stamped
   // onto the FillUpTransaction and used to scope every rule-engine count.
   // Refuses (machine-checkable markers, mapped to Arabic by the fill-up

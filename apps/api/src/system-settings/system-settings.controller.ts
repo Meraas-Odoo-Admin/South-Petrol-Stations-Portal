@@ -95,7 +95,7 @@ export class SystemSettingsController {
       throw new ConflictException(`SystemSetting "${dto.key}" already exists.`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const createdSetting = await this.prisma.$transaction(async (tx) => {
       const created = await tx.systemSetting.create({
         data: { key: dto.key, value: dto.value, description: dto.description },
       });
@@ -113,6 +113,8 @@ export class SystemSettingsController {
 
       return created;
     });
+    this.settingsService.invalidate();
+    return createdSetting;
   }
 
   @RequirePermission('settings:manage')
@@ -145,6 +147,7 @@ export class SystemSettingsController {
 
       return updated;
     });
+    this.settingsService.invalidate();
     // Another super admin is told that a rule switch or a setting changed, in
     // one plain sentence (never the key or the raw values). A save that changed
     // nothing tells nobody.

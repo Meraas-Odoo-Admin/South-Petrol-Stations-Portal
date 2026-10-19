@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { usePageParam } from '../../lib/usePageParam';
 import { Pagination } from '../../components/Pagination';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,7 +10,6 @@ import { Card } from '../../components/design/Card';
 import { Dialog } from '../../components/design/Dialog';
 import { PillButton } from '../../components/design/PillButton';
 import { StatusPill } from '../../components/design/StatusPill';
-import { Switch } from '../../components/design/Switch';
 import { TextField, TextAreaField } from '../../components/design/TextField';
 import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
@@ -32,6 +32,11 @@ import {
 // the server from the opening level, the deliveries and the fill-ups; nobody
 // types it. Deliveries are never edited: a mistake is a linked correction with
 // a reason, and a reset to zero is its own recorded entry.
+//
+// After review (19 Oct 2026): the tanks are run by the municipality manager
+// from «مراقبة المحطات» (capacity, deliveries, reset — three permissions); the
+// station's own page shows them read-only. No «إظهار المخزون للموظفين»
+// switch: station employees see no stock.
 
 const RESET_WORD = 'تصفير';
 const TEAL = '#0D5C52';
@@ -52,13 +57,17 @@ function numberOr(value: string): number | null {
 
 function LevelCard({
   level,
-  canManage,
+  canConfigure,
+  canDeliver,
+  canReset,
   onSetup,
   onDeliver,
   onReset,
 }: {
   level: FuelLevel;
-  canManage: boolean;
+  canConfigure: boolean;
+  canDeliver: boolean;
+  canReset: boolean;
   onSetup: () => void;
   onDeliver: () => void;
   onReset: () => void;
@@ -79,7 +88,7 @@ function LevelCard({
           <p className="text-[16px] leading-[1.7] text-ink-soft lg:text-[14px]">
             لم يُضبط خزان هذا النوع بعد. أدخل سعة الخزان والمستوى الحالي لتبدأ المنظومة بحساب المخزون.
           </p>
-          {canManage && (
+          {canConfigure && (
             <PillButton size="field" data-testid={`fuel-setup-${level.fuelType}`} onClick={onSetup}>
               ضبط الخزان
             </PillButton>
@@ -133,17 +142,23 @@ function LevelCard({
               </div>
             </dl>
           )}
-          {canManage && (
+          {(canDeliver || canConfigure || canReset) && (
             <div className="mt-4 flex flex-wrap gap-2.5">
-              <PillButton size="field" data-testid={`fuel-deliver-${level.fuelType}`} onClick={onDeliver}>
-                تسجيل توريد
-              </PillButton>
-              <PillButton size="field" variant="secondary" onClick={onSetup}>
-                تعديل السعة
-              </PillButton>
-              <PillButton size="field" variant="danger" data-testid={`fuel-reset-${level.fuelType}`} onClick={onReset}>
-                تصفير المستوى
-              </PillButton>
+              {canDeliver && (
+                <PillButton size="field" data-testid={`fuel-deliver-${level.fuelType}`} onClick={onDeliver}>
+                  تسجيل توريد
+                </PillButton>
+              )}
+              {canConfigure && (
+                <PillButton size="field" variant="secondary" onClick={onSetup}>
+                  تعديل السعة
+                </PillButton>
+              )}
+              {canReset && (
+                <PillButton size="field" variant="danger" data-testid={`fuel-reset-${level.fuelType}`} onClick={onReset}>
+                  تصفير المستوى
+                </PillButton>
+              )}
             </div>
           )}
         </>
@@ -159,6 +174,7 @@ function useRefreshStock(stationId: string) {
   return async () => {
     await queryClient.invalidateQueries({ queryKey: ['fuel-stock', stationId] });
     await queryClient.invalidateQueries({ queryKey: ['ops-report'] });
+    await queryClient.invalidateQueries({ queryKey: ['fuel-stock-overview'] });
   };
 }
 
@@ -406,7 +422,7 @@ function ResetDialog({ stationId, level, onClose }: { stationId: string; level: 
           </div>
         </dl>
         <p className="text-[15px] leading-[1.7] text-ink lg:text-[13px]">
-          سيُصبح المستوى صفرًا ثم يستمر من الصفر مع التوريد القادم. يُسجَّل التصفير باسمك وسببه ومستواه السابق، ويُبلَّغ به مدير البلدية.
+          سيُصبح المستوى صفرًا ثم يستمر من الصفر مع التوريد القادم. يُسجَّل التصفير باسمك وسببه ومستواه السابق، ويُبلَّغ به مشرف المحطة ومدير النظام.
         </p>
         <TextAreaField label="سبب التصفير (مطلوب)" value={reason} onChange={(e) => setReason(e.target.value)} />
         <TextField
@@ -489,11 +505,22 @@ function LevelChart({ stationId, fuelType, threshold }: { stationId: string; fue
 
 // ── the panel ──────────────────────────────────────────────────────────
 
-export function FuelStockPanel({ stationId, stationName }: { stationId: string; stationName?: string }) {
+export function FuelStockPanel({
+  stationId,
+  stationName,
+  readOnly = false,
+}: {
+  stationId: string;
+  stationName?: string;
+  /** The station's own page: the figures only; the work is in «مراقبة المحطات». */
+  readOnly?: boolean;
+}) {
   const { hasPermission } = useAuth();
-  const canManage = hasPermission('fuel_stock:manage');
+  const canConfigure = !readOnly && hasPermission('fuel_stock:configure');
+  const canDeliver = !readOnly && hasPermission('fuel_stock:deliver');
+  const canReset = !readOnly && hasPermission('fuel_stock:reset');
+  const canMonitor = readOnly && (hasPermission('fuel_stock:deliver') || hasPermission('fuel_stock:reset'));
   const canRead = hasPermission('fuel_stock:read');
-  const queryClient = useQueryClient();
   const stock = useFuelStock(stationId);
   const entriesPage = usePageParam(FUEL_ENTRIES_PAGE_SIZE);
   const entries = useFuelEntries(stationId, canRead, entriesPage.skip);
@@ -503,16 +530,6 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
     | null
   >(null);
   const [chartFuel, setChartFuel] = useState('');
-  const [switchError, setSwitchError] = useState<string | null>(null);
-
-  const visibility = useMutation({
-    mutationFn: async (show: boolean) => apiClient.patch(`/stations/${stationId}/stock-visibility`, { show }),
-    onSuccess: async () => {
-      setSwitchError(null);
-      await queryClient.invalidateQueries({ queryKey: ['fuel-stock', stationId] });
-    },
-    onError: (err) => setSwitchError(adminErrorMessage(err, 'تعذّر تغيير الإعداد.')),
-  });
 
   const configured = stock.data?.levels.filter((l) => l.configured) ?? [];
   useEffect(() => {
@@ -530,6 +547,16 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
     <div className="space-y-4" data-testid="fuel-stock-panel">
       {stationName && <h2 className="sr-only">الوقود والمخزون في {stationName}</h2>}
 
+      {canMonitor && (
+        <Notice kind="info">
+          التوريد والتصفير وسعة الخزانات من{' '}
+          <Link to={`/monitoring/stations/${stationId}`} className="font-bold text-primary-dark underline underline-offset-4">
+            مراقبة المحطات
+          </Link>
+          .
+        </Notice>
+      )}
+
       {data.levels.length === 0 ? (
         <Notice kind="info">
           لم تُحدَّد أنواع وقود لهذه المحطة بعد. اختر الأنواع التي تبيعها المحطة من تبويب «نظرة عامة».
@@ -540,7 +567,9 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
             <LevelCard
               key={level.fuelType}
               level={level}
-              canManage={canManage}
+              canConfigure={canConfigure}
+              canDeliver={canDeliver}
+              canReset={canReset}
               onSetup={() => setDialog({ kind: 'setup', level })}
               onDeliver={() => setDialog({ kind: 'deliver', level })}
               onReset={() => setDialog({ kind: 'reset', level })}
@@ -551,28 +580,8 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
 
       {data.threshold !== null && (
         <p className="text-[14px] leading-[1.7] text-ink-soft lg:text-[12px]">
-          يُنبَّه المشرف ومدير البلدية عندما ينزل أي نوع تحت {litersText(data.threshold)}، مرة عند الانخفاض ومرة أخرى بعد إعادة التعبئة وانخفاضه ثانية. لا يُمنع تسجيل التعبئة بسبب المخزون.
+          تُخصم كل تعبئة من مخزون المحطة تلقائيًا. يُنبَّه المشرف ومدير البلدية عندما ينزل أي نوع تحت {litersText(data.threshold)}، مرة عند الانخفاض ومرة أخرى بعد إعادة التعبئة وانخفاضه ثانية. لا يُمنع تسجيل التعبئة بسبب المخزون.
         </p>
-      )}
-
-      {canManage && (
-        <SectionCard title="إظهار المخزون للموظفين" description="تحكّم في ما يراه موظفو المحطة على شاشاتهم.">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="max-w-xl text-[15px] leading-[1.7] text-ink lg:text-[13px]">
-              عند الإيقاف لا يرى الموظفون مستويات الوقود إطلاقًا، ولا يصلهم تنبيه الانخفاض. تبقى أنت ومدير البلدية ترون كل شيء.
-            </p>
-            <Switch
-              checked={data.showToEmployees}
-              onChange={(next) => visibility.mutate(next)}
-              busy={visibility.isPending}
-              label="إظهار المخزون للموظفين"
-              onLabel="ظاهر للموظفين"
-              offLabel="مخفي عن الموظفين"
-              testId="stock-visibility-switch"
-            />
-          </div>
-          {switchError && <Notice kind="error">{switchError}</Notice>}
-        </SectionCard>
       )}
 
       {canRead && configured.length > 0 && (
@@ -632,7 +641,7 @@ export function FuelStockPanel({ stationId, stationName }: { stationId: string; 
                         </p>
                       )}
                     </div>
-                    {canManage && e.kind === 'DELIVERY' && (
+                    {canDeliver && e.kind === 'DELIVERY' && (
                       <PillButton size="field" variant="secondary" onClick={() => setDialog({ kind: 'correct', entry: e })}>
                         تصحيح
                       </PillButton>

@@ -8,8 +8,7 @@ import {
   BOOKLET_HELP,
   NATIONAL_ID_HELP,
   LIBYAN_MOBILE_HELP,
-  VEHICLE_COLORS,
-  VEHICLE_COLOR_OTHER,
+  cleanDigits,
   VEHICLE_FUEL_TYPES,
   VEHICLE_FUEL_TYPE_LABELS_AR,
   checkArabicPersonName,
@@ -21,7 +20,6 @@ import {
   checkManufactureYear,
   checkOwnerIdentity,
   identityNumberLength,
-  manufactureYearOptions,
   normalizeChassis,
   normalizePlate,
   type FieldCheck,
@@ -72,6 +70,44 @@ interface OwnerRow {
 interface VehicleDuplicate {
   field: DuplicateField;
   vehicle: { id: string; internalCode: string; currentPlate: string };
+}
+
+// After review (19 Oct 2026): another vehicle with the same plate number is
+// allowed (the chassis number tells them apart) — a notice, never a refusal.
+interface SamePlateVehicle {
+  id: string;
+  internalCode: string;
+  currentPlate: string;
+  chassisNumber: string | null;
+  vehicleType: { name: string } | null;
+}
+
+function SamePlateNotice({ vehicles }: { vehicles: SamePlateVehicle[] }) {
+  if (vehicles.length === 0) return null;
+  return (
+    <div role="status" className="mt-1.5 rounded-sm bg-accent-100 p-2.5 text-[14px] text-ink lg:text-[12px]" data-testid="registration-same-plate">
+      <p className="font-bold">
+        {vehicles.length >= 2
+          ? 'رقم اللوحة هذا مسجّل لمركبتين بالفعل، ولا يمكن تكراره أكثر من مرة واحدة.'
+          : `رقم اللوحة هذا مسجّل لمركبة أخرى. يُسمح بتكراره مرة واحدة فقط، لمركبة من نوع مختلف${
+              vehicles[0]?.vehicleType ? ` عن «${vehicles[0].vehicleType.name}»` : ''
+            }، وبرقم هيكل مختلف.`}
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {vehicles.map((v) => (
+          <li key={v.id}>
+            <Link to={`/vehicles/${v.id}`} className="underline">
+              <LtrText>{v.internalCode}</LtrText>
+            </Link>
+            {' — رقم الهيكل '}
+            <LtrText className="font-mono">{v.chassisNumber ?? '—'}</LtrText>
+            {' — النوع '}
+            {v.vehicleType?.name ?? 'غير محدَّد'}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 interface RegisteredVehicle {
@@ -246,8 +282,8 @@ export function RegistrationPage() {
   const [registrationBooklet, setRegistrationBooklet] = useState('');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
-  const [colorChoice, setColorChoice] = useState('');
-  const [colorOther, setColorOther] = useState('');
+  // After review (19 Oct 2026): colour and year are typed, not picked from lists.
+  const [color, setColor] = useState('');
   const [manufactureYear, setManufactureYear] = useState('');
   const [fuelType, setFuelType] = useState<VehicleFuelTypeKey | ''>('');
   const [vehicleTypeId, setVehicleTypeId] = useState('');
@@ -261,8 +297,6 @@ export function RegistrationPage() {
   } | null>(null);
 
   const fullPlate = plate;
-  const yearOptions = useMemo(() => manufactureYearOptions(), []);
-  const color = colorChoice === VEHICLE_COLOR_OTHER ? colorOther : colorChoice;
 
   const typeLookup = useLookup<{ id: string; name: string; isActive: boolean }>('/vehicle-types', 'vehicle-types');
   const vehicleTypes = typeLookup.items;
@@ -298,12 +332,13 @@ export function RegistrationPage() {
   const duplicateQuery = useQuery({
     queryKey: ['vehicles', 'duplicate-check', duplicateParams],
     queryFn: async () =>
-      (await apiClient.get<{ conflicts: VehicleDuplicate[] }>('/vehicles/duplicate-check', { params: duplicateParams }))
+      (await apiClient.get<{ conflicts: VehicleDuplicate[]; samePlate?: SamePlateVehicle[] }>('/vehicles/duplicate-check', { params: duplicateParams }))
         .data,
     enabled: hasDuplicateParams,
   });
   const conflicts = serverConflicts ?? (hasDuplicateParams ? (duplicateQuery.data?.conflicts ?? []) : []);
   const conflictFor = (field: DuplicateField) => conflicts.find((c) => c.field === field);
+  const samePlate = hasDuplicateParams && duplicateParams.currentPlate ? (duplicateQuery.data?.samePlate ?? []) : [];
 
   const registerVehicle = useMutation({
     mutationFn: async () =>
@@ -320,7 +355,7 @@ export function RegistrationPage() {
           color: color.trim(),
           manufactureYear: Number(manufactureYear),
           fuelType,
-          vehicleTypeId: vehicleTypeId || undefined,
+          vehicleTypeId,
         })
       ).data,
     onSuccess: (vehicle) => {
@@ -351,10 +386,12 @@ export function RegistrationPage() {
     const md = checkMakeOrModel(model, 'الطراز');
     if (!md.ok) return { message: md.message, field: 'registration-model' };
     const c = checkColor(color);
-    if (!c.ok) return { message: c.message, field: colorChoice === VEHICLE_COLOR_OTHER ? 'registration-color-other' : 'registration-color' };
+    if (!c.ok) return { message: c.message, field: 'registration-color' };
     const y = checkManufactureYear(manufactureYear);
     if (!y.ok) return { message: y.message, field: 'registration-year' };
     if (!fuelType) return { message: 'نوع وقود المركبة مطلوب: بنزين أو ديزل.', field: 'registration-fuel' };
+    // Required (after review, 19 Oct 2026).
+    if (!vehicleTypeId) return { message: 'نوع المركبة مطلوب: اختره من القائمة.', field: 'registration-vehicle-type' };
     const conflict = conflicts[0];
     if (conflict) {
       const field = { currentPlate: 'registration-plate-input', chassisNumber: 'registration-chassis-input', registrationBooklet: 'registration-booklet-input' }[conflict.field];
@@ -370,8 +407,7 @@ export function RegistrationPage() {
     setRegistrationBooklet('');
     setMake('');
     setModel('');
-    setColorChoice('');
-    setColorOther('');
+    setColor('');
     setManufactureYear('');
     setFuelType('');
     setVehicleTypeId('');
@@ -637,7 +673,7 @@ export function RegistrationPage() {
                 label="رقم اللوحة"
               />
               <FieldHelp check={vehicleTouched ? checks.plate : null} help="رمز المدينة (رقم أو رقمان)، ثم رقم المركبة. أرقام فقط." />
-              <DuplicateWarning conflict={conflictFor('currentPlate')} />
+              <SamePlateNotice vehicles={samePlate} />
             </div>
 
             <div>
@@ -712,46 +748,27 @@ export function RegistrationPage() {
                 error={checks.model && !checks.model.ok ? checks.model.message : null}
                 placeholder="مثال: كامري"
               />
-              <div>
-                <Label htmlFor="reg-color">اللون</Label>
-                <select
-                  id="reg-color"
-                  data-testid="registration-color"
-                  value={colorChoice}
-                  onChange={(e) => setColorChoice(e.target.value)}
-                  className={SELECT_CLASS}
-                >
-                  <option value="">— اختر —</option>
-                  {VEHICLE_COLORS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                  <option value={VEHICLE_COLOR_OTHER}>{VEHICLE_COLOR_OTHER}</option>
-                </select>
-                {colorChoice === VEHICLE_COLOR_OTHER && (
-                  <div className="mt-2">
-                    <TextField label="اكتب اللون" data-testid="registration-color-other" value={colorOther} onChange={(e) => setColorOther(e.target.value)} />
-                  </div>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="reg-year">سنة الصنع</Label>
-                <select
-                  id="reg-year"
-                  data-testid="registration-year"
-                  value={manufactureYear}
-                  onChange={(e) => setManufactureYear(e.target.value)}
-                  className={SELECT_CLASS}
-                >
-                  <option value="">— اختر —</option>
-                  {yearOptions.map((year) => (
-                    <option key={year} value={String(year)}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* After review (19 Oct 2026): typed, not picked from a list. */}
+              <TextField
+                label="اللون"
+                data-testid="registration-color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                error={checks.color && !checks.color.ok ? checks.color.message : null}
+                placeholder="مثال: أبيض"
+                maxLength={30}
+              />
+              <TextField
+                label="سنة الصنع"
+                data-testid="registration-year"
+                value={manufactureYear}
+                onChange={(e) => setManufactureYear(cleanDigits(e.target.value).slice(0, 4))}
+                error={checks.year && !checks.year.ok ? checks.year.message : null}
+                placeholder="مثال: 2018"
+                inputMode="numeric"
+                maxLength={4}
+                ltr
+              />
               <div>
                 <Label htmlFor="reg-fuel">نوع وقود المركبة</Label>
                 <select
@@ -771,7 +788,7 @@ export function RegistrationPage() {
                 <p className="mt-1.5 text-[14px] text-ink-soft lg:text-[12px]">يُنبَّه موظف المحطة إن اختلف الوقود المصروف عن هذا النوع.</p>
               </div>
               <div>
-                <Label htmlFor="reg-type">نوع المركبة (اختياري)</Label>
+                <Label htmlFor="reg-type">نوع المركبة</Label>
                 <select
                   id="reg-type"
                   data-testid="registration-vehicle-type"
@@ -779,7 +796,7 @@ export function RegistrationPage() {
                   onChange={(e) => setVehicleTypeId(e.target.value)}
                   className={SELECT_CLASS}
                 >
-                  <option value="">— غير محدَّد —</option>
+                  <option value="">— اختر —</option>
                   {vehicleTypes
                     ?.filter((t) => t.isActive)
                     .map((t) => (

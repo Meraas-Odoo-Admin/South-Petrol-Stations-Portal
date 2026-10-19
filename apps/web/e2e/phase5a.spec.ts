@@ -42,6 +42,8 @@ test('super admin: creates a municipality (its directorate appears by itself) an
   const name = `بلدية اختبار ${tag(5)}`;
   await page.getByRole('button', { name: 'بلدية جديدة' }).click();
   await page.getByTestId('municipality-create-name').fill(name);
+  // The card code is required (after review, 19 Oct 2026); unique, so random.
+  await page.getByTestId('municipality-create-code').fill(Array.from({ length: 5 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join(''));
   await page.getByTestId('municipality-create-save').click();
 
   // The security directorate was created with it, named after it.
@@ -91,6 +93,9 @@ test('municipality manager: station, its supervisor, an office manager, archive 
   await page.locator('#st-company').selectOption({ index: 1 });
   await page.getByLabel('رقم المحطة لدى الشركة').fill(`${random(3)}`);
   await page.getByLabel('اسم المحطة').fill(stationName);
+  // After review (19 Oct 2026): a fuel it sells, and that tank's capacity, are required.
+  await page.locator('label', { hasText: 'بنزين 95' }).locator('input[type="checkbox"]').check();
+  await page.getByTestId('station-tank-PETROL_95').fill('30000');
   await shots(page, '11-new-station-form');
   await page.getByRole('button', { name: 'حفظ المحطة' }).click();
   await expect(page.getByRole('heading', { name: stationName })).toBeVisible();

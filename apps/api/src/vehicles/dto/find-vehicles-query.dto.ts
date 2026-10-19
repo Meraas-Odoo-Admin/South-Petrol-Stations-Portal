@@ -80,6 +80,14 @@ export class FindVehiclesQueryDto extends PaginationQueryDto {
   @IsEnum(VehicleSortField)
   sort?: VehicleSortField;
 
+  // After review (19 Oct 2026): only vehicles whose plate number another
+  // vehicle also has (told apart by their chassis numbers), sorted by plate.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  duplicatePlate?: boolean;
+
   // true: answer {total, skip, take, items} (the vehicles list screen). Left
   // out: the bare array of one page that the pickers read.
   @ApiProperty({ required: false })

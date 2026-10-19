@@ -9,6 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { calendarDayToDate, tripoliDay } from '../src/common/utils/grace-stage';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Phase 6 (the 4a grace period is gone): a fill-up is recorded from a CARD
 // SCAN. There are no stages, no awareness and no typed-plate paths. The only
@@ -195,7 +196,7 @@ describe('Phase 6 card-only pump flow (e2e)', () => {
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicleId: { in: vIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vIds } } });
     await prisma.duplicateCatch.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: userIds } } });

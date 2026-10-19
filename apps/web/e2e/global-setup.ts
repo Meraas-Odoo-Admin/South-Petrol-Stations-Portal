@@ -158,7 +158,10 @@ async function main() {
     color: 'ابيض',
     manufactureYear: 2020,
     fuelType: 'PETROL',
+    // Required (after review, 19 Oct 2026): set once the types are read below.
+    vehicleTypeId: fixtureVehicleTypeId,
   });
+  let fixtureVehicleTypeId = '';
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
   const sysadmin = await login('sysadmin1', SEEDED_PASSWORD);
@@ -197,6 +200,10 @@ async function main() {
     },
     { headers },
   );
+  // Every vehicle needs a type (after review, 19 Oct 2026): the first active one.
+  const fixtureTypes = await api.get<Array<{ id: string; isActive: boolean }>>(`${API_BASE}/vehicle-types`, { headers });
+  fixtureVehicleTypeId = fixtureTypes.data.find((t) => t.isActive)?.id ?? '';
+  if (!fixtureVehicleTypeId) throw new Error('No active vehicle type — was prisma db seed run?');
   const registrationStation = await api.post(
     `${API_BASE}/registration-stations`,
     { name: `PW Registration Desk ${runId}`, municipalityId: sabha.id, address: 'PW test address' },

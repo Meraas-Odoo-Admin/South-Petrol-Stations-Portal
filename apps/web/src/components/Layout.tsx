@@ -113,6 +113,7 @@ export function Layout() {
     },
     // Phase 5A: each level's own place for its places and people.
     { to: '/manage', label: 'إدارة المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.manage(hasPermission) },
+    { to: '/monitoring', label: 'مراقبة المحطات', icon: <Icon d={ICONS.fuel} />, show: NAV_ACCESS.monitoring(hasPermission) },
     { to: '/my-station', label: 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
     { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
@@ -152,7 +153,7 @@ export function Layout() {
     { title: '', paths: ['/'] },
     { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
-    { title: 'محطتي ومكتبي', paths: ['/manage', '/my-station', '/my-office'] },
+    { title: 'محطتي ومكتبي', paths: ['/manage', '/monitoring', '/my-station', '/my-office'] },
     { title: 'الإدارة', paths: ['/admin'] },
   ];
   const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));
@@ -173,7 +174,9 @@ export function Layout() {
     <div
       dir="rtl"
       className="flex min-h-[100dvh] flex-col bg-paper lg:min-h-screen lg:flex-row"
-      style={{ '--bottom-bar': showBottomBar ? '58px' : '0px' } as React.CSSProperties}
+      // --chrome-extra: what the bottom bar and the room kept for it add (58px
+      // bar + 64px more padding), for screens sized to the visible height.
+      style={{ '--bottom-bar': showBottomBar ? '58px' : '0px', '--chrome-extra': showBottomBar ? '122px' : '0px' } as React.CSSProperties}
     >
       {/* Desktop sidebar (end/right side) — hidden below lg.
           Order matters here: with dir="rtl" and the default flex-direction

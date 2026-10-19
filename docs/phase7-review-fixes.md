@@ -429,3 +429,69 @@ Every screen the station employee sees fits a phone with no scrolling. This was 
 - **Audit:** each save writes one audit entry, `UPDATE_IDENTITY` or `UPDATE_OWNER_IDENTITY`. The owner's numbers themselves are never written to the audit log.
 
 Requests already pending stay in the database. Nothing creates new ones from the vehicle page.
+
+## After review: least privilege and audit controls (Khalil, 19 Oct 2026)
+
+**1. Each job holds only what its screens use** (`rbac-catalog.ts`, 13 grants taken away):
+
+| Job | Taken away | Why |
+|---|---|---|
+| Station supervisor | `fillups:update` | No endpoint uses it |
+| | `routes:read`, `security_authorities:read` | No screen reads those lists any more |
+| | `owners:reveal_identity` | A station has no need for an owner's full identity number |
+| Registration employee and office manager | `vehicles:request_change`, `owners:request_change` | The request forms are gone; «تعديل» edits directly |
+| Municipality manager | both request permissions, `fillups:update`, `routes:read`, `security_authorities:read` | Same reasons |
+
+**2. Audit controls:**
+- **The audit log is insert-only in the database.** Migration `20261019110000_audit_log_insert_only` adds triggers: no row is changed or deleted, and the table is never emptied. There are two narrow exceptions:
+  - a deleted test account's entries lose only their link to it;
+  - test-data removal, inside one transaction with `app.test_data_removal` set. Tests and seeds go through `prisma/audit-removal.ts`.
+- **Every report export is recorded:** the 9 export endpoints, through `@AuditedExport` (`EXPORT`). Each entry has who, which report, the filters, the address and the device.
+- **Session renewals (`ROTATE`, every 15 minutes) are no longer recorded.** They buried the log in noise.
+- **A locked super admin account now alerts the other super admins.** Before, nobody was told.
+
+**3. Left as they are, for the client to decide** (each one is the job's own business):
+- the municipality manager can record fill-ups (`fillups:create`, `cards:scan`) and register vehicles (`vehicles:manage`);
+- the station supervisor reads companies and municipalities, which their station form needs.
+
+**Recommended for the server:** the API connects with the database's owner. A separate database user for the running app, with no right to change the schema, would close the last way around the triggers.
+
+## After review: the stations' fuel is the municipality manager's (Khalil, 19 Oct 2026)
+
+**1. Who does what** (`rbac-catalog.ts`). `fuel_stock:manage` is split into three, and all three go to the municipality manager:
+
+| Permission | Work |
+|---|---|
+| `fuel_stock:configure` | Set a tank's capacity |
+| `fuel_stock:deliver` | Record and correct deliveries |
+| `fuel_stock:reset` | Reset a level to zero |
+
+The station supervisor keeps `fuel_stock:read`: their own station's tanks and deliveries, read-only. The «إظهار المخزون للموظفين» switch is gone from the screens; station employees see no stock.
+
+**2. Creating a station.** Each fuel it sells needs a tank capacity:
+- the API returns `TANK_CAPACITY_REQUIRED`, `TANK_FOR_UNSOLD_FUEL` or `TANK_REPEATED`;
+- the tank starts empty at the moment the station is created;
+- a fuel added later is set up from «مراقبة المحطات».
+
+**3. «مراقبة المحطات»** (`/monitoring`, `GET /fuel-stock/overview`). Every station of the municipality, worst first. For each tank:
+- level and capacity;
+- dispensed today and over the last 7 days;
+- about how many days the fuel lasts at that pace;
+- last delivery and last fill-up.
+
+Each station opens on three tabs:
+- stock and deliveries: capacity, delivery, correction and reset;
+- every fill-up of a day;
+- the station's reports.
+
+The overview is built from database sums. Migration `20261019120000_fillup_station_fuel_index` adds the index it needs.
+
+**4. Every fill-up is still taken off its station's stock by the server.** A delivery that would fill a tank past its capacity is refused (`DELIVERY_ABOVE_CAPACITY`). A reset is told to:
+- the station's supervisor;
+- the municipality's other managers;
+- the super admin.
+
+**5. «وقود غير مبرَّر» is gone.** It confused more than it told:
+- the reconciliation table keeps `start + delivered − dispensed − zeroed = level now`;
+- its status is the tank's status;
+- the summary card now shows the liters dispensed today.

@@ -46,6 +46,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   DUPLICATE_CAUGHT: 'رُصد تسجيل مكرر',
   LINK_UNREGISTERED_FILLUPS: 'ربط تعبئات سابقة بالمركبة',
   // Fuel
+  FUEL_STORAGE_SETUP: 'ضبط خزان وقود',
+  FUEL_STORAGE_UPDATE: 'عدّل سعة خزان وقود',
   FUEL_DELIVERY: 'سجّل توريد وقود',
   FUEL_DELIVERY_CORRECTION: 'صحّح توريد وقود',
   FUEL_RESET: 'صفّر مستوى الوقود',
@@ -56,6 +58,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   ARCHIVE: 'أرشف',
   RESTORE: 'استعاد',
   UPDATE_EXCEPTION_SETTINGS: 'عدّل إعدادات الاستثناءات',
+  // Reports leaving the system (after review, 19 Oct 2026)
+  EXPORT: 'صدّر تقريرًا',
   // System
   IMPORT_STATIONS: 'استورد قائمة المحطات',
   TEST_DATA_REMOVAL: 'حذف البيانات التجريبية',
@@ -104,8 +108,9 @@ export const AUDIT_ACTION_GROUPS: Array<{ label: string; actions: string[] }> = 
       'LINK_UNREGISTERED_FILLUPS',
     ],
   },
-  { label: 'الوقود', actions: ['FUEL_DELIVERY', 'FUEL_DELIVERY_CORRECTION', 'FUEL_RESET', 'STOCK_VISIBILITY'] },
+  { label: 'الوقود', actions: ['FUEL_STORAGE_SETUP', 'FUEL_STORAGE_UPDATE', 'FUEL_DELIVERY', 'FUEL_DELIVERY_CORRECTION', 'FUEL_RESET', 'STOCK_VISIBILITY'] },
   { label: 'الإنشاء والتعديل', actions: ['CREATE', 'UPDATE', 'ARCHIVE', 'RESTORE', 'UPDATE_EXCEPTION_SETTINGS'] },
+  { label: 'تصدير التقارير', actions: ['EXPORT'] },
   { label: 'النظام', actions: ['IMPORT_STATIONS', 'TEST_DATA_REMOVAL'] },
 ];
 
@@ -133,6 +138,7 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   OwnerChangeRequest: 'طلب تعديل مالك',
   RefreshToken: 'جلسة',
   System: 'النظام',
+  Report: 'تقرير',
   Exception: 'استثناء',
   StandingException: 'استثناء دائم',
   Driver: 'سائق',
@@ -184,6 +190,7 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   revealed: 'كُشف',
   side: 'الجهة',
   failedAttempts: 'عدد المحاولات الخاطئة',
+  filters: 'التصفية المستخدمة',
   chassisNumber: 'رقم الشاصي',
   registrationBooklet: 'رقم كتيب المركبة',
   ownerId: 'المالك',
@@ -191,6 +198,20 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   identityNumberChanged: 'تغيّر رقم الهوية',
   lockedUntil: 'مقفل حتى',
   minutes: 'المدة بالدقائق',
+};
+
+// The reports an EXPORT entry names (its entityId).
+export const AUDIT_REPORT_LABELS: Record<string, string> = {
+  daily: 'تقرير المحطة اليومي',
+  violations: 'الاستثناءات',
+  'my-day': 'يومي (مكتب التسجيل)',
+  'my-shift': 'ورديتي',
+  office: 'تقرير المكتب',
+  station: 'تقرير المحطة',
+  municipality: 'تقرير البلدية',
+  summary: 'الملخص بين البلديات',
+  'registration-offices': 'مكاتب التسجيل',
+  'audit-log': 'سجل التدقيق',
 };
 
 // Why a sign-in failed (LOGIN_FAILED's reason).

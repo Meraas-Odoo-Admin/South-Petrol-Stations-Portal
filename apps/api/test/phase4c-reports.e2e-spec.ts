@@ -8,6 +8,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Registration pivot, phase 4c — the monitoring reports, through the real
 // endpoints:
@@ -291,7 +292,7 @@ describe('Phase 4c — monitoring reports (e2e)', () => {
     await prisma.vehicleCard.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
     await prisma.duplicateCatch.deleteMany({ where: { registrationStationId: { in: stations } } });
-    await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: ids } }, { entityId: { in: ids } }] } });
+    await deleteAuditRows(prisma, { where: { OR: [{ userId: { in: ids } }, { entityId: { in: ids } }] } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: ids } } });

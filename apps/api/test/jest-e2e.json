@@ -11,5 +11,6 @@
     "^.+\\.ts$": "ts-jest"
   },
   "testTimeout": 120000,
+  "globalSetup": "<rootDir>/global-setup.ts",
   "maxWorkers": 1
 }

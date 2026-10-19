@@ -47,7 +47,7 @@ const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 export const PAGE = LIST_PAGE_SIZE;
 
 const GOOD = ['سليم', 'في المسار', 'فعّال', 'مفعّلة', 'لا أحد بلا بطاقة'];
-const BAD = ['غير مبرَّر', 'بطاقات غير مبرَّرة', 'فات الموعد', 'معرّض للتأخر', 'بيانات تحتاج مراجعة', 'فارغ', 'يحتاج مراجعة'];
+const BAD = ['بطاقات غير مبرَّرة', 'فات الموعد', 'معرّض للتأخر', 'بيانات تحتاج مراجعة', 'فارغ', 'يحتاج مراجعة'];
 function statusVariant(text: string): 'ok' | 'danger' | 'warn' | 'neutral' {
   if (GOOD.includes(text)) return 'ok';
   if (BAD.some((b) => text.includes(b))) return 'danger';

@@ -108,6 +108,20 @@ export function UserDetailPage({ basePath }: { basePath: string }) {
             </StatusPill>
           )}
         </div>
+        {/* Oversight (after review, 19 Oct 2026): straight to the audit log. */}
+        {hasPermission('audit:view') && (
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="user-audit-links">
+            <Link className="rounded-full border border-line bg-surface-alt px-3 py-1.5 text-[14px] font-bold text-ink hover:border-primary lg:text-[12px]" to={`/admin/audit-log?${new URLSearchParams({ userId: user.id, who: user.fullName })}`}>
+              أفعاله في سجل التدقيق
+            </Link>
+            <Link
+              className="rounded-full border border-line bg-surface-alt px-3 py-1.5 text-[14px] font-bold text-ink hover:border-primary lg:text-[12px]"
+              to={`/admin/audit-log?${new URLSearchParams({ entityType: 'User', entityId: user.id, what: user.fullName })}`}
+            >
+              ما حدث لحسابه
+            </Link>
+          </div>
+        )}
       </header>
 
       {note && !user.capabilities.canManageAccount && user.capabilities.readOnlyReason && (

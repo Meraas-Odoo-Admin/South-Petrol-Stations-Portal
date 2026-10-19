@@ -24,7 +24,7 @@ export interface ReportTable {
   note?: string;
   columns: TableColumn[];
   rows: Array<Record<string, Cell>>;
-  // Rows the reader should look at first (fuel unaccounted for, low stock):
+  // Rows the reader should look at first (low stock):
   // the screen marks them with a word as well as a colour.
   flagKey?: string;
 }

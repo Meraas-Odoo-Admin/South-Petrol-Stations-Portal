@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Registration pivot, phase 2 — separation of duties, enforced server-side:
 // no user may be on both the petrol-station side and the registration side.
@@ -88,7 +89,7 @@ describe('Role separation — petrol station vs registration (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: userIds } } });

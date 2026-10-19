@@ -14,6 +14,7 @@ import {
   UNRESTRICTED_STATION_ACCESS_ROLES,
 } from '../prisma/rbac-catalog';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Client decision (Phase 5C): the municipality manager (from the station's page
 // in «إدارة المحطات») and the station supervisor (in «محطتي») both set the fuel
@@ -115,7 +116,7 @@ describe('Fuel types: who may set them (e2e)', () => {
   afterAll(async () => {
     const stationIds = Object.values(station);
     await prisma.stationFuelAvailability.deleteMany({ where: { stationId: { in: stationIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userMunicipalityScope.deleteMany({ where: { userId: { in: userIds } } });

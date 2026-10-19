@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // UX round: no list is unbounded. The municipality page's tabs, the station
 // and office lists, the report tables and the notification bell all answer
@@ -126,7 +127,7 @@ describe('Pagination and the bell (e2e)', () => {
 
   afterAll(async () => {
     await prisma.notification.deleteMany({ where: { entityType: 'SystemSetting', entityId: settingKey } });
-    await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { entityId: settingKey }] } });
+    await deleteAuditRows(prisma, { where: { OR: [{ userId: { in: userIds } }, { entityId: settingKey }] } });
     await prisma.systemSetting.deleteMany({ where: { key: settingKey } });
     await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });

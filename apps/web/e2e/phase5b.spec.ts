@@ -6,7 +6,7 @@ import { api, API_BASE } from './env';
 import { loadFixtures, loginAs, navigateInApp } from './helpers';
 
 // Phase 5B browser pass: fuel storage (set-up, delivery, the level, low-stock,
-// reset with its confirmation, the hide-from-employees switch), the bell with
+// reset with its confirmation — in «مراقبة المحطات», after review 19 Oct 2026), the bell with
 // real notifications, each role's reports, a station's and an office's tabs,
 // the summary row and the readiness panel, and the person page with the
 // switch and the locked permissions. Screenshots (desktop and 390 px) go to
@@ -93,8 +93,11 @@ test.beforeAll(async () => {
   supervisorToken = await apiLogin(fixtures.supervisorUsername, fixtures.supervisorPassword);
 });
 
-test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the reset, and the hide switch', async ({ browser }) => {
-  test.setTimeout(360_000);
+// After review (19 Oct 2026): the supervisor chooses the fuels the station sells
+// and sees its tanks read-only; the tanks, the deliveries and the reset are the
+// municipality manager's, in «مراقبة المحطات» (the next test).
+test('supervisor: fuel types, and the station\'s tanks read-only', async ({ browser }) => {
+  test.setTimeout(240_000);
   const { context, page } = await newPage(browser);
   await loginAs(page, fixtures.supervisorUsername, fixtures.supervisorPassword);
 
@@ -114,6 +117,24 @@ test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the rese
   await page.getByTestId('tab-fuel').click();
   await expect(page.getByTestId('fuel-stock-panel')).toBeVisible();
   await shots(page, '11-fuel-not-set-up');
+  // No lever on the tanks, and no «إظهار المخزون للموظفين» switch.
+  await expect(page.getByTestId('fuel-setup-PETROL_95')).toHaveCount(0);
+  await expect(page.getByTestId('stock-visibility-switch')).toHaveCount(0);
+  await context.close();
+});
+
+test('municipality manager: «مراقبة المحطات» — two tanks, a delivery, a low-stock alert, a correction and the reset', async ({ browser }) => {
+  test.setTimeout(360_000);
+  const { context, page } = await newPage(browser);
+  await loginAs(page, fixtures.adminUsername, fixtures.adminPassword);
+
+  await page.getByRole('link', { name: 'مراقبة المحطات' }).first().click();
+  await expect(page).toHaveURL(/\/monitoring$/);
+  await expect(page.getByTestId('monitor-summary')).toBeVisible();
+  await shots(page, '10b-monitoring');
+  await page.getByTestId(`monitor-station-${fixtures.stationId}`).click();
+  await expect(page).toHaveURL(new RegExp(`/monitoring/stations/${fixtures.stationId}`));
+  await expect(page.getByTestId('fuel-stock-panel')).toBeVisible();
 
   // Two tanks. Diesel opens just above the 1,000 L line.
   await page.getByTestId('fuel-setup-PETROL_95').click();
@@ -138,7 +159,6 @@ test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the rese
     );
   }
   await page.reload();
-  await page.getByTestId('tab-fuel').click();
   await expect(page.getByTestId('fuel-level-DIESEL')).toContainText('900');
   await expect(page.getByTestId('fuel-card-DIESEL')).toContainText('منخفض');
   await shots(page, '13-low-stock');
@@ -177,12 +197,9 @@ test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the rese
   await expect(page.getByTestId('fuel-level-PETROL_95')).toContainText('0');
   await shots(page, '18-after-reset');
 
-  // The switch: hide the stock from employees.
-  const hide = page.getByTestId('stock-visibility-switch');
-  await expect(hide).toHaveAttribute('aria-checked', 'true');
-  await hide.click();
-  await expect(hide).toHaveAttribute('aria-checked', 'false');
-  await shots(page, '19-stock-hidden-from-employees');
+  // Every fill-up of the day, from the same screen.
+  await page.getByTestId('tab-fillups').click();
+  await expect(page.getByTestId('daily-export-csv')).toBeVisible();
   await context.close();
 });
 
@@ -191,12 +208,6 @@ test('supervisor: fuel types, two tanks, a delivery, a low-stock alert, the rese
 // records and no reports: the app opens on «تسجيل تعبئة», its only screen.
 test('station employee: only «تسجيل تعبئة» — no home, stock, bell, records or reports', async ({ browser }) => {
   test.setTimeout(240_000);
-  // The supervisor shows the stock again (the steps after this one expect it).
-  await api.patch(
-    `${API_BASE}/stations/${fixtures.stationId}/stock-visibility`,
-    { show: true },
-    { headers: { Authorization: `Bearer ${supervisorToken}` } },
-  );
   const { context, page } = await newPage(browser);
   await loginAs(page, employeeUsername, fixtures.supervisorPassword, '/fillups/new');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -268,8 +279,9 @@ test('municipality manager: the summary row, a station and an office, and the re
   await shots(page, '41-station-overview');
   await page.getByTestId('tab-fuel').click();
   await expect(page.getByTestId('fuel-stock-panel')).toBeVisible();
-  // A municipality manager sees every figure but has no lever on the tanks.
+  // The station's page shows the figures; the levers are in «مراقبة المحطات».
   await expect(page.getByTestId('fuel-deliver-DIESEL')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'مراقبة المحطات' }).last()).toBeVisible();
   await shots(page, '42-station-fuel-tab-manager');
   await page.getByTestId('tab-reports').click();
   await showTable(page, 'days');
@@ -283,7 +295,7 @@ test('municipality manager: the summary row, a station and an office, and the re
   await shots(page, '49a-person-active-switch');
   await page.getByTestId('permissions-toggle').click();
   await expect(page.getByTestId('permissions-body')).toBeVisible();
-  await expect(page.getByTestId('permission-locked-fuel_stock:manage')).toContainText('من الوظيفة');
+  await expect(page.getByTestId('permission-locked-fuel_stock:read')).toContainText('من الوظيفة');
   await shots(page, '49b-person-permissions-locked');
   await navigateInApp(page, '/manage');
   // The list is paged (25 a page): search for the one wanted.

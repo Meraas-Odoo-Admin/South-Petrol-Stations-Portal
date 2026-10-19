@@ -183,24 +183,18 @@ export interface PeriodReconciliation {
   startLevel: number;
   delivered: number;
   dispensed: number;
-  /** Fuel the books held when a supervisor reset the level to zero. */
+  /** What the books held when the level was reset to zero. */
   resetWrittenOff: number;
   endLevel: number;
-  /** Fuel dispensed beyond everything delivered: negative levels, however they ended. */
-  shortfall: number;
-  /** Fuel that is not accounted for: written off by resets plus the shortfall. */
-  unaccounted: number;
 }
 
 // Fuel reconciliation of one fuel type at one station for a period.
 //
-//   start + delivered − dispensed − written off by resets = end
+//   start + delivered − dispensed − zeroed by resets = end
 //
-// Because the level is computed from deliveries and fill-ups it can never
-// disagree with them by itself; the fuel that is NOT accounted for shows up as
-// (a) a level that went below zero (more dispensed than was ever delivered or
-// held) and (b) what a reset wrote off (fuel the books held that a supervisor
-// zeroed). Both are reported as "unaccounted".
+// (After review, 19 Oct 2026: no "unaccounted fuel" figure any more — it
+// confused more than it told. A level below zero still shows as a data
+// warning on the tank.)
 export function reconcilePeriod(
   setup: StorageSetup,
   raw: FuelEntryRaw[],
@@ -223,23 +217,18 @@ export function reconcilePeriod(
     .reduce((sum, d) => sum + d.liters, 0);
 
   let resetWrittenOff = 0;
-  let erasedNegative = 0;
   for (const r of raw) {
     if (r.kind !== 'RESET') continue;
     const at = r.occurredAt.getTime();
     if (at <= s || at > e) continue;
     const before = levelAt(setup, raw, dispenses, new Date(at - 1)).level;
     if (before > 0) resetWrittenOff += before;
-    else erasedNegative += -before;
   }
-  const shortfall = Math.max(0, -end.level) + erasedNegative;
   return {
     startLevel: round3(startLevel),
     delivered: round3(delivered),
     dispensed: round3(dispensed),
     resetWrittenOff: round3(resetWrittenOff),
     endLevel: end.level,
-    shortfall: round3(shortfall),
-    unaccounted: round3(resetWrittenOff + shortfall),
   };
 }

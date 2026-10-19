@@ -33,6 +33,7 @@ export class AuditReadService {
     const and: Prisma.AuditLogWhereInput[] = [];
     if (query.entityType) and.push({ entityType: query.entityType });
     if (query.userId) and.push({ userId: query.userId });
+    if (query.entityId) and.push({ entityId: query.entityId });
     const actions = (query.action ?? '')
       .split(',')
       .map((a) => a.trim())
@@ -63,6 +64,81 @@ export class AuditReadService {
       });
     }
     return and.length ? { AND: and } : {};
+  }
+
+  // The oversight summary for the same filters (after review, 19 Oct 2026):
+  // how many entries, of which actions, and who did the most.
+  async summary(query: AuditQueryDto) {
+    const where = this.whereOf(query);
+    const [total, byAction, byUser] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.groupBy({ by: ['action'], where, _count: { _all: true } }),
+      this.prisma.auditLog.groupBy({
+        by: ['userId'],
+        where: { AND: [where, { userId: { not: null } }] },
+        _count: { userId: true },
+        orderBy: { _count: { userId: 'desc' } },
+        take: 5,
+      }),
+    ]);
+    const ids = byUser.map((u) => u.userId!).filter(Boolean);
+    const people = ids.length
+      ? await this.prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true, username: true } })
+      : [];
+    const byId = new Map(people.map((p) => [p.id, p]));
+    return {
+      total,
+      byAction: byAction.map((a) => ({ action: a.action, count: a._count._all })).sort((a, b) => b.count - a.count),
+      topActors: byUser.map((u) => ({
+        userId: u.userId!,
+        fullName: byId.get(u.userId!)?.fullName ?? '—',
+        username: byId.get(u.userId!)?.username ?? '',
+        count: u._count.userId,
+      })),
+    };
+  }
+
+  // The same entries as a CSV file (after review, 19 Oct 2026): newest first,
+  // at most EXPORT_MAX rows (the file says when it was cut short). Times in
+  // Libya's time. The export itself is in the audit log (@AuditedExport).
+  async exportCsv(query: AuditQueryDto): Promise<{ csv: string; truncated: boolean }> {
+    const EXPORT_MAX = 10_000;
+    const where = this.whereOf(query);
+    const rows = await this.prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: EXPORT_MAX + 1,
+      include: { user: { select: { fullName: true, username: true } } },
+    });
+    const truncated = rows.length > EXPORT_MAX;
+    const page = rows.slice(0, EXPORT_MAX);
+    const labels = await this.entityLabels(page);
+    const when = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Tripoli', dateStyle: 'short', timeStyle: 'medium' });
+    const cell = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v);
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['الوقت (ليبيا)', 'الفاعل', 'اسم المستخدم', 'الإجراء', 'نوع السجل', 'السجل', 'المعرّف', 'العنوان', 'الجهاز', 'قبل', 'بعد'];
+    const lines = page.map((r) =>
+      [
+        when.format(r.createdAt),
+        r.user?.fullName ?? '',
+        r.user?.username ?? '',
+        r.action,
+        r.entityType,
+        labels.get(`${r.entityType}:${r.entityId}`) ?? '',
+        r.entityId,
+        r.ipAddress ?? '',
+        r.userAgent ?? '',
+        r.oldValue,
+        r.newValue,
+      ]
+        .map(cell)
+        .join(','),
+    );
+    if (truncated) lines.push(cell(`… قُطع الملف عند ${EXPORT_MAX} إدخال؛ ضيّق التصفية لرؤية الباقي.`));
+    // BOM first, so Excel opens the Arabic correctly.
+    return { csv: '﻿' + [header.map(cell).join(','), ...lines].join('\r\n') + '\r\n', truncated };
   }
 
   // What each entry is about, by name: the person, station, vehicle… as it is

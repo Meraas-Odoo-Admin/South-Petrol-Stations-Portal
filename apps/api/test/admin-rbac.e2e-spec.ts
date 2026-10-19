@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Item 4 (RBAC gating on every new admin endpoint from this round, tested
 // against the actual permission grants, not assumed). Mirrors the
@@ -146,7 +147,7 @@ describe('Admin panel RBAC (e2e)', () => {
     const allUserIds = Object.values(userIds);
     const allRoleIds = Object.values(roleIds);
     await prisma.standingException.deleteMany({ where: { grantedById: { in: allUserIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });

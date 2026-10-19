@@ -23,12 +23,14 @@ import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPag
 import { MunicipalityDetailPage } from './features/admin/MunicipalityDetailPage';
 import { ManagePlacesPage } from './features/places/ManagePlacesPage';
 import { StationCreatePage, StationManagePage } from './features/places/StationManagePage';
+import { StationMonitorPage, StationsMonitoringPage } from './features/monitoring/StationsMonitoringPage';
 import { OfficeCreatePage, OfficeManagePage } from './features/places/OfficeManagePage';
 import { MyOfficePage, MyStationPage } from './features/places/MyPlacePages';
 import { EmployeeActivityPage } from './features/regreports/EmployeeActivityPage';
 import { RolesReportsPage } from './features/reports/RolesReportsPage';
 import { useAuth } from './features/auth/AuthProvider';
 import { NAV_ACCESS, singleDestination } from './lib/navAccess';
+import { CitizenCheckPage } from './features/citizen/CitizenCheckPage';
 
 // Route structure mirrors backend modules, per docs/IMPLEMENTATION_PLAN.md
 // §9. /fillups/new is the recording screen (create only — the exceptions
@@ -117,6 +119,8 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Public: the citizen checks their own card, no account (after review, 19 Oct 2026). */}
+          <Route path="/check" element={<CitizenCheckPage />} />
           <Route element={<RequireAuth />}>
             {/* Deliberately OUTSIDE <Layout>: this is the forced first-login
                 screen (artboard 3c), meant to be a dedicated,
@@ -156,6 +160,9 @@ function App() {
               <Route path="/manage/stations/:stationId" element={<Gate allow={NAV_ACCESS.manage}><StationManagePage /></Gate>} />
               <Route path="/manage/offices/new" element={<Gate allow={(h) => h('registration_stations:manage')}><OfficeCreatePage /></Gate>} />
               <Route path="/manage/offices/:officeId" element={<Gate allow={NAV_ACCESS.manage}><OfficeManagePage /></Gate>} />
+              {/* «مراقبة المحطات»: the stations' fuel (after review, 19 Oct 2026). */}
+              <Route path="/monitoring" element={<Gate allow={NAV_ACCESS.monitoring}><StationsMonitoringPage /></Gate>} />
+              <Route path="/monitoring/stations/:stationId" element={<Gate allow={NAV_ACCESS.monitoring}><StationMonitorPage /></Gate>} />
               {/* A supervisor's own station, an office manager's own office. */}
               <Route path="/my-station" element={<Gate allow={NAV_ACCESS.myStation}><MyStationPage /></Gate>} />
               <Route path="/my-office" element={<Gate allow={NAV_ACCESS.myOffice}><MyOfficePage /></Gate>} />

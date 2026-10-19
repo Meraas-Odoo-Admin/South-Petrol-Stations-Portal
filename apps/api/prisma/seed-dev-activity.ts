@@ -26,6 +26,7 @@ import { devScriptRefusal } from '../src/common/utils/local-database';
 import { tripoliDay } from '../src/common/utils/grace-stage';
 import { addDays, tripoliMidnight } from '../src/common/utils/tripoli';
 import { computeLevel, levelAt, type FuelEntryRaw } from '../src/fuel-stock/stock-level';
+import { deleteAuditRows } from './audit-removal';
 
 const SYN = '[synthetic]';
 const DAYS = 21;
@@ -95,7 +96,7 @@ async function resetSynthetic(prisma: PrismaClient) {
   }
   await prisma.stationFuelStorage.deleteMany({ where: { createdById: { in: userIds } } });
   await prisma.notification.deleteMany({ where: { dedupeKey: { startsWith: 'syn-' } } });
-  await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { entityId: { startsWith: 'syn_' } }] } });
+  await deleteAuditRows(prisma, { where: { OR: [{ userId: { in: userIds } }, { entityId: { startsWith: 'syn_' } }] } });
   await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });

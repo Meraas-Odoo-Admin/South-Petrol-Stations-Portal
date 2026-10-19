@@ -3,8 +3,6 @@ import { isAxiosError } from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BOOKLET_HELP,
-  VEHICLE_COLORS,
-  VEHICLE_COLOR_OTHER,
   VEHICLE_FUEL_TYPES,
   VEHICLE_FUEL_TYPE_LABELS_AR,
   checkBooklet,
@@ -12,7 +10,7 @@ import {
   checkColor,
   checkMakeOrModel,
   checkManufactureYear,
-  manufactureYearOptions,
+  cleanDigits,
   normalizeBooklet,
   normalizeChassis,
   normalizePlate,
@@ -30,6 +28,7 @@ import { PLATE_DIGIT_GROUPS } from '../../lib/digitBoxGroups';
 import { formatLicensePlate, restrictToChassisNumber, restrictToRegistrationBooklet } from '../../lib/libyanFormats';
 import { focusField } from '../../lib/focusField';
 import type { VehicleBasicInfo } from './types';
+import { plateSharingMessage } from './plateSharing';
 
 interface VehicleEditFormProps {
   vehicle: VehicleBasicInfo;
@@ -76,10 +75,8 @@ export function VehicleEditForm({ vehicle, canEditIdentity, canEditDetails, onDo
   // Details
   const [make, setMake] = useState(vehicle.make ?? '');
   const [model, setModel] = useState(vehicle.model ?? '');
-  const startColor = vehicle.color ?? '';
-  const known = (VEHICLE_COLORS as readonly string[]).includes(startColor);
-  const [colorChoice, setColorChoice] = useState(startColor === '' ? '' : known ? startColor : VEHICLE_COLOR_OTHER);
-  const [colorOther, setColorOther] = useState(known ? '' : startColor);
+  // After review (19 Oct 2026): colour and year are typed, as at registration.
+  const [color, setColor] = useState(vehicle.color ?? '');
   const [manufactureYear, setManufactureYear] = useState(vehicle.manufactureYear?.toString() ?? '');
   const [fuelType, setFuelType] = useState<VehicleFuelTypeKey | ''>(vehicle.fuelType ?? '');
 
@@ -90,9 +87,6 @@ export function VehicleEditForm({ vehicle, canEditIdentity, canEditDetails, onDo
 
   // Phase 7: the year is picked from a list, newest first. A year stored
   // before the list existed is offered too, so the form never drops it.
-  const yearOptions = manufactureYearOptions();
-  if (vehicle.manufactureYear && !yearOptions.includes(vehicle.manufactureYear)) yearOptions.push(vehicle.manufactureYear);
-  const color = colorChoice === VEHICLE_COLOR_OTHER ? colorOther : colorChoice;
   const typeName = (id: string) =>
     typeLookup.items?.find((t) => t.id === id)?.name ?? (id === vehicle.vehicleTypeId ? vehicle.vehicleType?.name : undefined) ?? '—';
 
@@ -163,10 +157,17 @@ export function VehicleEditForm({ vehicle, canEditIdentity, canEditDetails, onDo
     },
     onError: (err) => {
       setConfirming(null);
-      const body = isAxiosError(err) ? (err.response?.data as { message?: unknown; details?: { field?: string } } | undefined) : undefined;
+      const body = isAxiosError(err)
+        ? (err.response?.data as { message?: unknown; details?: { field?: string; limit?: number; otherType?: string | null; vehicle?: string } } | undefined)
+        : undefined;
+      const sharing = plateSharingMessage(body?.message, body?.details);
       const field = body?.details?.field;
       setFailure(
-        body?.message === 'IDENTITY_IN_USE'
+        sharing
+          ? sharing
+          : body?.message === 'OWNER_VEHICLE_LIMIT'
+          ? `المالك الجديد مسجّل له الحد الأقصى المسموح من المركبات (${body.details?.limit ?? '—'}).`
+          : body?.message === 'IDENTITY_IN_USE'
           ? `${field === 'currentPlate' ? 'رقم اللوحة' : field === 'chassisNumber' ? 'رقم الشاصي' : 'رقم الكتيب'} مستخدم لمركبة أخرى. راجع الرقم.`
           : 'تعذر حفظ التعديلات. حاول مرة أخرى.',
       );
@@ -281,46 +282,26 @@ export function VehicleEditForm({ vehicle, canEditIdentity, canEditDetails, onDo
         <>
           <TextField label="الصانع (كما في الدفتر)" data-testid="vehicle-edit-make" placeholder="مثال: تويوتا" value={make} onChange={(e) => setMake(e.target.value)} error={errors.make} />
           <TextField label="الطراز (كما في الدفتر)" data-testid="vehicle-edit-model" placeholder="مثال: كامري" value={model} onChange={(e) => setModel(e.target.value)} error={errors.model} />
-          <div>
-            <label htmlFor="edit-color" className={LABEL}>
-              اللون
-            </label>
-            <select id="edit-color" data-testid="vehicle-edit-color" value={colorChoice} onChange={(e) => setColorChoice(e.target.value)} className={SELECT_CLASS}>
-              <option value="">— اختر —</option>
-              {VEHICLE_COLORS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-              <option value={VEHICLE_COLOR_OTHER}>{VEHICLE_COLOR_OTHER}</option>
-            </select>
-            {colorChoice === VEHICLE_COLOR_OTHER && (
-              <div className="mt-2">
-                <TextField label="اكتب اللون" value={colorOther} onChange={(e) => setColorOther(e.target.value)} />
-              </div>
-            )}
-            {errors.color && <p role="alert" className={ERROR}>{errors.color}</p>}
-          </div>
-          <div>
-            <label htmlFor="edit-year" className={LABEL}>
-              سنة الصنع
-            </label>
-            <select
-              id="edit-year"
-              data-testid="vehicle-edit-manufactureYear"
-              value={manufactureYear}
-              onChange={(e) => setManufactureYear(e.target.value)}
-              className={SELECT_CLASS}
-            >
-              <option value="">— اختر —</option>
-              {yearOptions.map((year) => (
-                <option key={year} value={String(year)}>
-                  {year}
-                </option>
-              ))}
-            </select>
-            {errors.manufactureYear && <p role="alert" className={ERROR}>{errors.manufactureYear}</p>}
-          </div>
+          <TextField
+            label="اللون"
+            data-testid="vehicle-edit-color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            error={errors.color}
+            placeholder="مثال: أبيض"
+            maxLength={30}
+          />
+          <TextField
+            label="سنة الصنع"
+            data-testid="vehicle-edit-manufactureYear"
+            value={manufactureYear}
+            onChange={(e) => setManufactureYear(cleanDigits(e.target.value).slice(0, 4))}
+            error={errors.manufactureYear}
+            placeholder="مثال: 2018"
+            inputMode="numeric"
+            maxLength={4}
+            ltr
+          />
           <div>
             <label htmlFor="edit-fuel" className={LABEL}>
               نوع وقود المركبة

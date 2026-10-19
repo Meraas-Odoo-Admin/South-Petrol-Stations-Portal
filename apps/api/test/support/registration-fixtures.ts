@@ -39,6 +39,8 @@ export function vehicleBody<T extends Record<string, unknown>>(overrides: T) {
     color: 'ابيض',
     manufactureYear: 2020,
     fuelType: 'PETROL',
+    // Required (after review, 19 Oct 2026); made by test/global-setup.ts.
+    vehicleTypeId: process.env.E2E_VEHICLE_TYPE_ID,
     ...overrides,
   };
 }

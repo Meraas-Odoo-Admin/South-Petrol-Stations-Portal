@@ -12,6 +12,7 @@ import {
   RecordDeliveryDto,
   ResetLevelDto,
   StockEntriesQueryDto,
+  StockOverviewQueryDto,
   StockVisibilityDto,
 } from './dto/fuel-stock.dto';
 
@@ -30,6 +31,14 @@ export class FuelStockController {
     return this.stock.levels(stationId, actor.id);
   }
 
+  // «مراقبة المحطات» (after review, 19 Oct 2026): every station in scope with
+  // its tanks, today's and the week's dispensing, and the last delivery.
+  @RequirePermission('fuel_stock:read')
+  @Get('fuel-stock/overview')
+  overview(@Query() query: StockOverviewQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.stock.overview(query, actor.id);
+  }
+
   @RequirePermission('fuel_stock:read')
   @Get('stations/:stationId/fuel-stock/entries')
   entries(
@@ -40,7 +49,7 @@ export class FuelStockController {
     return this.stock.listEntries(stationId, query, actor.id);
   }
 
-  @RequirePermission('fuel_stock:manage')
+  @RequirePermission('fuel_stock:configure')
   @Put('stations/:stationId/fuel-stock/:fuelType/storage')
   configure(
     @Param('stationId') stationId: string,
@@ -51,7 +60,7 @@ export class FuelStockController {
     return this.stock.configure(stationId, fuelType, dto, actor.id);
   }
 
-  @RequirePermission('fuel_stock:manage')
+  @RequirePermission('fuel_stock:deliver')
   @Post('stations/:stationId/fuel-stock/:fuelType/deliveries')
   deliver(
     @Param('stationId') stationId: string,
@@ -62,13 +71,13 @@ export class FuelStockController {
     return this.stock.recordDelivery(stationId, fuelType, dto, actor.id);
   }
 
-  @RequirePermission('fuel_stock:manage')
+  @RequirePermission('fuel_stock:deliver')
   @Post('fuel-stock/entries/:id/corrections')
   correct(@Param('id') id: string, @Body() dto: CorrectDeliveryDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.stock.correctDelivery(id, dto, actor.id);
   }
 
-  @RequirePermission('fuel_stock:manage')
+  @RequirePermission('fuel_stock:reset')
   @Post('stations/:stationId/fuel-stock/:fuelType/reset')
   reset(
     @Param('stationId') stationId: string,
@@ -79,7 +88,9 @@ export class FuelStockController {
     return this.stock.reset(stationId, fuelType, dto, actor.id);
   }
 
-  @RequirePermission('fuel_stock:manage')
+  // The switch is gone from the screens (after review, 19 Oct 2026: station
+  // employees see no stock at all); the endpoint stays for the record.
+  @RequirePermission('fuel_stock:configure')
   @Patch('stations/:stationId/stock-visibility')
   visibility(
     @Param('stationId') stationId: string,

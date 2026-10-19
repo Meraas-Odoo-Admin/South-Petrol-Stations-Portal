@@ -8,6 +8,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthService } from '../src/auth/auth.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Registration pivot, phase 4b — accounts. Every rule here is enforced by the
 // API, so each is exercised through the real HTTP endpoints with real tokens:
@@ -174,7 +175,7 @@ describe('Phase 4b — accounts (e2e)', () => {
       select: { id: true },
     });
     const ids = allUsers.map((u) => u.id);
-    await prisma.auditLog.deleteMany({ where: { OR: [{ userId: { in: ids } }, { entityId: { in: ids } }] } });
+    await deleteAuditRows(prisma, { where: { OR: [{ userId: { in: ids } }, { entityId: { in: ids } }] } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: ids } } });
@@ -183,7 +184,7 @@ describe('Phase 4b — accounts (e2e)', () => {
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: { in: roleIds } } });
     await prisma.role.deleteMany({ where: { id: { in: roleIds } } });
-    await prisma.auditLog.deleteMany({ where: { entityId: { in: [municipalityId, stageMunicipalityId] } } });
+    await deleteAuditRows(prisma, { where: { entityId: { in: [municipalityId, stageMunicipalityId] } } });
     await prisma.registrationStation.deleteMany({ where: { id: { in: Object.values(regIds) } } });
     await prisma.station.deleteMany({ where: { id: { in: Object.values(stationIds) } } });
     await prisma.company.delete({ where: { id: companyId } });

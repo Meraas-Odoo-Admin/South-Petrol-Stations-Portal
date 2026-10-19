@@ -8,6 +8,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { RbacService } from '../src/rbac/rbac.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // The acceptance bar for M1 (docs/IMPLEMENTATION_PLAN.md §8, §11): a
 // station_employee scoped to one station must not be able to read another
@@ -193,7 +194,7 @@ describe('Station scoping boundary (e2e)', () => {
 
   afterAll(async () => {
     const allUserIds = [employeeUserId, supervisorUserId, noScopeUserId, unrestrictedUserId];
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });

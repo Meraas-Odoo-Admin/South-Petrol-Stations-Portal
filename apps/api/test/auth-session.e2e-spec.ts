@@ -10,6 +10,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { REFRESH_COOKIE_NAME } from '../src/auth/auth.controller';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // login/refresh/logout are explicitly named in the M1 checklist
 // (docs/IMPLEMENTATION_PLAN.md §11), but only login's happy path had any
@@ -141,7 +142,7 @@ describe('Auth session lifecycle (e2e)', () => {
 
   afterAll(async () => {
     const allUserIds = [refreshUserId, logoutUserId, lockoutUserId, meUserId, changePwUserId, pendingUserId];
-    await prisma.auditLog.deleteMany({ where: { userId: { in: allUserIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: allUserIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userStationScope.deleteMany({ where: { userId: { in: allUserIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });

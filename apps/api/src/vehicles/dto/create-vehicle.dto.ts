@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsOptional, IsString, MinLength, IsNotEmpty } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { VehicleUsageType } from '@prisma/client';
 import { normalizeBooklet, normalizeChassis, VEHICLE_FUEL_TYPES } from '@fuel-tracking/shared-types';
@@ -63,10 +63,12 @@ export class CreateVehicleDto {
   @IsBookletNumber()
   registrationBooklet!: string;
 
-  @ApiProperty({ required: false, description: 'VehicleType lookup row id — see GET /vehicle-types.' })
-  @IsOptional()
+  // Required (after review, 19 Oct 2026): every vehicle has a type — the
+  // plate-sharing rule (two vehicles at most, of different types) needs it.
+  @ApiProperty({ description: 'VehicleType lookup row id — see GET /vehicle-types.' })
   @IsString()
-  vehicleTypeId?: string;
+  @IsNotEmpty()
+  vehicleTypeId!: string;
 
   // Free text, typed exactly as written in the booklet. No lists.
   @ApiProperty({ description: 'The make (الصانع), as written in the booklet.' })

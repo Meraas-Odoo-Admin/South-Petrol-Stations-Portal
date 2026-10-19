@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class CreateMunicipalityDto {
   @ApiProperty()
@@ -8,10 +8,11 @@ export class CreateMunicipalityDto {
   @MaxLength(80)
   name!: string;
 
-  // Optional card-number prefix (SBH for سبها): 2-5 uppercase Latin letters.
-  // A card can't be issued in a municipality until it has one.
-  @ApiProperty({ required: false, example: 'SBH' })
-  @IsOptional()
+  // The card-number prefix (SBH for سبها): 2-5 uppercase Latin letters.
+  // Required (after review, 19 Oct 2026): every municipality can issue cards
+  // from the day it is created.
+  @ApiProperty({ example: 'SBH' })
+  @IsString()
   @Matches(/^[A-Z]{2,5}$/, { message: 'الرمز يتكوّن من 2 إلى 5 أحرف إنجليزية كبيرة.' })
-  code?: string;
+  code!: string;
 }

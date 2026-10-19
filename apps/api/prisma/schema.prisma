@@ -693,7 +693,9 @@ model VehicleType {
 model Vehicle {
   id                                String                  @id @default(cuid())
   internalCode                      String                  @unique // fixed forever, even if the plate changes
-  currentPlate                      String                  @unique
+  // After review (19 Oct 2026): NOT unique — two vehicles may share a plate
+  // number; the chassis number (unique) tells them apart.
+  currentPlate                      String
   // Registration pivot, phase 4a: currentPlate in its canonical form
   // `<city>-<serial>` from the one shared normalizePlate() (Western digits,
   // any separator read as one dash, no leading zeros — `8-1234567`,
@@ -757,6 +759,7 @@ model Vehicle {
   updatedAt                         DateTime                @updatedAt
 
   @@index([normalizedPlate])
+  @@index([currentPlate])
   @@index([registeredAtRegistrationStationId, createdAt]) // vehicles registered per office
   @@index([registeredById, createdAt])
 }
@@ -963,6 +966,9 @@ model FillUpTransaction {
   // Phase 4a: allowance history of an unregistered plate, per municipality.
   @@index([municipalityId, normalizedPlate, occurredAt])
   @@index([driverId, occurredAt])
+  // A station's tank: what was dispensed of one fuel since a moment (after
+  // review, 19 Oct 2026: «مراقبة المحطات» reads it for every station).
+  @@index([stationId, fuelType, occurredAt])
   @@index([stationId, occurredAt])
   @@index([municipalityId, occurredAt, stationId]) // deadline readiness: per day, per station
 }

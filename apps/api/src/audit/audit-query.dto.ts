@@ -13,6 +13,14 @@ export class AuditQueryDto extends PaginationQueryDto {
   @IsString()
   userId?: string;
 
+  // Everything that happened to one record (a vehicle, an account, a station…),
+  // with entityType (after review, 19 Oct 2026).
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  entityId?: string;
+
   // One action, or several separated by commas (a group on the screen, such
   // as every sign-in event).
   @ApiProperty({ required: false, example: 'LOGIN_FAILED,ACCOUNT_LOCKED' })

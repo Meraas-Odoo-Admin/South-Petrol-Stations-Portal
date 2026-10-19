@@ -50,10 +50,11 @@ const CHANGE_TYPE_FIELD: Record<
   [VehicleChangeType.VEHICLE_TYPE_CHANGE]: 'vehicleTypeId',
 };
 
+// After review (19 Oct 2026): the plate is not among them — two vehicles may
+// share a plate number; the chassis number tells them apart.
 const UNIQUE_CHANGE_TYPES: Set<VehicleChangeType> = new Set([
   VehicleChangeType.CHASSIS_CHANGE,
   VehicleChangeType.BOOKLET_CHANGE,
-  VehicleChangeType.PLATE_CHANGE,
 ]);
 
 // Prisma's findUnique `where` requires a literal known unique-field key —
@@ -109,6 +110,42 @@ function buildChangeUpdateData(changeType: VehicleChangeType, value: string): Pr
       return { usageType: value as VehicleUsageType };
     case VehicleChangeType.VEHICLE_TYPE_CHANGE:
       return { vehicleType: { connect: { id: value } } };
+  }
+}
+
+// After review (19 Oct 2026), the plate-sharing rules:
+//  - a plate number is shared by two vehicles at most (it repeats once);
+//  - the two must be of different vehicle types — so a vehicle sharing a
+//    plate must have a type, and the other one must have one too.
+// Checked inside the transaction that writes the plate or the type, after the
+// per-plate lock (re-entrant, the same one registration takes), so two
+// registrations at once can't both slip in.
+async function assertPlateMayBeShared(
+  tx: Prisma.TransactionClient,
+  normalizedPlate: string | null,
+  vehicleTypeId: string | null,
+  exceptVehicleId?: string,
+) {
+  if (!normalizedPlate) return;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'plate:' + normalizedPlate}))`;
+  const others = await tx.vehicle.findMany({
+    where: { normalizedPlate, ...(exceptVehicleId ? { id: { not: exceptVehicleId } } : {}) },
+    select: { internalCode: true, vehicleTypeId: true, vehicleType: { select: { name: true } } },
+    take: 3,
+  });
+  if (others.length === 0) return;
+  if (others.length >= 2) {
+    throw new ConflictException({ message: 'PLATE_SHARED_LIMIT', details: { vehicles: others.map((o) => o.internalCode) } });
+  }
+  const other = others[0]!;
+  if (!other.vehicleTypeId) {
+    throw new ConflictException({ message: 'PLATE_SHARED_OTHER_NO_TYPE', details: { vehicle: other.internalCode } });
+  }
+  if (!vehicleTypeId) {
+    throw new ConflictException({ message: 'PLATE_SHARED_TYPE_REQUIRED', details: { otherType: other.vehicleType?.name ?? null } });
+  }
+  if (vehicleTypeId === other.vehicleTypeId) {
+    throw new ConflictException({ message: 'PLATE_SHARED_SAME_TYPE', details: { otherType: other.vehicleType?.name ?? null } });
   }
 }
 
@@ -220,20 +257,26 @@ export class VehiclesService {
     });
   }
 
-  async findDuplicates(values: DuplicateCheckQueryDto): Promise<{ conflicts: VehicleDuplicate[] }> {
+  // `conflicts` refuse the registration (the chassis number, the booklet);
+  // `samePlate` only warns (after review, 19 Oct 2026): a plate number may
+  // belong to more than one vehicle, told apart by their chassis numbers.
+  async findDuplicates(
+    values: DuplicateCheckQueryDto,
+  ): Promise<{
+    conflicts: VehicleDuplicate[];
+    samePlate: Array<VehicleDuplicate['vehicle'] & { chassisNumber: string | null; vehicleType: { name: string } | null }>;
+  }> {
     const select = { id: true, internalCode: true, currentPlate: true } as const;
     const checks: Array<[VehicleDuplicate['field'], Promise<VehicleDuplicate['vehicle'] | null>]> = [];
-    if (values.currentPlate) {
-      // By the normalized plate (and the stored text, for rows that predate
-      // the column): `8-1234567`, `8 1234567` and `٨-١٢٣٤٥٦٧` are one plate.
-      checks.push([
-        'currentPlate',
-        this.prisma.vehicle.findFirst({
+    // By the normalized plate (and the stored text, for rows that predate
+    // the column): `8-1234567`, `8 1234567` and `٨-١٢٣٤٥٦٧` are one plate.
+    const samePlate = values.currentPlate
+      ? await this.prisma.vehicle.findMany({
           where: { OR: plateMatchClauses(values.currentPlate) },
-          select,
-        }),
-      ]);
-    }
+          select: { ...select, chassisNumber: true, vehicleType: { select: { name: true } } },
+          take: 5,
+        })
+      : [];
     if (values.chassisNumber) {
       checks.push(['chassisNumber', this.prisma.vehicle.findUnique({ where: { chassisNumber: values.chassisNumber }, select })]);
     }
@@ -250,7 +293,7 @@ export class VehiclesService {
         conflicts.push({ field, vehicle });
       }
     }
-    return { conflicts };
+    return { conflicts, samePlate };
   }
 
   // Round 4 feedback item 5: the vehicle detail page shows "X من Y تعبئات
@@ -325,6 +368,13 @@ export class VehiclesService {
       if (!owner) {
         throw new NotFoundException('Vehicle owner not found.');
       }
+      await this.assertOwnerHasRoom(dto.ownerId);
+    }
+
+    // Required and real (after review, 19 Oct 2026): an active vehicle type.
+    const vehicleType = await this.prisma.vehicleType.findUnique({ where: { id: dto.vehicleTypeId }, select: { isActive: true } });
+    if (!vehicleType || !vehicleType.isActive) {
+      throw new BadRequestException('VEHICLE_TYPE_INVALID');
     }
 
     // The DTO already refuses a plate that can't be split into a city code
@@ -339,18 +389,11 @@ export class VehiclesService {
       // (FillUpsService takes the same per-plate lock), so a fill-up can't
       // slip in between the link below and the commit and stay unlinked.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'plate:' + normalizedPlate}))`;
-      const clash = await tx.vehicle.findFirst({
-        where: { normalizedPlate },
-        select: { id: true, internalCode: true, currentPlate: true },
-      });
-      if (clash) {
-        // On its own connection, so the record survives this transaction's rollback.
-        await this.recordDuplicateCatch(registrationStationId, actorId, ['currentPlate']);
-        throw new ConflictException({
-          message: 'VEHICLE_DUPLICATE',
-          details: { conflicts: [{ field: 'currentPlate', vehicle: clash }] },
-        });
-      }
+      // After review (19 Oct 2026): another vehicle may already have this plate
+      // number. Then earlier unregistered fill-ups of the plate are not given
+      // to the new one (they may be the other vehicle's).
+      await assertPlateMayBeShared(tx, normalizedPlate, dto.vehicleTypeId ?? null);
+      const plateShared = Boolean(await tx.vehicle.findFirst({ where: { normalizedPlate }, select: { id: true } }));
 
       const vehicle = await tx.vehicle.create({
         data: {
@@ -370,10 +413,12 @@ export class VehiclesService {
       // transaction, so its history and its limits carry on without a gap.
       // ONLY the vehicle link is added — typedPlate, identifiedBy and the
       // stamped municipality stay exactly as recorded.
-      const linked = await tx.fillUpTransaction.updateMany({
-        where: { vehicleId: null, normalizedPlate },
-        data: { vehicleId: vehicle.id },
-      });
+      const linked = plateShared
+        ? { count: 0 }
+        : await tx.fillUpTransaction.updateMany({
+            where: { vehicleId: null, normalizedPlate },
+            data: { vehicleId: vehicle.id },
+          });
 
       // Seed the plate history with the vehicle's initial plate so
       // plate-change always has a current (validTo: null) row to close.
@@ -439,7 +484,18 @@ export class VehiclesService {
       [VehicleSortField.CURRENT_PLATE]: { currentPlate: 'asc' },
     };
 
+    // «لوحات مكررة»: the plates (normalized) that more than one vehicle has.
+    const repeatedPlates = query.duplicatePlate
+      ? (
+          await this.prisma.$queryRaw<Array<{ normalizedPlate: string }>>`
+            SELECT "normalizedPlate" FROM "Vehicle"
+            WHERE "normalizedPlate" IS NOT NULL
+            GROUP BY "normalizedPlate" HAVING COUNT(*) > 1`
+        ).map((r) => r.normalizedPlate)
+      : null;
+
     const where: Prisma.VehicleWhereInput = {
+        ...(repeatedPlates ? { normalizedPlate: { in: repeatedPlates } } : {}),
         internalCode: query.internalCode ? { contains: query.internalCode } : undefined,
         // Plates match on the normalized form too, so a plate typed with a
         // different separator or in Arabic-Indic digits still finds it.
@@ -493,7 +549,10 @@ export class VehiclesService {
       },
       vehicleType: { select: { id: true, name: true } },
     } satisfies Prisma.VehicleInclude;
-    const orderBy = sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT];
+    // Repeated plates: each plate's vehicles side by side.
+    const orderBy = repeatedPlates
+      ? [{ normalizedPlate: 'asc' as const }, { createdAt: 'asc' as const }]
+      : sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT];
     const skip = query.skip ?? 0;
     const take = query.take ?? 50;
 
@@ -544,6 +603,9 @@ export class VehiclesService {
         },
         vehicleType: { select: { id: true, name: true } },
         plateHistory: { orderBy: { validFrom: 'asc' } },
+        // After review (19 Oct 2026, oversight): who registered it, and where.
+        registeredBy: { select: { id: true, fullName: true, username: true } },
+        registeredAtRegistrationStation: { select: { id: true, name: true } },
       },
     });
     if (!vehicle) {
@@ -595,6 +657,28 @@ export class VehiclesService {
     });
   }
 
+  // After review (19 Oct 2026): «ضوابط المالك» — an owner may have at most
+  // registration.max_vehicles_per_owner vehicles (0 = no limit). Checked
+  // whenever a vehicle is given to an owner: registering it, the direct edit,
+  // and approving an older owner-change request. `exceptVehicleId`: the vehicle
+  // being moved, if it is already counted (it never is: it belongs to someone else).
+  private async assertOwnerHasRoom(ownerId: string, exceptVehicleId?: string) {
+    let max = 0;
+    try {
+      max = await this.settings.getNumber('registration.max_vehicles_per_owner');
+    } catch {
+      // A database the migration has not reached yet: no limit, as before.
+      return;
+    }
+    if (!Number.isFinite(max) || max <= 0) return;
+    const count = await this.prisma.vehicle.count({
+      where: { ownerId, ...(exceptVehicleId ? { id: { not: exceptVehicleId } } : {}) },
+    });
+    if (count >= max) {
+      throw new ConflictException({ message: 'OWNER_VEHICLE_LIMIT', details: { limit: max, count } });
+    }
+  }
+
   // After review (18 Oct 2026): «تعديل» changes the identity fields directly
   // for whoever may approve such changes — no request. Each field sent and
   // different is checked with the registration's rules, must not belong to
@@ -630,6 +714,7 @@ export class VehiclesService {
     if (dto.ownerId !== undefined && dto.ownerId !== (before.ownerId ?? '')) {
       const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: dto.ownerId } });
       if (!owner) throw new NotFoundException('Vehicle owner not found.');
+      await this.assertOwnerHasRoom(dto.ownerId, id);
       changes.push({ type: VehicleChangeType.OWNER_CHANGE, field: 'ownerId', from: before.ownerId, to: dto.ownerId });
     }
     if (dto.vehicleTypeId !== undefined && dto.vehicleTypeId !== (before.vehicleTypeId ?? '')) {
@@ -648,6 +733,16 @@ export class VehiclesService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      const plateChange = changes.find((c) => c.type === VehicleChangeType.PLATE_CHANGE);
+      const typeChange = changes.find((c) => c.type === VehicleChangeType.VEHICLE_TYPE_CHANGE);
+      if (plateChange || typeChange) {
+        await assertPlateMayBeShared(
+          tx,
+          normalizePlate(plateChange ? plateChange.to : before.currentPlate),
+          typeChange ? typeChange.to : before.vehicleTypeId,
+          id,
+        );
+      }
       for (const change of changes) await applyIdentityChange(tx, id, change.type, change.to);
       await this.audit.log(
         {
@@ -679,14 +774,10 @@ export class VehiclesService {
     if (!newNormalized) {
       throw new BadRequestException('PLATE_INVALID');
     }
-    const existingByPlate = await this.prisma.vehicle.findFirst({
-      where: { id: { not: id }, OR: plateMatchClauses(dto.newPlate) },
-    });
-    if (existingByPlate) {
-      throw new ConflictException('currentPlate is already in use by another vehicle.');
-    }
+    // After review (19 Oct 2026): another vehicle may have this plate number too.
 
     return this.prisma.$transaction(async (tx) => {
+      await assertPlateMayBeShared(tx, newNormalized, vehicle.vehicleTypeId, id);
       const currentHistoryRow = await tx.vehiclePlateHistory.findFirst({
         where: { vehicleId: id, validTo: null },
         orderBy: { validFrom: 'desc' },
@@ -770,6 +861,7 @@ export class VehiclesService {
       if (!owner) {
         throw new NotFoundException('Vehicle owner not found.');
       }
+      await this.assertOwnerHasRoom(dto.requestedValue, vehicleId);
     }
     if (dto.changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
       const vehicleType = await this.prisma.vehicleType.findUnique({ where: { id: dto.requestedValue } });
@@ -799,6 +891,9 @@ export class VehiclesService {
 
     if (currentValue === null) {
       const updated = await this.prisma.$transaction(async (tx) => {
+        if (dto.changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
+          await assertPlateMayBeShared(tx, vehicle.normalizedPlate, dto.requestedValue, vehicleId);
+        }
         const result = await tx.vehicle.update({
           where: { id: vehicleId },
           data: buildChangeUpdateData(dto.changeType, dto.requestedValue),
@@ -913,6 +1008,7 @@ export class VehiclesService {
       if (!owner) {
         throw new NotFoundException('Vehicle owner not found.');
       }
+      await this.assertOwnerHasRoom(request.requestedValue, request.vehicleId);
     }
     if (request.changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
       const vehicleType = await this.prisma.vehicleType.findUnique({ where: { id: request.requestedValue } });
@@ -922,6 +1018,19 @@ export class VehiclesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (request.changeType === VehicleChangeType.PLATE_CHANGE || request.changeType === VehicleChangeType.VEHICLE_TYPE_CHANGE) {
+        const current = await tx.vehicle.findUniqueOrThrow({
+          where: { id: request.vehicleId },
+          select: { normalizedPlate: true, vehicleTypeId: true },
+        });
+        const plateRequest = request.changeType === VehicleChangeType.PLATE_CHANGE;
+        await assertPlateMayBeShared(
+          tx,
+          plateRequest ? normalizePlate(request.requestedValue) : current.normalizedPlate,
+          plateRequest ? current.vehicleTypeId : request.requestedValue,
+          request.vehicleId,
+        );
+      }
       await applyIdentityChange(tx, request.vehicleId, request.changeType, request.requestedValue);
 
       const updatedRequest = await tx.vehicleChangeRequest.update({

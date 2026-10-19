@@ -8,6 +8,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
 import { nationalIdTail, vehicleBody } from './support/registration-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Registration pivot, phase 2 — the registration-station boundary test
 // (CLAUDE.md rule 3), the counterpart of station-scoping.e2e-spec.ts:
@@ -137,7 +138,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
     await prisma.vehiclePlateHistory.deleteMany({ where: { vehicle: { registeredById: registrarId } } });
     await prisma.vehicle.deleteMany({ where: { registeredById: registrarId } });
     if (ownerId) await prisma.vehicleOwner.deleteMany({ where: { id: ownerId } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
@@ -276,12 +277,13 @@ describe('Registration stations — scoping boundary (e2e)', () => {
       `/vehicles/duplicate-check?currentPlate=${plate}&chassisNumber=${chassis}&registrationBooklet=${booklet}`,
     );
     expect(check.status).toBe(200);
-    expect(check.body.conflicts.map((c: { field: string }) => c.field).sort()).toEqual(
-      ['chassisNumber', 'currentPlate', 'registrationBooklet'],
-    );
+    // After review (19 Oct 2026): the same plate is a notice (samePlate), not a
+    // clash — only the chassis number and the booklet refuse.
+    expect(check.body.conflicts.map((c: { field: string }) => c.field).sort()).toEqual(['chassisNumber', 'registrationBooklet']);
     for (const conflict of check.body.conflicts) {
       expect(conflict.vehicle).toEqual({ id: vehicleId, internalCode: vehicleInternalCode, currentPlate: plate });
     }
+    expect(check.body.samePlate.map((v: { id: string }) => v.id)).toContain(vehicleId);
 
     const clean = await asRegistrar('get', `/vehicles/duplicate-check?currentPlate=7-${randomDigits(7)}`);
     expect(clean.body.conflicts).toEqual([]);
@@ -291,12 +293,12 @@ describe('Registration stations — scoping boundary (e2e)', () => {
     const save = await asRegistrar(
       'post',
       '/vehicles',
-      vehicleBody({ registrationStationId: stations.inScope, ownerId, currentPlate: plate }),
+      vehicleBody({ registrationStationId: stations.inScope, ownerId, currentPlate: plate, chassisNumber: chassis }),
     );
     expect(save.status).toBe(409);
     expect(save.body.message).toBe('VEHICLE_DUPLICATE');
     expect(save.body.details.conflicts).toEqual([
-      { field: 'currentPlate', vehicle: { id: vehicleId, internalCode: vehicleInternalCode, currentPlate: plate } },
+      { field: 'chassisNumber', vehicle: { id: vehicleId, internalCode: vehicleInternalCode, currentPlate: plate } },
     ]);
 
     // A refused registration is a duplicate caught: recorded for the office report, with who and where.
@@ -305,7 +307,7 @@ describe('Registration stations — scoping boundary (e2e)', () => {
       where: { registrationStationId: stations.inScope, userId: registrarId },
       orderBy: { occurredAt: 'desc' },
     });
-    expect(row.fields).toEqual(['PLATE']);
+    expect(row.fields).toEqual(['CHASSIS']);
     expect(await prisma.auditLog.count({ where: { action: 'DUPLICATE_CAUGHT', entityId: stations.inScope, userId: registrarId } })).toBeGreaterThanOrEqual(1);
   });
 

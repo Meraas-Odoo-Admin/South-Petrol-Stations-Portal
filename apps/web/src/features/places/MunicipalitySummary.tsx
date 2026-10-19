@@ -10,7 +10,7 @@ import { SkeletonRows } from '../../components/design/Skeleton';
 interface SummaryResponse {
   municipality: { id: string; name: string };
   registration: { cardsToday: number; activeOffices: number; offices: number };
-  fuel: { stations: number; lowStockStations: number; unaccountedFuel: number; windowDays: number };
+  fuel: { stations: number; lowStockStations: number; dispensedToday: number };
 }
 
 function Figure({
@@ -82,14 +82,8 @@ export function PlaceSummaryRow({ municipalityId }: { municipalityId?: string })
           tone={f.lowStockStations > 0 ? 'attention' : 'good'}
           state={f.lowStockStations > 0 ? 'تحتاج توريدًا' : 'كلها سليمة'}
         />
-        <Figure
-          testId="summary-fuel-unaccounted"
-          label={`وقود غير مبرَّر (آخر ${f.windowDays} يومًا)`}
-          value={tall.format(f.unaccountedFuel)}
-          unit="لتر"
-          tone={f.unaccountedFuel > 0 ? 'attention' : 'good'}
-          state={f.unaccountedFuel > 0 ? 'تحتاج مراجعة' : 'مطابق'}
-        />
+        {/* After review (19 Oct 2026): in place of «وقود غير مبرَّر», which is gone. */}
+        <Figure testId="summary-dispensed-today" label="لترات صُرفت اليوم" value={tall.format(f.dispensedToday)} unit="لتر" />
       </div>
     </section>
   );

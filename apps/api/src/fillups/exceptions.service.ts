@@ -109,6 +109,7 @@ export class ExceptionsService {
         tx,
       );
     });
+    this.settings.invalidate();
     return this.getSettings(undefined, actorId);
   }
 

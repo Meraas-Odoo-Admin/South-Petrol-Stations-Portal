@@ -7,7 +7,7 @@ import { RbacService } from '../rbac/rbac.service';
 // Phase 5B: ONE notification service that features call. An event is one line
 // at its call site:
 //
-//   await this.notifications.notifyScope({ stationId }, ['fuel_stock:manage'], { kind, title, body, link });
+//   await this.notifications.notifyScope({ stationId }, ['notifications:station_events'], { kind, title, body, link });
 //
 // Who receives it is decided here, never by the caller, from two facts: the
 // recipient's SCOPE (explicit station / office / municipality rows) and the
@@ -343,6 +343,14 @@ export class NotificationsService {
         kind: 'MANAGER_LOCKED',
         title: `تكرر فشل الدخول على حساب المدير ${user.fullName}`,
       });
+    } else if (user.stationScope.length === 0 && user.registrationStationScope.length === 0) {
+      // After review (19 Oct 2026): an account tied to no place — a super
+      // admin — had nobody to tell. The other super admins are told now.
+      await this.notifyPermissionHolders(
+        'notifications:system_events',
+        { ...payload, kind: 'MANAGER_LOCKED', title: `تكرر فشل الدخول على حساب مدير النظام ${user.fullName}` },
+        user.id,
+      );
     }
   }
 

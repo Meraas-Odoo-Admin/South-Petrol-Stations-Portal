@@ -16,6 +16,7 @@ import {
   UNRESTRICTED_STATION_ACCESS_ROLES,
 } from '../prisma/rbac-catalog';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // Phase 5B — fuel storage, the notification bell and the role reports.
 //
@@ -201,7 +202,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     }
     await prisma.stationFuelStorage.deleteMany({ where: { stationId: { in: stationIds } } });
     await prisma.stationFuelAvailability.deleteMany({ where: { stationId: { in: stationIds } } });
-    await prisma.auditLog.deleteMany({
+    await deleteAuditRows(prisma, {
       where: { OR: [{ userId: { in: ids } }, { entityId: { in: [...ids, ...stationIds, m1, m2] } }] },
     });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
@@ -264,12 +265,13 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
   // ── storage ─────────────────────────────────────────────────────────────
 
   describe('storage and the computed level', () => {
-    it('only a supervisor sets up storage; an employee, a municipality manager and another station cannot', async () => {
+    it('only the municipality manager sets up storage; the supervisor, an employee and another municipality cannot', async () => {
       const body = { capacityLiters: 30000, openingLevelLiters: 10000 };
       await put('emp', storage(station.s1a) + '/storage', body).expect(403);
       await put('mm1', storage(station.s1a) + '/storage', body).expect(403);
       await put('supM2', storage(station.s1a) + '/storage', body).expect(403);
-      await put('sup', storage(station.s1a) + '/storage', body).expect(200);
+      await put('mm2', storage(station.s1a) + '/storage', body).expect(403);
+      await put('mm1', storage(station.s1a) + '/storage', body).expect(200);
     });
 
     it('level = opening + deliveries − dispensed, computed by the server', async () => {
@@ -278,7 +280,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       const before = start.detail.openingLevelLiters + start.detail.delivered - start.detail.dispensed;
       expect(start.level).toBe(before);
 
-      await post('sup', storage(station.s1a) + '/deliveries', {
+      await post('mm1', storage(station.s1a) + '/deliveries', {
         liters: 5000,
         truckPlate: '5-123456',
         waybillNumber: 'WB-1',
@@ -291,7 +293,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     });
 
     it('refuses a delivery dated before the opening moment (it is already inside the opening level)', async () => {
-      await post('sup', storage(station.s1a) + '/deliveries', {
+      await post('mm1', storage(station.s1a) + '/deliveries', {
         liters: 100,
         occurredAt: '2020-01-01T10:00:00.000Z',
         truckPlate: '5-000000',
@@ -299,21 +301,32 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       }).expect(400);
     });
 
+    it('refuses a delivery that would fill the tank past its capacity, and the supervisor records none', async () => {
+      const res = await post('mm1', storage(station.s1a) + '/deliveries', {
+        liters: 40000,
+        truckPlate: '5-999999',
+        waybillNumber: 'WB-BIG',
+      }).expect(400);
+      expect(res.body.message).toBe('DELIVERY_ABOVE_CAPACITY');
+      await post('sup', storage(station.s1a) + '/deliveries', { liters: 10, truckPlate: '5-999998', waybillNumber: 'WB-SUP' }).expect(403);
+    });
+
     it('the opening level is locked once something is recorded against it', async () => {
-      await put('sup', storage(station.s1a) + '/storage', { capacityLiters: 30000, openingLevelLiters: 9000 }).expect(409);
+      await put('mm1', storage(station.s1a) + '/storage', { capacityLiters: 30000, openingLevelLiters: 9000 }).expect(409);
       // The capacity alone can still be changed.
-      await put('sup', storage(station.s1a) + '/storage', { capacityLiters: 32000, openingLevelLiters: 10000 }).expect(200);
+      await put('mm1', storage(station.s1a) + '/storage', { capacityLiters: 32000, openingLevelLiters: 10000 }).expect(200);
     });
 
     it('a delivery is corrected, never edited: a linked entry with a reason, the original kept', async () => {
-      const made = await post('sup', storage(station.s1a) + '/deliveries', {
+      const made = await post('mm1', storage(station.s1a) + '/deliveries', {
         liters: 1000,
         truckPlate: '5-654321',
         waybillNumber: 'WB-2',
       }).expect(201);
       const before = (await level('sup', station.s1a)).level;
-      await post('sup', `/fuel-stock/entries/${made.body.id}/corrections`, { liters: 800 }).expect(400); // no reason
-      await post('sup', `/fuel-stock/entries/${made.body.id}/corrections`, { liters: 800, reason: 'خطأ في كتابة الكمية' }).expect(201);
+      await post('sup', `/fuel-stock/entries/${made.body.id}/corrections`, { liters: 800, reason: 'خطأ في كتابة الكمية' }).expect(403);
+      await post('mm1', `/fuel-stock/entries/${made.body.id}/corrections`, { liters: 800 }).expect(400); // no reason
+      await post('mm1', `/fuel-stock/entries/${made.body.id}/corrections`, { liters: 800, reason: 'خطأ في كتابة الكمية' }).expect(201);
       expect((await level('sup', station.s1a)).level).toBeCloseTo(before - 200, 3);
 
       const original = await prisma.fuelStockEntry.findUniqueOrThrow({ where: { id: made.body.id } });
@@ -339,7 +352,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
 
     it('audits set-up, delivery and correction', async () => {
       const actions = await prisma.auditLog.findMany({
-        where: { userId: userId.sup, action: { in: ['FUEL_STORAGE_SETUP', 'FUEL_DELIVERY', 'FUEL_DELIVERY_CORRECTION'] } },
+        where: { userId: userId.mm1, action: { in: ['FUEL_STORAGE_SETUP', 'FUEL_DELIVERY', 'FUEL_DELIVERY_CORRECTION'] } },
         select: { action: true },
       });
       expect(new Set(actions.map((a) => a.action))).toEqual(
@@ -348,7 +361,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     });
 
     it('does not block fill-ups when the level is at or below zero', async () => {
-      await put('supS1b', storage(station.s1b) + '/storage', { capacityLiters: 5000, openingLevelLiters: 50 }).expect(200);
+      await put('mm1', storage(station.s1b) + '/storage', { capacityLiters: 5000, openingLevelLiters: 50 }).expect(200);
       await fill('supS1b', station.s1b, 80).expect(201);
       await fill('supS1b', station.s1b, 80).expect(201);
       const l = await level('supS1b', station.s1b);
@@ -377,7 +390,8 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
 
     it('is enforced by the API when switched off, not only hidden by the screen', async () => {
       await patch('viewer', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(403);
-      await patch('sup', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(200);
+      await patch('sup', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(403);
+      await patch('mm1', `/stations/${station.s1a}/stock-visibility`, { show: false }).expect(200);
 
       const hidden = await get('viewer', `/stations/${station.s1a}/fuel-stock`).expect(200);
       expect(hidden.body.visible).toBe(false);
@@ -390,7 +404,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       const mmSees = await get('mm1', `/stations/${station.s1a}/fuel-stock`).expect(200);
       expect(mmSees.body.visible).toBe(true);
 
-      await patch('sup', `/stations/${station.s1a}/stock-visibility`, { show: true }).expect(200);
+      await patch('mm1', `/stations/${station.s1a}/stock-visibility`, { show: true }).expect(200);
     });
 
     it('stock of another station is out of reach for every scoped caller', async () => {
@@ -406,7 +420,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
     it('alerts when the level drops below 1,000 L, stays quiet after, and alerts again only after a refill', async () => {
       // A fresh station-fuel: diesel at s1a, opening 1500 L.
       await patch('sup', `/stations/${station.s1a}`, { fuelTypes: ['PETROL_95', 'DIESEL'] }).expect(200);
-      await put('sup', storage(station.s1a, 'DIESEL') + '/storage', { capacityLiters: 20000, openingLevelLiters: 1500 }).expect(200);
+      await put('mm1', storage(station.s1a, 'DIESEL') + '/storage', { capacityLiters: 20000, openingLevelLiters: 1500 }).expect(200);
 
       const lowFor = async (by: UserKey) =>
         (await notificationsOf(by, 'LOW_STOCK')).filter((n: { title: string }) => n.title.includes('ديزل')).length;
@@ -424,7 +438,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       expect(await lowFor('sup')).toBe(1);
       expect(await lowFor('mm1')).toBe(1);
 
-      await post('sup', storage(station.s1a, 'DIESEL') + '/deliveries', {
+      await post('mm1', storage(station.s1a, 'DIESEL') + '/deliveries', {
         liters: 5000,
         truckPlate: '5-111111',
         waybillNumber: 'WB-D1',
@@ -452,15 +466,15 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       expect(await aboutS1a('regEmp')).toHaveLength(0);
     });
 
-    it('does not tell employees when the supervisor hides stock from them', async () => {
-      await patch('supS1b', `/stations/${station.s1b}/stock-visibility`, { show: false }).expect(200);
+    it('does not tell employees when stock is hidden from them', async () => {
+      await patch('mm1', `/stations/${station.s1b}/stock-visibility`, { show: false }).expect(200);
       const empB = await prisma.user.create({
         data: { username: `${prefix}_empB`, passwordHash: await argon2.hash(password), fullName: 'P5B empB' },
       });
       await prisma.userRole.create({ data: { userId: empB.id, roleId: roleId.station_employee } });
       await prisma.userStationScope.create({ data: { userId: empB.id, stationId: station.s1b } });
       await patch('supS1b', `/stations/${station.s1b}`, { fuelTypes: ['PETROL_95', 'KEROSENE'] }).expect(200);
-      await put('supS1b', storage(station.s1b, 'KEROSENE') + '/storage', { capacityLiters: 9000, openingLevelLiters: 1100 }).expect(200);
+      await put('mm1', storage(station.s1b, 'KEROSENE') + '/storage', { capacityLiters: 9000, openingLevelLiters: 1100 }).expect(200);
       await fill('supS1b', station.s1b, 300, 'KEROSENE').expect(201);
       const count = await prisma.notification.count({ where: { userId: empB.id, kind: 'LOW_STOCK' } });
       expect(count).toBe(0);
@@ -472,31 +486,92 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
   // ── reset to zero ───────────────────────────────────────────────────────
 
   describe('reset to zero', () => {
-    it('needs a reason and the typed word, and is audited and told to the municipality manager', async () => {
+    it('is the municipality manager\'s, needs a reason and the typed word, and is audited and told to the supervisor and the super admin', async () => {
       const path = storage(station.s1a) + '/reset';
-      await post('sup', path, { reason: 'جرد', confirmation: 'نعم' }).expect(400);
-      await post('sup', path, { reason: '', confirmation: 'تصفير' }).expect(400);
+      await post('mm1', path, { reason: 'جرد', confirmation: 'نعم' }).expect(400);
+      await post('mm1', path, { reason: '', confirmation: 'تصفير' }).expect(400);
       await post('emp', path, { reason: 'جرد فعلي', confirmation: 'تصفير' }).expect(403);
+      await post('sup', path, { reason: 'جرد فعلي', confirmation: 'تصفير' }).expect(403);
+      await post('mm2', path, { reason: 'جرد فعلي', confirmation: 'تصفير' }).expect(403);
 
       const before = (await level('sup', station.s1a)).level;
-      const done = await post('sup', path, { reason: 'جرد فعلي أظهر خزانًا فارغًا', confirmation: 'تصفير' }).expect(201);
+      const done = await post('mm1', path, { reason: 'جرد فعلي أظهر خزانًا فارغًا', confirmation: 'تصفير' }).expect(201);
       expect(done.body.previousLevel).toBeCloseTo(before, 3);
       expect((await level('sup', station.s1a)).level).toBe(0);
 
       const entry = await prisma.fuelStockEntry.findFirstOrThrow({ where: { stationId: station.s1a, kind: 'RESET' } });
       expect(entry.reason).toContain('جرد');
-      const audit = await prisma.auditLog.findFirst({ where: { action: 'FUEL_RESET', userId: userId.sup } });
+      const audit = await prisma.auditLog.findFirst({ where: { action: 'FUEL_RESET', userId: userId.mm1 } });
       expect(audit).not.toBeNull();
-      expect(await notificationsOf('mm1', 'FUEL_RESET')).toHaveLength(1);
+      expect(await notificationsOf('sup', 'FUEL_RESET')).toHaveLength(1);
+      expect(await prisma.notification.count({ where: { userId: userId.top, kind: 'FUEL_RESET' } })).toBe(1);
+      expect(await notificationsOf('mm1', 'FUEL_RESET')).toHaveLength(0); // not the one who did it
       expect(await notificationsOf('mm2', 'FUEL_RESET')).toHaveLength(0);
+      expect(await notificationsOf('supS1b', 'FUEL_RESET')).toHaveLength(0);
 
       // The level continues from zero with the next delivery.
-      await post('sup', storage(station.s1a) + '/deliveries', {
+      await post('mm1', storage(station.s1a) + '/deliveries', {
         liters: 3000,
         truckPlate: '5-222222',
         waybillNumber: 'WB-3',
       }).expect(201);
       expect((await level('sup', station.s1a)).level).toBe(3000);
+    });
+  });
+
+  // ── «مراقبة المحطات» (after review, 19 Oct 2026) ───────────────────────
+
+  describe('«مراقبة المحطات»', () => {
+    it('lists the municipality manager\'s stations with their tanks and today\'s dispensing; nobody else\'s', async () => {
+      const own = await get('mm1', '/fuel-stock/overview').expect(200);
+      const ids = own.body.stations.map((s: { id: string }) => s.id);
+      expect(ids).toEqual(expect.arrayContaining([station.s1a, station.s1b]));
+      expect(ids).not.toContain(station.s2);
+      const s1a = own.body.stations.find((s: { id: string }) => s.id === station.s1a);
+      const petrol = s1a.tanks.find((t: { fuelType: string }) => t.fuelType === 'PETROL_95');
+      // The same level as the station's own screen.
+      expect(petrol.level).toBe((await level('mm1', station.s1a)).level);
+      expect(petrol.capacityLiters).toBe(32000);
+      expect(petrol.lastDeliveryLiters).toBe(3000);
+      expect(own.body.totals.stations).toBe(2);
+      expect(own.body.totals.dispensedToday).toBeGreaterThan(0);
+
+      const other = await get('mm2', '/fuel-stock/overview').expect(200);
+      expect(other.body.stations.map((s: { id: string }) => s.id)).toEqual([station.s2]);
+      await get('emp', '/fuel-stock/overview').expect(403);
+    });
+
+    it('a new station gets a tank, empty, for every fuel it sells — the capacity is required', async () => {
+      const body = { stationNumber: `9${runId.slice(-4)}`, name: 'P5B new station', companyId, municipalityId: m1, fuelTypes: ['PETROL_95', 'DIESEL'] };
+      const missing = await post('mm1', '/stations', body).expect(400);
+      expect(missing.body.message).toBe('TANK_CAPACITY_REQUIRED');
+      const extra = await post('mm1', '/stations', {
+        ...body,
+        tanks: [
+          { fuelType: 'PETROL_95', capacityLiters: 20000 },
+          { fuelType: 'DIESEL', capacityLiters: 15000 },
+          { fuelType: 'KEROSENE', capacityLiters: 5000 },
+        ],
+      }).expect(400);
+      expect(extra.body.message).toBe('TANK_FOR_UNSOLD_FUEL');
+
+      const made = await post('mm1', '/stations', {
+        ...body,
+        tanks: [
+          { fuelType: 'PETROL_95', capacityLiters: 20000 },
+          { fuelType: 'DIESEL', capacityLiters: 15000 },
+        ],
+      }).expect(201);
+      const tanks = await prisma.stationFuelStorage.findMany({ where: { stationId: made.body.id }, orderBy: { fuelType: 'asc' } });
+      expect(tanks.map((t) => [t.fuelType, Number(t.capacityLiters), Number(t.openingLevelLiters)])).toEqual([
+        ['DIESEL', 15000, 0],
+        ['PETROL_95', 20000, 0],
+      ]);
+      // This spec's clean-up knows only its three stations.
+      await prisma.stationFuelStorage.deleteMany({ where: { stationId: made.body.id } });
+      await prisma.stationFuelAvailability.deleteMany({ where: { stationId: made.body.id } });
+      await deleteAuditRows(prisma, { where: { entityId: { in: [made.body.id, ...tanks.map((t) => t.id)] } } });
+      await prisma.station.delete({ where: { id: made.body.id } });
     });
   });
 
@@ -600,12 +675,12 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       const writtenOff = Number(petrolA.resetWrittenOff);
       expect(start + delivered - dispensed - writtenOff).toBeCloseTo(Number(petrolA.level), 2);
       expect(writtenOff).toBeGreaterThan(0);
-      expect(Number(petrolA.unaccounted)).toBeCloseTo(writtenOff, 2);
-      expect(petrolA.status).toBe('وقود غير مبرَّر');
+      // After review (19 Oct 2026): no «وقود غير مبرَّر» column or status.
+      expect(petrolA).not.toHaveProperty('unaccounted');
+      expect(['سليم', 'منخفض', 'فارغ']).toContain(petrolA.status);
 
-      // The negative station reports its shortfall as unaccounted fuel.
+      // A level below zero is withheld, never shown as a figure.
       const petrolB = recon.find((r) => r.station === 'P5B station s1b' && r.fuel === 'بنزين 95')!;
-      expect(Number(petrolB.unaccounted)).toBeGreaterThan(0);
       expect(petrolB.level).toBeNull();
     });
 
@@ -615,6 +690,8 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
       expect(own.body.fuel.stations).toBe(2);
       expect(own.body.registration.offices).toBe(1);
       expect(own.body.fuel.lowStockStations).toBeGreaterThan(0);
+      expect(own.body.fuel).not.toHaveProperty('unaccountedFuel');
+      expect(own.body.fuel.dispensedToday).toBeGreaterThan(0);
       const other = await get('mm2', '/ops-reports/municipality-summary').expect(200);
       expect(other.body.fuel.stations).toBe(1);
       await get('mm1', `/ops-reports/municipality-summary?municipalityId=${m2}`).expect(403);
@@ -672,7 +749,7 @@ describe('Phase 5B — storage, notifications and reports (e2e)', () => {
         expect(p.granted).toBe(true);
         expect(p.canSwitch).toBe(false);
       }
-      expect(all.find((p: { key: string }) => p.key === 'fuel_stock:manage')?.fromJob).toBe(true);
+      expect(all.find((p: { key: string }) => p.key === 'fuel_stock:read')?.fromJob).toBe(true);
 
       const locked = fromJob[0];
       // The municipality manager's path and the super admin's path both refuse.

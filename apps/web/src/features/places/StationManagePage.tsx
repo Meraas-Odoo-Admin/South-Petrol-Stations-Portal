@@ -67,7 +67,7 @@ export function StationCreatePage() {
   });
 
   function submit() {
-    const found = validateStation(values);
+    const found = validateStation(values, 'create');
     setErrors(found);
     if (Object.keys(found).length > 0) return focusFirstInvalid();
     create.mutate();
@@ -78,7 +78,7 @@ export function StationCreatePage() {
       <BackLink to="/manage">العودة إلى إدارة المحطات</BackLink>
       <PageHeader title="محطة وقود جديدة" subtitle={only ? `في ${only.name}` : undefined} />
       <SectionCard title="بيانات المحطة" description="يُولَّد الرمز الداخلي تلقائيًا عند الحفظ.">
-        <StationForm values={values} onChange={setValues} errors={errors} />
+        <StationForm values={values} onChange={setValues} errors={errors} withTanks />
       </SectionCard>
       {create.isError && (
         <Notice kind="error">

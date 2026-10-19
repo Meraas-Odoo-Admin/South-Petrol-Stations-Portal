@@ -33,12 +33,9 @@ test('supervisor session: no directorate section, sees own station day screen (m
   await expect(maskedField).toContainText(last4);
   await expect(maskedField).not.toHaveText(fixtures.ownerIdentityNumber);
 
-  // Round 7 item 2: the reveal-toggle ported from the old drivers-list
-  // pattern to POST /owners/:id/reveal-identity — supervisor1 holds
-  // owners:reveal_identity (seed.ts), so clicking through shows the real
-  // value even though the passive display above stays masked.
-  await maskedField.getByTestId('owner-identity-reveal-toggle').click();
-  await expect(maskedField).toHaveText(fixtures.ownerIdentityNumber);
+  // After review (19 Oct 2026): a station supervisor no longer holds
+  // owners:reveal_identity — the number stays masked, with no reveal toggle.
+  await expect(maskedField.getByTestId('owner-identity-reveal-toggle')).toHaveCount(0);
 
   // Export: their own station is auto-selected in a disabled <select>
   // (GET /stations-backed StationSelect, not a free-text input — see this

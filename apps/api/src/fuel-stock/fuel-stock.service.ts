@@ -13,9 +13,13 @@ import { AuditService } from '../audit/audit.service';
 import { RbacService } from '../rbac/rbac.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { tripoliDay } from '../common/utils/grace-stage';
+import { addDays, tripoliMidnight } from '../common/utils/tripoli';
 import {
+  baselineOf,
   computeLevel,
   decideAlerts,
+  effectiveDeliveries,
   reconcilePeriod,
   statusOf,
   type Dispense,
@@ -29,17 +33,22 @@ import type {
   RecordDeliveryDto,
   ResetLevelDto,
   StockEntriesQueryDto,
+  StockOverviewQueryDto,
 } from './dto/fuel-stock.dto';
 
 // Phase 5B: fuel storage at stations.
 //
-// Who may do what is decided by permission, never by role name:
-//   fuel_stock:manage        set up tanks, record and correct deliveries, reset,
-//                            hide the levels from employees (station supervisors)
+// Who may do what is decided by permission, never by role name (after review,
+// 19 Oct 2026: the stations' fuel is run by the municipality manager, from
+// «مراقبة المحطات»; the station supervisor only reads their own):
+//   fuel_stock:configure     a station's tank capacities (and starting level)
+//   fuel_stock:deliver       record and correct deliveries
+//   fuel_stock:reset         reset a level to zero, with a reason
 //   fuel_stock:read          see every figure and the history (supervisors,
 //                            municipality managers, super admin)
 //   fuel_stock:read_visible  see the current level per fuel type, and only while
 //                            the station's switch shows stock to employees
+//                            (held by no job at present)
 // and always inside the caller's station scope.
 
 export const FUEL_LABELS_AR: Record<FuelType, string> = {
@@ -85,6 +94,24 @@ export interface StationFuelLevel {
     dispensed: number;
     lastResetAt: Date | null;
   };
+}
+
+// One tank of one station on «مراقبة المحطات».
+export interface OverviewTank {
+  fuelType: FuelType;
+  fuelLabel: string;
+  configured: boolean;
+  capacityLiters: number | null;
+  level: number | null;
+  percentFull: number | null;
+  status: StationFuelLevel['status'];
+  dispensedToday: number;
+  fillUpsToday: number;
+  dispensedWeek: number;
+  daysLeft: number | null;
+  lastDeliveryAt: Date | null;
+  lastDeliveryLiters: number | null;
+  lastFillUpAt: Date | null;
 }
 
 @Injectable()
@@ -294,6 +321,171 @@ export class FuelStockService {
     return { threshold, rows };
   }
 
+  // «مراقبة المحطات» (after review, 19 Oct 2026): every station in the
+  // caller's scope (of one municipality, when asked), each tank with its level,
+  // what was dispensed today and over the last 7 days, about how many days the
+  // fuel lasts at that pace, the last delivery and the last fill-up. Built from
+  // aggregates — never the fill-up rows themselves — so a municipality of many
+  // stations is a handful of queries plus one sum per tank.
+  async overview(query: StockOverviewQueryDto, actorId: string) {
+    const scope = await this.rbac.getStationScope(actorId);
+    const stations = await this.prisma.station.findMany({
+      where: {
+        archivedAt: null,
+        ...(scope !== null ? { id: { in: scope } } : {}),
+        ...(query.municipalityId ? { municipalityId: query.municipalityId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        internalCode: true,
+        status: true,
+        locality: true,
+        fuelAvailability: { select: { fuelType: true, isAvailable: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+    const ids = stations.map((s) => s.id);
+    const today = tripoliDay(new Date());
+    const todayStart = tripoliMidnight(today);
+    const weekStart = tripoliMidnight(addDays(today, -6));
+    const inStations = { stationId: { in: ids } };
+
+    const [threshold, storages, entries, todaySums, weekSums] = await Promise.all([
+      this.threshold(),
+      ids.length ? this.prisma.stationFuelStorage.findMany({ where: inStations }) : Promise.resolve([]),
+      ids.length
+        ? this.prisma.fuelStockEntry.findMany({
+            where: inStations,
+            select: { id: true, stationId: true, fuelType: true, kind: true, liters: true, occurredAt: true, createdAt: true, correctsEntryId: true },
+          })
+        : Promise.resolve([]),
+      ids.length
+        ? this.prisma.fillUpTransaction.groupBy({
+            by: ['stationId', 'fuelType'],
+            where: { ...inStations, occurredAt: { gte: todayStart } },
+            _sum: { quantityLiters: true },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
+      ids.length
+        ? this.prisma.fillUpTransaction.groupBy({
+            by: ['stationId', 'fuelType'],
+            where: { ...inStations, occurredAt: { gte: weekStart } },
+            _sum: { quantityLiters: true },
+            _max: { occurredAt: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const key = (stationId: string, fuelType: string) => `${stationId}:${fuelType}`;
+    const storageOf = new Map(storages.map((s) => [key(s.stationId, s.fuelType), s]));
+    const entriesOf = new Map<string, FuelEntryRaw[]>();
+    for (const e of entries) {
+      const k = key(e.stationId, e.fuelType);
+      entriesOf.set(k, [...(entriesOf.get(k) ?? []), { ...e, liters: Number(e.liters) }]);
+    }
+    const todayOf = new Map(todaySums.map((r) => [key(r.stationId, r.fuelType), r]));
+    const weekOf = new Map(weekSums.map((r) => [key(r.stationId, r.fuelType), r]));
+
+    const rows: Array<{ id: string; name: string; internalCode: string; locality: string | null; status: string; tanks: OverviewTank[] }> = [];
+    for (const station of stations) {
+      const fuelTypes = new Set<FuelType>([
+        ...station.fuelAvailability.filter((a) => a.isAvailable).map((a) => a.fuelType),
+        ...storages.filter((s) => s.stationId === station.id).map((s) => s.fuelType),
+      ]);
+      const tanks: OverviewTank[] = [];
+      for (const fuelType of [...fuelTypes].sort()) {
+        const k = key(station.id, fuelType);
+        const storage = storageOf.get(k);
+        const dispensedToday = Number(todayOf.get(k)?._sum.quantityLiters ?? 0);
+        const fillUpsToday = todayOf.get(k)?._count._all ?? 0;
+        const dispensedWeek = Number(weekOf.get(k)?._sum.quantityLiters ?? 0);
+        const lastFillUpAt = weekOf.get(k)?._max.occurredAt ?? null;
+        const base = { fuelType, fuelLabel: FUEL_LABELS_AR[fuelType], dispensedToday, fillUpsToday, dispensedWeek, lastFillUpAt };
+        if (!storage) {
+          tanks.push({
+            ...base,
+            configured: false,
+            capacityLiters: null,
+            level: null,
+            percentFull: null,
+            status: 'NOT_SET_UP',
+            daysLeft: null,
+            lastDeliveryAt: null,
+            lastDeliveryLiters: null,
+          });
+          continue;
+        }
+        const raw = entriesOf.get(k) ?? [];
+        const level = await this.levelFromSums(storage, raw);
+        const capacity = Number(storage.capacityLiters);
+        const deliveries = effectiveDeliveries(raw);
+        const last = deliveries[deliveries.length - 1] ?? null;
+        const perDay = dispensedWeek / 7;
+        tanks.push({
+          ...base,
+          configured: true,
+          capacityLiters: capacity,
+          level: level < 0 ? null : level,
+          percentFull: level < 0 || capacity <= 0 ? null : Math.min(100, Math.round((level / capacity) * 100)),
+          status: statusOf(level, threshold),
+          // At the last 7 days' pace; nothing to say when nothing was sold.
+          daysLeft: perDay > 0 && level > 0 ? Math.floor(level / perDay) : null,
+          lastDeliveryAt: last?.at ?? null,
+          lastDeliveryLiters: last?.liters ?? null,
+        });
+      }
+      rows.push({
+        id: station.id,
+        name: station.name,
+        internalCode: station.internalCode,
+        locality: station.locality,
+        status: station.status,
+        tanks,
+      });
+    }
+
+    const allTanks = rows.flatMap((r) => r.tanks);
+    const byFuel = [...new Set(allTanks.map((t) => t.fuelType))].sort().map((fuelType) => {
+      const these = allTanks.filter((t) => t.fuelType === fuelType && t.configured);
+      return {
+        fuelType,
+        fuelLabel: FUEL_LABELS_AR[fuelType],
+        level: Math.round(these.reduce((sum, t) => sum + (t.level ?? 0), 0)),
+        capacityLiters: Math.round(these.reduce((sum, t) => sum + (t.capacityLiters ?? 0), 0)),
+        dispensedToday: Math.round(allTanks.filter((t) => t.fuelType === fuelType).reduce((sum, t) => sum + t.dispensedToday, 0)),
+      };
+    });
+    const stationsWhere = (test: (status: string) => boolean) => rows.filter((r) => r.tanks.some((t) => test(t.status))).length;
+    return {
+      threshold,
+      totals: {
+        stations: rows.length,
+        low: stationsWhere((s) => s === 'LOW'),
+        empty: stationsWhere((s) => s === 'EMPTY' || s === 'DATA_WARNING'),
+        notSetUp: stationsWhere((s) => s === 'NOT_SET_UP'),
+        dispensedToday: Math.round(allTanks.reduce((sum, t) => sum + t.dispensedToday, 0)),
+        fillUpsToday: allTanks.reduce((sum, t) => sum + t.fillUpsToday, 0),
+        byFuel,
+      },
+      stations: rows,
+    };
+  }
+
+  // The level of one tank as computeLevel() gives it, with the fill-ups summed
+  // by the database instead of read row by row.
+  private async levelFromSums(storage: { stationId: string; fuelType: FuelType; openingLevelLiters: unknown; openedAt: Date }, raw: FuelEntryRaw[]) {
+    const baseline = baselineOf(this.setupOf(storage), raw);
+    const delivered = effectiveDeliveries(raw)
+      .filter((d) => d.at.getTime() > baseline.at.getTime())
+      .reduce((sum, d) => sum + d.liters, 0);
+    const dispensed = await this.prisma.fillUpTransaction.aggregate({
+      where: { stationId: storage.stationId, fuelType: storage.fuelType, occurredAt: { gt: baseline.at } },
+      _sum: { quantityLiters: true },
+    });
+    return Math.round((baseline.level + delivered - Number(dispensed._sum.quantityLiters ?? 0)) * 1000) / 1000;
+  }
+
   // Fuel reconciliation of one station and fuel type over a period.
   async reconcile(
     stationId: string,
@@ -496,6 +688,12 @@ export class FuelStockService {
     if (occurredAt.getTime() < storage.openedAt.getTime()) {
       throw new BadRequestException('DELIVERY_BEFORE_OPENING');
     }
+    // After review (19 Oct 2026): a delivery that would fill the tank past its
+    // capacity is a typing mistake (or a wrong capacity) — refused, not stored.
+    const before = await this.levelFromSums(storage, await this.entriesOf(stationId, fuelType));
+    if (Math.max(0, before) + dto.liters > Number(storage.capacityLiters)) {
+      throw new BadRequestException('DELIVERY_ABOVE_CAPACITY');
+    }
 
     const entry = await this.prisma.$transaction(async (tx) => {
       const created = await tx.fuelStockEntry.create({
@@ -628,18 +826,24 @@ export class FuelStockService {
       return created;
     });
 
-    await this.notifications.notifyScope(
-      { stationId },
-      ['notifications:municipality_events'],
-      {
-        kind: 'FUEL_RESET',
-        title: `تصفير مخزون ${FUEL_LABELS_AR[fuelType]} في ${station.name}`,
-        body: `المخزون المسجّل قبل التصفير: ${arabicCount(Math.round(previous), 'liter')}. السبب: ${dto.reason}`,
-        link: `/manage/stations/${stationId}?tab=fuel`,
-        entityType: 'Station',
-        entityId: stationId,
-      },
-      { exceptUserId: actorId },
+    // After review (19 Oct 2026): the municipality manager resets, so the
+    // station's supervisor, the municipality's other managers and the super
+    // admin are told — never the person who did it.
+    const said = {
+      kind: 'FUEL_RESET',
+      title: `تصفير مخزون ${FUEL_LABELS_AR[fuelType]} في ${station.name}`,
+      body: `المخزون المسجّل قبل التصفير: ${arabicCount(Math.round(previous), 'liter')}. السبب: ${dto.reason}`,
+      entityType: 'Station',
+      entityId: stationId,
+    };
+    await this.notifications.notifyScopeOnce({ stationId }, said, [
+      { permissions: ['notifications:municipality_events'], link: `/monitoring/stations/${stationId}` },
+      { permissions: ['notifications:station_events'], link: '/my-station?tab=fuel' },
+    ], { exceptUserId: actorId });
+    await this.notifications.notifyPermissionHolders(
+      'notifications:system_events',
+      { ...said, link: `/monitoring/stations/${stationId}` },
+      actorId,
     );
     return { ...entry, liters: Number(entry.liters), previousLevel: previous };
   }
@@ -692,7 +896,7 @@ export class FuelStockService {
       const station = await this.station(stationId);
       const fuel = FUEL_LABELS_AR[fuelType];
       const link = `/my-station?tab=fuel`;
-      const managerLink = `/manage/stations/${stationId}?tab=fuel`;
+      const managerLink = `/monitoring/stations/${stationId}`;
 
       if (decision.alertLow) {
         const payload = {

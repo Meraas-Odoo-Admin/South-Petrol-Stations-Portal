@@ -38,4 +38,9 @@ export interface VehicleBasicInfo {
     phone: string | null;
   } | null;
   plateHistory: VehiclePlateHistoryEntry[];
+  // After review (19 Oct 2026, oversight): who registered the vehicle, where
+  // and when. Null for vehicles that came from before registration was tracked.
+  registeredBy?: { id: string; fullName: string; username: string } | null;
+  registeredAtRegistrationStation?: { id: string; name: string } | null;
+  createdAt?: string;
 }

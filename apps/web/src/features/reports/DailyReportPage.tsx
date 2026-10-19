@@ -55,13 +55,16 @@ function fillUpReference(row: { id: string; identifiedBy?: string | null; except
   return null;
 }
 
-export function DailyReportPage() {
+// After review (19 Oct 2026): also the «الصرف» tab of a station in «مراقبة
+// المحطات» — one station, fixed, inside that page (embedded: no page title and
+// no directorate overview).
+export function DailyReportPage({ fixedStationId, embedded = false }: { fixedStationId?: string; embedded?: boolean } = {}) {
   const { user, hasPermission } = useAuth();
   const canViewAllStations = hasPermission('reports:view_all_stations');
   const permissions = user?.permissions ?? [];
   const ownStation = user?.stationScope[0] ?? null;
 
-  const [stationId, setStationId] = useState(canViewAllStations ? '' : (ownStation?.stationId ?? ''));
+  const [stationId, setStationId] = useState(fixedStationId ?? (canViewAllStations ? '' : (ownStation?.stationId ?? '')));
   const [date, setDate] = useState(todayIso());
   // Phase 7 (4.1): a cleared or half-typed date is never sent - the API refused
   // `date=` and the page then blamed the station. The report keeps showing the
@@ -172,10 +175,8 @@ export function DailyReportPage() {
 
   return (
     <div>
-      <PageHeader
-        title="اليوم"
-        subtitle="تعبئات يوم واحد، وأرقامه، ومن سجّلها."
-        actions={
+      {(() => {
+        const actions = (
           <>
             <PillButton variant="secondary" size="sm" onClick={handleExportCsv} disabled={exporting !== null} data-testid="daily-export-csv">
               {exporting === 'csv' ? '...' : 'تنزيل CSV'}
@@ -184,8 +185,16 @@ export function DailyReportPage() {
               {exporting === 'pdf' ? '...' : 'تنزيل PDF'}
             </PillButton>
           </>
-        }
-      />
+        );
+        return embedded ? (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[15px] text-ink-soft lg:text-[13px]">كل تعبئة في يوم واحد: من سجّلها، والمركبة، والكمية.</p>
+            <div className="flex gap-2">{actions}</div>
+          </div>
+        ) : (
+          <PageHeader title="اليوم" subtitle="تعبئات يوم واحد، وأرقامه، ومن سجّلها." actions={actions} />
+        );
+      })()}
 
       <Card className="mb-4 p-4">
         <div className="mb-2 flex items-center justify-between">
@@ -197,14 +206,14 @@ export function DailyReportPage() {
           )}
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div>
+          {!fixedStationId && <div>
             <label htmlFor="daily-station" className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المحطة</label>
             {canViewAllStations ? (
               <StationSelect id="daily-station" value={stationId} onChange={setStationId} allowAllOption className={`w-56 ${selectClass}`} />
             ) : (
               <StationSelect id="daily-station" value={stationId} onChange={setStationId} disabled className={`w-56 ${selectClass}`} />
             )}
-          </div>
+          </div>}
           <div>
             <label htmlFor="daily-date" className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">التاريخ</label>
             <DateField
@@ -440,7 +449,7 @@ export function DailyReportPage() {
         </>
       )}
 
-      {canViewAllStations && <DirectorateOverview endDate={reportDate} />}
+      {canViewAllStations && !embedded && <DirectorateOverview endDate={reportDate} />}
     </div>
   );
 }

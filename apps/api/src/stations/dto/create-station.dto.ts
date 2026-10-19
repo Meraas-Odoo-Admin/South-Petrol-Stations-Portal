@@ -1,9 +1,38 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { Transform } from 'class-transformer';
+import {
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { MAX_STOCK_LITERS } from '../../fuel-stock/dto/fuel-stock.dto';
 import { IsOptionalLibyanMobile } from '../../common/validators/shared-field-checks';
 import { normalizePhoneValue } from '../../common/validators/phone-transform';
 import { FuelType, StationStatus } from '@prisma/client';
+
+// After review (19 Oct 2026): the municipality manager gives each fuel the
+// station sells its tank capacity when creating the station.
+export class StationTankDto {
+  @ApiProperty({ enum: FuelType })
+  @IsEnum(FuelType)
+  fuelType!: FuelType;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(1)
+  @Max(MAX_STOCK_LITERS)
+  capacityLiters!: number;
+}
 
 export class CreateStationDto {
   // Auto-generated ("STN-######") when omitted, same pattern as
@@ -117,4 +146,14 @@ export class CreateStationDto {
   @ArrayUnique()
   @IsEnum(FuelType, { each: true })
   fuelTypes?: FuelType[];
+
+  // One per fuel in fuelTypes, required (after review, 19 Oct 2026). The tank
+  // starts empty at the moment the station is created; the first delivery
+  // fills it.
+  @ApiProperty({ type: [StationTankDto], required: false })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StationTankDto)
+  tanks?: StationTankDto[];
 }

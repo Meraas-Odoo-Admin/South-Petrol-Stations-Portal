@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { OpsReportsService } from './ops-reports.service';
 import { OpsReportExportQueryDto, OpsReportQueryDto } from './dto/ops-report-query.dto';
 import { pageReport, tableToCsv, type OpsReport } from './ops-report-types';
+import { AuditedExport } from '../audit/audited-export';
 
 // The role reports of phase 5B. One endpoint per report, each behind its own
 // permission, plus a CSV export of any one table of it (the same rows, the
@@ -37,6 +38,7 @@ export class OpsReportsController {
   }
 
   @RequirePermission('registration_reports:own_day')
+  @AuditedExport('my-day')
   @Get('my-day/export')
   async myDayExport(
     @Query() query: OpsReportExportQueryDto,
@@ -53,6 +55,7 @@ export class OpsReportsController {
   }
 
   @RequirePermission('reports:own_shift')
+  @AuditedExport('my-shift')
   @Get('my-shift/export')
   async myShiftExport(
     @Query() query: OpsReportExportQueryDto,
@@ -69,6 +72,7 @@ export class OpsReportsController {
   }
 
   @RequirePermission('registration_reports:view')
+  @AuditedExport('office')
   @Get('office/export')
   async officeExport(
     @Query() query: OpsReportExportQueryDto,
@@ -85,6 +89,7 @@ export class OpsReportsController {
   }
 
   @RequirePermission('reports:view')
+  @AuditedExport('station')
   @Get('station/export')
   async stationExport(
     @Query() query: OpsReportExportQueryDto,
@@ -101,6 +106,7 @@ export class OpsReportsController {
   }
 
   @RequirePermission('reports:municipality')
+  @AuditedExport('municipality')
   @Get('municipality/export')
   async municipalityExport(
     @Query() query: OpsReportExportQueryDto,
@@ -123,6 +129,7 @@ export class OpsReportsController {
   }
 
   @RequirePermission('reports:cross_municipality')
+  @AuditedExport('summary')
   @Get('summary/export')
   async summaryExport(@Query() query: OpsReportExportQueryDto, @Res({ passthrough: true }) res: Response) {
     return this.csv(await this.reports.summary(query), query, res);

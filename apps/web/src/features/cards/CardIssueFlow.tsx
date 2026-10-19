@@ -55,6 +55,12 @@ function CardPreview({ cardId }: { cardId: string }) {
 // Every issue, print and cancellation is audited server-side, against the
 // office and the employee. Phase 7: no desk to pick; the one printer setting
 // (black-only ribbon) is kept per device.
+// After review (19 Oct 2026): colour printing only, for now. The black-only
+// ribbon switch and the printer setup card are hidden everywhere, and a
+// device that saved «black only» before prints in colour too. Set to true to
+// bring both back (the code behind them is kept).
+const PRINTER_SETTINGS_ENABLED = false;
+
 export function CardIssueFlow({
   vehicleId,
   registrationStationId,
@@ -62,7 +68,7 @@ export function CardIssueFlow({
   reasonNote,
   onDone,
   onCancel,
-  showPrinterSettings = true,
+  showPrinterSettings = PRINTER_SETTINGS_ENABLED,
 }: {
   vehicleId: string;
   registrationStationId: string;
@@ -80,7 +86,7 @@ export function CardIssueFlow({
   const [step, setStep] = useState<Step>('ready');
   const [error, setError] = useState<string | null>(null);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
-  const [printMode, setPrintMode] = useState<'full' | 'black'>(() => rememberedPrintMode());
+  const [printMode, setPrintMode] = useState<'full' | 'black'>(() => (PRINTER_SETTINGS_ENABLED ? rememberedPrintMode() : 'full'));
 
   const invalidateCards = () => queryClient.invalidateQueries({ queryKey: ['vehicle-cards', vehicleId] });
 
@@ -134,7 +140,7 @@ export function CardIssueFlow({
   return (
     <div className="space-y-3" data-testid="card-issue-flow">
       {/* The printer next to this device: one setting, remembered on it. */}
-      {showPrinterSettings && (
+      {PRINTER_SETTINGS_ENABLED && showPrinterSettings && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm bg-surface-alt p-3" data-testid="card-printer-settings">
           <label className="flex min-h-[44px] items-center gap-2 text-[15px] text-ink lg:text-[13px]">
             <input

@@ -28,6 +28,7 @@ const QUICK_LINKS: QuickLink[] = [
   { to: '/vehicles/change-requests', label: 'طلبات التعديل', hint: 'طلبات تغيير هوية المركبات', show: NAV_ACCESS.changeRequests, icon: 'changeRequests' },
   { to: '/stations', label: 'المحطات', hint: 'قائمة محطات المديرية', show: NAV_ACCESS.stations, icon: 'stations' },
   { to: '/manage', label: 'إدارة المحطات', hint: 'محطات الوقود ومكاتب التسجيل في بلديتك وأشخاصها', show: NAV_ACCESS.manage, icon: 'stations' },
+  { to: '/monitoring', label: 'مراقبة المحطات', hint: 'مخزون الوقود في المحطات، والتوريد والتصفير، والصرف', show: NAV_ACCESS.monitoring, icon: 'fuel' },
   { to: '/my-station', label: 'محطتي', hint: 'موظفو محطتك والوقود الذي تبيعه والنشاط', show: NAV_ACCESS.myStation, icon: 'stations' },
   { to: '/my-office', label: 'مكتبي', hint: 'موظفو مكتبك وتقاريره اليومية', show: NAV_ACCESS.myOffice, icon: 'register' },
   { to: '/admin', label: 'الإدارة', hint: 'البلديات والإعدادات وقواعد التعبئة والقوائم وسجل التدقيق', show: NAV_ACCESS.admin, icon: 'admin' },

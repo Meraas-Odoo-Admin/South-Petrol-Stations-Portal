@@ -7,6 +7,7 @@ import { normalizePlate } from '@fuel-tracking/shared-types';
 // unconditional at module load) and seed demo data as a side effect.
 import { PERMISSIONS, ROLE_PERMISSIONS, UNRESTRICTED_STATION_ACCESS_ROLES, SYSTEM_SETTINGS } from './rbac-catalog';
 import { syncRbacCatalog } from './rbac-sync';
+import { deleteAuditRows } from './audit-removal';
 
 export { PERMISSIONS, ROLE_PERMISSIONS, UNRESTRICTED_STATION_ACCESS_ROLES, SYSTEM_SETTINGS };
 
@@ -510,7 +511,7 @@ async function cleanupPlaywrightFixtures(): Promise<void> {
     await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 
     console.log(

@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 import { createMunicipality, deleteMunicipalities } from './support/municipality-fixtures';
+import { deleteAuditRows } from '../prisma/audit-removal';
 
 // UX round, item 4: vehicles are global, so a registration employee in ANY
 // office reprints or re-issues ANY vehicle's card. The print is counted against
@@ -85,7 +86,7 @@ describe('Cards from another office (e2e)', () => {
     await prisma.cardPrint.deleteMany({ where: { registrationStationId: { in: [officeA, officeB] } } });
     await prisma.vehicleCard.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: vehicleIds } } });
-    await prisma.auditLog.deleteMany({ where: { userId: { in: ids } } });
+    await deleteAuditRows(prisma, { where: { userId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userRegistrationStationScope.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userRole.deleteMany({ where: { userId: { in: ids } } });

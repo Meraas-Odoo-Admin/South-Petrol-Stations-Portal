@@ -173,3 +173,7 @@ To check it after a deployment, without touching the database:
 3. **Two different public addresses:** correct.
 4. **Every entry from one address starting with `172.` or `10.`** (the Docker network): the value is too low. Raise it by one and restart the `api` service.
 5. **An address you never used** (one someone could type into a header): the value is too high. Lower it.
+
+## Update of 19 Oct 2026: roles and the audit log
+
+This update takes 13 grants away from the jobs (least privilege). Re-run `bootstrap:prod` once after deploying, so the roles match the catalog. The new migrations (the vehicles-per-owner setting, plates no longer unique, the audit log made insert-only) apply by themselves when the API starts.

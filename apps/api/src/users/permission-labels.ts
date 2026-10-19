@@ -28,7 +28,9 @@ export const PERMISSION_LABELS: Record<string, { area: string; label: string }> 
 
   'fuel_stock:read': { area: 'stock', label: 'رؤية مخزون الوقود وتفاصيله وسجل التوريد' },
   'fuel_stock:read_visible': { area: 'stock', label: 'رؤية مستوى الوقود في محطته' },
-  'fuel_stock:manage': { area: 'stock', label: 'إعداد الخزانات وتسجيل التوريد والتصحيح والتصفير' },
+  'fuel_stock:configure': { area: 'stock', label: 'ضبط سعة خزانات المحطات' },
+  'fuel_stock:deliver': { area: 'stock', label: 'تسجيل توريد الوقود للمحطات وتصحيحه' },
+  'fuel_stock:reset': { area: 'stock', label: 'تصفير مخزون المحطة' },
 
   'stations:read': { area: 'stations', label: 'عرض المحطات' },
   'stations:manage': { area: 'stations', label: 'تعديل المحطة وأنواع الوقود التي تبيعها' },

@@ -51,7 +51,7 @@ export function MunicipalitiesAdminPage() {
 
   const create = useMutation({
     mutationFn: async () =>
-      (await apiClient.post<{ id: string }>('/municipalities', { name: name.trim(), ...(code.trim() ? { code: code.trim().toUpperCase() } : {}) })).data,
+      (await apiClient.post<{ id: string }>('/municipalities', { name: name.trim(), code: code.trim().toUpperCase() })).data,
     onSuccess: (created) => {
       setCreating(false);
       setName('');
@@ -66,7 +66,12 @@ export function MunicipalitiesAdminPage() {
       setProblem('اكتب اسم البلدية.');
       return;
     }
-    if (code.trim() && !/^[A-Za-z]{2,5}$/.test(code.trim())) {
+    // Required (after review, 19 Oct 2026): cards can be issued from day one.
+    if (!code.trim()) {
+      setProblem('اكتب رمز البطاقات للبلدية.');
+      return;
+    }
+    if (!/^[A-Za-z]{2,5}$/.test(code.trim())) {
       setProblem('رمز البطاقات من 2 إلى 5 أحرف إنجليزية.');
       return;
     }
@@ -256,7 +261,8 @@ export function MunicipalitiesAdminPage() {
         <div className="space-y-4">
           <TextField label="اسم البلدية" value={name} onChange={(e) => setName(e.target.value)} data-testid="municipality-create-name" />
           <TextField
-            label="رمز البطاقات (اختياري)"
+            label="رمز البطاقات"
+            data-testid="municipality-create-code"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             hint="2 إلى 5 أحرف إنجليزية، مثل SBH؛ تبدأ به أرقام بطاقات هذه البلدية."

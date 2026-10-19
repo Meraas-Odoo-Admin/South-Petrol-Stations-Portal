@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { LookupSearch, useLookup } from '../../lib/useLookup';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { checkLibyanMobile } from '@fuel-tracking/shared-types';
 import { apiClient } from '../../lib/apiClient';
 import { FUEL_TYPE_LABELS, STATION_STATUS_LABELS } from '../../lib/labels';
-import { restrictToPhoneNumber } from '../../lib/libyanFormats';
 import { PillButton } from '../../components/design/PillButton';
 import { TextField } from '../../components/design/TextField';
 import { adminErrorMessage } from '../admin/adminErrors';
@@ -68,16 +66,12 @@ export interface StationFormValues {
   name: string;
   companyId: string;
   municipalityId: string;
-  routeId: string;
   status: string;
   statusNote: string;
   locality: string;
   fuelTypes: string[];
-  supervisorName: string;
-  supervisorPhone: string;
-  operatorSameAsSupervisor: boolean;
-  operatorName: string;
-  operatorPhone: string;
+  /** Create only (after review, 19 Oct 2026): the tank capacity of each fuel, as typed. */
+  tankCapacities: Record<string, string>;
 }
 
 export const EMPTY_STATION: StationFormValues = {
@@ -85,16 +79,11 @@ export const EMPTY_STATION: StationFormValues = {
   name: '',
   companyId: '',
   municipalityId: '',
-  routeId: '',
   status: 'ACTIVE',
   statusNote: '',
   locality: '',
   fuelTypes: [],
-  supervisorName: '',
-  supervisorPhone: '',
-  operatorSameAsSupervisor: false,
-  operatorName: '',
-  operatorPhone: '',
+  tankCapacities: {},
 };
 
 export function stationToValues(s: StationRow): StationFormValues {
@@ -103,33 +92,33 @@ export function stationToValues(s: StationRow): StationFormValues {
     name: s.name,
     companyId: s.companyId,
     municipalityId: s.municipalityId ?? '',
-    routeId: s.routeId ?? '',
     status: s.status,
     statusNote: s.statusNote ?? '',
     locality: s.locality ?? '',
     fuelTypes: s.fuelAvailability.filter((f) => f.isAvailable).map((f) => f.fuelType),
-    supervisorName: s.supervisorName ?? '',
-    supervisorPhone: s.supervisorPhone ?? '',
-    operatorSameAsSupervisor: s.operatorSameAsSupervisor,
-    operatorName: s.operatorName ?? '',
-    operatorPhone: s.operatorPhone ?? '',
+    tankCapacities: {},
   };
+}
+
+// A capacity as typed ("20,000" or "20000"), or null when it is not a number.
+function capacityOf(text: string | undefined): number | null {
+  const n = Number((text ?? '').replace(/[^\d.]/g, ''));
+  return (text ?? '').trim() !== '' && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 type StationErrors = Partial<Record<keyof StationFormValues, string>>;
 
-export function validateStation(values: StationFormValues): StationErrors {
+export function validateStation(values: StationFormValues, mode: 'create' | 'edit' = 'edit'): StationErrors {
   const errors: StationErrors = {};
+  // After review (19 Oct 2026): a new station's every fuel has its tank capacity.
+  if (mode === 'create' && values.fuelTypes.length === 0) errors.fuelTypes = 'اختر نوع وقود واحدًا على الأقل.';
+  if (mode === 'create' && values.fuelTypes.some((f) => capacityOf(values.tankCapacities[f]) === null)) {
+    errors.tankCapacities = 'أدخل سعة الخزان (باللتر) لكل نوع وقود تبيعه المحطة.';
+  }
   if (!values.companyId) errors.companyId = 'اختر الشركة.';
   if (!values.stationNumber.trim()) errors.stationNumber = 'رقم المحطة مطلوب (رقمها لدى الشركة).';
   if (values.name.trim().length < 2) errors.name = 'اسم المحطة مطلوب.';
   if (!values.municipalityId) errors.municipalityId = 'اختر البلدية.';
-  const sup = checkLibyanMobile(values.supervisorPhone);
-  if (!sup.ok) errors.supervisorPhone = sup.message;
-  if (!values.operatorSameAsSupervisor) {
-    const op = checkLibyanMobile(values.operatorPhone);
-    if (!op.ok) errors.operatorPhone = op.message;
-  }
   return errors;
 }
 
@@ -137,25 +126,18 @@ export function validateStation(values: StationFormValues): StationErrors {
 // not clear anything in the API, so optional texts are simply trimmed.
 export function stationPayload(values: StationFormValues, mode: 'create' | 'edit') {
   const text = (v: string) => (v.trim() ? v.trim() : mode === 'create' ? undefined : '');
-  const phone = (v: string) => {
-    const c = checkLibyanMobile(v);
-    return c.ok && c.value ? c.value : undefined;
-  };
   return {
     stationNumber: values.stationNumber.trim(),
     name: values.name.trim(),
     companyId: values.companyId,
     municipalityId: values.municipalityId || undefined,
-    routeId: values.routeId || undefined,
     status: values.status,
     statusNote: text(values.statusNote),
     locality: text(values.locality),
     fuelTypes: values.fuelTypes,
-    supervisorName: text(values.supervisorName),
-    supervisorPhone: phone(values.supervisorPhone),
-    operatorSameAsSupervisor: values.operatorSameAsSupervisor,
-    operatorName: values.operatorSameAsSupervisor ? undefined : text(values.operatorName),
-    operatorPhone: values.operatorSameAsSupervisor ? undefined : phone(values.operatorPhone),
+    ...(mode === 'create'
+      ? { tanks: values.fuelTypes.map((fuelType) => ({ fuelType, capacityLiters: capacityOf(values.tankCapacities[fuelType]) })) }
+      : {}),
   };
 }
 
@@ -170,21 +152,22 @@ export function StationForm({
   errors,
   existingInternalCode,
   lockCompany = false,
+  withTanks = false,
 }: {
   values: StationFormValues;
   onChange: (values: StationFormValues) => void;
   errors: StationErrors;
   existingInternalCode?: string;
   lockCompany?: boolean;
+  /** On creating a station: a tank capacity per fuel it sells. */
+  withTanks?: boolean;
 }) {
   const queryClient = useQueryClient();
   const set = <K extends keyof StationFormValues>(key: K, value: StationFormValues[K]) =>
     onChange({ ...values, [key]: value });
 
   const companyLookup = useLookup<Lookup>('/companies', 'companies');
-  const routeLookup = useLookup<Lookup>('/routes', 'routes');
   const companies = { data: companyLookup.items };
-  const routes = { data: routeLookup.items };
   const municipalities = useMunicipalityList();
   const municipalityOptions = municipalities.data ?? [];
   const oneMunicipality = municipalityOptions.length === 1;
@@ -282,15 +265,8 @@ export function StationForm({
             ))}
           </SelectField>
         )}
-        <SelectField id="st-route" label="خط الإعداد (اختياري)" value={values.routeId} onChange={(v) => set('routeId', v)}>
-          <option value="">— غير محدَّد —</option>
-          {routes.data?.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </SelectField>
-        <LookupSearch id="st-route-search" q={routeLookup.q} onChange={routeLookup.setQ} capped={routeLookup.capped} />
+        {/* After review (19 Oct 2026): no «خط الإعداد» field. A route already
+            stored on a station is left as it is (the form no longer sends it). */}
         <SelectField id="st-status" label="حالة المحطة" value={values.status} onChange={(v) => set('status', v)}>
           {Object.entries(STATION_STATUS_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
@@ -334,41 +310,42 @@ export function StationForm({
             );
           })}
         </div>
+        {errors.fuelTypes && <p className="mt-1 text-[14px] font-bold text-danger-dark lg:text-[12px]">{errors.fuelTypes}</p>}
       </fieldset>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField label="مشرف المحطة — الاسم (اختياري)" value={values.supervisorName} onChange={(e) => set('supervisorName', e.target.value)} />
-        <TextField
-          label="مشرف المحطة — الهاتف (اختياري)"
-          value={values.supervisorPhone}
-          onChange={(e) => set('supervisorPhone', restrictToPhoneNumber(e.target.value))}
-          error={errors.supervisorPhone}
-          inputMode="tel"
-          ltr
-        />
-      </div>
-      <label className="flex min-h-[44px] items-center gap-2 text-[16px] font-bold text-ink lg:text-[14px]">
-        <input
-          type="checkbox"
-          checked={values.operatorSameAsSupervisor}
-          onChange={(e) => set('operatorSameAsSupervisor', e.target.checked)}
-          className="h-5 w-5 accent-primary"
-        />
-        المشغّل نفس المشرف
-      </label>
-      {!values.operatorSameAsSupervisor && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField label="المشغّل — الاسم (اختياري)" value={values.operatorName} onChange={(e) => set('operatorName', e.target.value)} />
-          <TextField
-            label="المشغّل — الهاتف (اختياري)"
-            value={values.operatorPhone}
-            onChange={(e) => set('operatorPhone', restrictToPhoneNumber(e.target.value))}
-            error={errors.operatorPhone}
-            inputMode="tel"
-            ltr
-          />
-        </div>
+      {/* After review (19 Oct 2026): the municipality manager gives each fuel's
+          tank capacity when creating the station. The tank starts empty; the
+          deliveries are recorded in «مراقبة المحطات». */}
+      {withTanks && values.fuelTypes.length > 0 && (
+        <fieldset data-testid="station-tanks">
+          <legend className="mb-2 text-[14px] font-bold text-ink lg:text-[12px]">سعة الخزانات</legend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {Object.entries(FUEL_TYPE_LABELS)
+              .filter(([value]) => values.fuelTypes.includes(value))
+              .map(([value, label]) => (
+                <TextField
+                  key={value}
+                  label={`سعة خزان ${label} (لتر)`}
+                  data-testid={`station-tank-${value}`}
+                  inputMode="decimal"
+                  ltr
+                  value={values.tankCapacities[value] ?? ''}
+                  onChange={(e) => set('tankCapacities', { ...values.tankCapacities, [value]: e.target.value })}
+                  error={errors.tankCapacities && capacityOf(values.tankCapacities[value]) === null ? 'سعة الخزان مطلوبة.' : undefined}
+                />
+              ))}
+          </div>
+          <p className="mt-2 text-[14px] leading-[1.7] text-ink-soft lg:text-[12px]">
+            يبدأ الخزان فارغًا، ويُسجَّل التوريد من «مراقبة المحطات». تُخصم كل تعبئة من مخزون المحطة تلقائيًا.
+          </p>
+          {errors.tankCapacities && <p className="mt-1 text-[14px] font-bold text-danger-dark lg:text-[12px]">{errors.tankCapacities}</p>}
+        </fieldset>
       )}
+
+      {/* After review (19 Oct 2026): no supervisor / operator text fields. The
+          station's supervisors are real accounts, added after the station is
+          created, from its people section («مشرفو المحطة»). Names stored
+          before are left as they are (the form no longer sends them). */}
     </div>
   );
 }

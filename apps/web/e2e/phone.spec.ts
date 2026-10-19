@@ -128,9 +128,10 @@ test.beforeAll(async () => {
         '/manage/stations/new',
         '/manage/offices/new',
       ],
-      // Phase 7: «الإدارة» holds the manager's «القوائم» tab.
+      // Phase 7: «الإدارة» holds the manager's «القوائم» tab. After review
+      // (19 Oct 2026): supervisory — no fill-up recording, no registration.
       mustSee: ['/manage', '/reports/daily', '/reports', '/admin'],
-      mustNotSee: ['/my-station', '/lists'],
+      mustNotSee: ['/my-station', '/lists', '/fillups/new', '/registration'],
     },
   ];
 });

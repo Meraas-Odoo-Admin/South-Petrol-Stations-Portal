@@ -1,12 +1,13 @@
 import { isAxiosError } from 'axios';
 import { describeApiError } from '../../lib/apiError';
+import { plateSharingMessage } from '../vehicles/plateSharing';
 
 // Registration pivot, phase 2: the API refuses registration with
 // machine-checkable markers (never English prose in this Arabic UI — same
 // convention as the fill-up screen's STATION_HAS_NO_MUNICIPALITY). This maps
 // them to what the registration employee should read.
 export function registrationErrorMessage(error: unknown): string {
-  if (!isAxiosError<{ message?: string | string[] }>(error) || !error.response) {
+  if (!isAxiosError<{ message?: string | string[]; details?: { limit?: number; otherType?: string | null; vehicle?: string } }>(error) || !error.response) {
     return describeApiError(error).message;
   }
   const { status, data } = error.response;
@@ -17,6 +18,8 @@ export function registrationErrorMessage(error: unknown): string {
     if (arabic.length > 0) return arabic.join(' ');
   }
   const code = typeof data?.message === 'string' ? data.message : '';
+  const sharing = plateSharingMessage(code, data?.details);
+  if (sharing) return sharing;
   switch (code) {
     case 'REGISTRATION_STATION_NOT_ACTIVE':
       return 'مكتب التسجيل هذا مغلق حاليًا، ولا يمكن التسجيل فيه.';
@@ -24,6 +27,10 @@ export function registrationErrorMessage(error: unknown): string {
       return 'مكتب التسجيل هذا مؤرشف، ولا يمكن التسجيل فيه.';
     case 'MUNICIPALITY_ARCHIVED':
       return 'بلدية هذا المكتب مؤرشفة، ولا يمكن التسجيل فيه.';
+    case 'VEHICLE_TYPE_INVALID':
+      return 'نوع المركبة المختار غير موجود أو موقوف. اختر نوعًا آخر من القائمة.';
+    case 'OWNER_VEHICLE_LIMIT':
+      return `هذا المالك مسجّل له الحد الأقصى المسموح من المركبات (${data?.details?.limit ?? '—'}). لا يمكن تسجيل مركبة أخرى باسمه.`;
     case 'VEHICLE_DUPLICATE':
       return 'بعض بيانات المركبة مسجّلة مسبقًا لمركبة أخرى — راجع التنبيهات أسفل الحقول.';
   }

@@ -41,9 +41,21 @@ export const PERMISSIONS = [
     key: 'fuel_stock:read_visible',
     description: 'See the current fuel level per fuel type at your own station, while the supervisor shows stock to employees',
   },
+  // After review (19 Oct 2026): the stations' fuel is the municipality
+  // manager's to run, from «مراقبة المحطات» — not the station supervisor's,
+  // who only sees their own levels. Three levers instead of one
+  // (fuel_stock:manage is gone; rbac-sync takes it off every role).
   {
-    key: 'fuel_stock:manage',
-    description: 'Set up tanks, record and correct deliveries, reset a level to zero, and show or hide stock from employees (station supervisors)',
+    key: 'fuel_stock:configure',
+    description: "Set a station's tank capacities (and the level it starts from) — municipality managers",
+  },
+  {
+    key: 'fuel_stock:deliver',
+    description: 'Record fuel deliveries to the stations in your scope, and correct them — municipality managers',
+  },
+  {
+    key: 'fuel_stock:reset',
+    description: "Reset a station's fuel level to zero, with a reason — municipality managers",
   },
   { key: 'notifications:read', description: 'Read your own notifications (the bell)' },
   { key: 'notifications:station_events', description: 'Receive station notifications: low or negative stock, overrides, fuel mismatches, lockouts' },
@@ -205,6 +217,13 @@ export const PERMISSIONS = [
 // The seed/bootstrap sync (rbac-sync.ts) makes each catalog role's grants
 // EXACTLY this list — a permission removed here is removed from existing
 // databases too, not just left behind.
+// After review (19 Oct 2026, least privilege): each job keeps only what its
+// screens use. Taken away: fillups:update (nothing uses it); routes:read and
+// security_authorities:read (no screen reads those lists since «خط الإعداد»
+// went); vehicles:request_change and owners:request_change (the request forms
+// went: «تعديل» edits directly, for vehicles:approve_change /
+// owners:approve_change); the station supervisor's owners:reveal_identity
+// (a station has no need for the owner's full identity number).
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   // After review (Khalil, 15 Oct 2026): a station employee records fill-ups
   // and nothing else — no vehicles or stations screens, reports, stock or
@@ -220,8 +239,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   station_supervisor: [
     'companies:read',
     'municipalities:read',
-    'routes:read',
-    'security_authorities:read',
     'vehicle_types:read',
     'stations:read',
     'stations:manage',
@@ -229,14 +246,13 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'records:browse',
     'cards:scan',
     'fillups:create',
-    'fillups:update',
     'fillups:record_exception',
     'owners:read',
-    'owners:reveal_identity',
     'reports:view',
     'users:manage_staff',
+    // Their own station's levels and deliveries, read-only (after review,
+    // 19 Oct 2026: deliveries and resets are the municipality manager's).
     'fuel_stock:read',
-    'fuel_stock:manage',
     'notifications:read',
     'notifications:station_events',
   ],
@@ -251,8 +267,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicles:manage',
     'owners:read',
     'owners:manage',
-    'vehicles:request_change',
-    'owners:request_change',
     'cards:read',
     'cards:issue',
     'notifications:read',
@@ -268,8 +282,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicles:manage',
     'owners:read',
     'owners:manage',
-    'vehicles:request_change',
-    'owners:request_change',
     'vehicles:approve_change',
     'owners:approve_change',
     'owners:reveal_identity',
@@ -288,12 +300,16 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   // below via users:manage_municipality_staff), settings:manage, audit:view
   // and the global lookups (vehicle types, exception types), which belong to
   // the super admin.
+  // After review (19 Oct 2026): supervisory. No fill-up recording (fillups:create,
+  // fillups:record_exception, cards:scan) and no registering of vehicles or
+  // owners (vehicles:manage, owners:manage) — that is the stations' and the
+  // offices' work. Kept: issuing and cancelling cards (the Phase 7 decision),
+  // and correcting a vehicle's or owner's identity (vehicles:approve_change,
+  // owners:approve_change).
   directorate_admin: [
     'companies:read',
     'companies:manage',
     'municipalities:read',
-    'routes:read',
-    'security_authorities:read',
     'vehicle_types:read',
     'stations:read',
     'stations:manage',
@@ -307,24 +323,21 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     // scope of a municipality-scoped role is its municipality's offices).
     'cards:issue',
     'cards:cancel',
-    'cards:scan',
     'reports:view_all_stations',
     'reports:view',
     'owners:read',
-    'owners:manage',
-    'vehicles:manage',
     'vehicles:read',
     'records:browse',
-    'vehicles:request_change',
     'vehicles:approve_change',
-    'owners:request_change',
     'owners:approve_change',
-    'fillups:create',
-    'fillups:update',
-    'fillups:record_exception',
     'owners:reveal_identity',
     'registration_reports:view',
     'fuel_stock:read',
+    // After review (19 Oct 2026): «مراقبة المحطات» — tank capacities,
+    // deliveries and resets of the municipality's stations.
+    'fuel_stock:configure',
+    'fuel_stock:deliver',
+    'fuel_stock:reset',
     'notifications:read',
     'notifications:municipality_events',
     'reports:municipality',
@@ -450,6 +463,14 @@ export const SYSTEM_SETTINGS = [
     value: '300',
     description:
       'PLACEHOLDER — max total liters a single vehicle owner (by national/administrative ID) can be issued per week, across all their vehicles',
+  },
+  // After review (19 Oct 2026): how many vehicles one owner may have
+  // registered. 0 = no limit. Also added by migration
+  // 20261019090000_owner_vehicle_limit, so a running database has it.
+  {
+    key: 'registration.max_vehicles_per_owner',
+    value: '0',
+    description: 'Max vehicles registered to one owner (by identity); 0 = no limit',
   },
   // Round 4 client feedback: cost = quantityLiters × price-per-liter, shown
   // read-only on the fill-up form. The client gave exactly ONE real number

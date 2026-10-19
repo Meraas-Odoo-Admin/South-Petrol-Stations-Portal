@@ -76,6 +76,8 @@ export function VehiclesListPage() {
   const [brandFilter, setBrandFilter] = useState('');
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState('');
   const [ownerStatusFilter, setOwnerStatusFilter] = useState<OwnerIdentityStatusFilter | ''>('');
+  // After review (19 Oct 2026): only vehicles that share their plate number.
+  const [duplicatePlateOnly, setDuplicatePlateOnly] = useState(false);
   const [sort, setSort] = useState<VehicleSortField>('CREATED_AT');
 
   const typeLookup = useLookup<{ id: string; name: string; isActive: boolean }>('/vehicle-types', 'vehicle-types');
@@ -98,7 +100,7 @@ export function VehiclesListPage() {
   }, [query]);
 
   const { data: pageData, isLoading, isError } = useQuery({
-    queryKey: ['vehicles', 'list', skip, debounced, brandFilter, vehicleTypeFilter, ownerStatusFilter, sort],
+    queryKey: ['vehicles', 'list', skip, debounced, brandFilter, vehicleTypeFilter, ownerStatusFilter, sort, duplicatePlateOnly],
     queryFn: async () =>
       (
         await apiClient.get<{ total: number; items: VehicleBasicInfo[] }>('/vehicles', {
@@ -110,6 +112,7 @@ export function VehiclesListPage() {
             brand: brandFilter || undefined,
             vehicleTypeId: vehicleTypeFilter || undefined,
             ownerIdentityStatus: ownerStatusFilter || undefined,
+            duplicatePlate: duplicatePlateOnly || undefined,
             sort,
           },
         })
@@ -266,6 +269,23 @@ export function VehiclesListPage() {
             ),
           )}
         </select>
+        <label
+          className={`inline-flex min-h-[44px] items-center gap-2 rounded-sm border px-3 text-[15px] font-bold lg:min-h-0 lg:py-2 lg:text-[13px] ${
+            duplicatePlateOnly ? 'border-accent bg-accent-100 text-ink' : 'border-line bg-surface-alt text-ink'
+          }`}
+          data-testid="vehicles-duplicate-plate-filter"
+        >
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-primary"
+            checked={duplicatePlateOnly}
+            onChange={(e) => {
+              setDuplicatePlateOnly(e.target.checked);
+              setSkip(0);
+            }}
+          />
+          لوحات مكررة فقط
+        </label>
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as VehicleSortField)}

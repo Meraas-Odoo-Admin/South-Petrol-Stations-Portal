@@ -113,10 +113,11 @@ test('registration employee: the 10-digit administrative number, no N, a year li
   await expect(page.getByTestId('registration-identity-error')).toContainText('يبدأ بـ 5 (ذكر) أو 6 (أنثى)');
 
   await expect(page.getByTestId('registration-plate-n')).toHaveCount(0);
-  const years = page.getByTestId('registration-year').locator('option');
-  const nextYear = String(new Date().getFullYear() + 1);
-  await expect(years.nth(1)).toHaveText(nextYear);
-  await expect(years.last()).toHaveText('1950');
+  // After review (19 Oct 2026): the year is typed — 4 digits only, Arabic-Indic
+  // digits turned into Western ones.
+  const year = page.getByTestId('registration-year');
+  await year.fill('٢٠١٨x9');
+  await expect(year).toHaveValue('2018');
   await expect(page.getByTestId('registration-make')).toHaveAttribute('placeholder', 'مثال: تويوتا');
   await expect(page.getByTestId('registration-model')).toHaveAttribute('placeholder', 'مثال: كامري');
 

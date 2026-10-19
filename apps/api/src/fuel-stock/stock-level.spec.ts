@@ -165,7 +165,7 @@ describe('fuel reconciliation of a period', () => {
   const from = d('2026-10-02T00:00:00');
   const to = d('2026-10-10T00:00:00');
 
-  it('a clean period leaves nothing unaccounted', () => {
+  it('a period adds up: start + delivered − dispensed − zeroed = end', () => {
     const result = reconcilePeriod(
       setup,
       [delivery(8000, '2026-10-03T09:00:00')],
@@ -173,15 +173,13 @@ describe('fuel reconciliation of a period', () => {
       from,
       to,
     );
-    expect(result).toMatchObject({ startLevel: 5000, delivered: 8000, dispensed: 300, endLevel: 12700, unaccounted: 0 });
+    expect(result).toMatchObject({ startLevel: 5000, delivered: 8000, dispensed: 300, endLevel: 12700, resetWrittenOff: 0 });
     expect(result.startLevel + result.delivered - result.dispensed - result.resetWrittenOff).toBe(result.endLevel);
   });
 
-  it('dispensing more than was ever delivered is unaccounted fuel (the shortfall)', () => {
+  it('dispensing more than was ever delivered ends below zero', () => {
     const result = reconcilePeriod(setup, [], [fill(5600, '2026-10-04T09:00:00')], from, to);
     expect(result.endLevel).toBe(-600);
-    expect(result.shortfall).toBe(600);
-    expect(result.unaccounted).toBe(600);
   });
 
   it('a reset writes off what the books held, and it is reported', () => {
@@ -194,7 +192,6 @@ describe('fuel reconciliation of a period', () => {
     );
     expect(result.resetWrittenOff).toBe(5900);
     expect(result.endLevel).toBe(0);
-    expect(result.unaccounted).toBe(5900);
     expect(result.startLevel + result.delivered - result.dispensed - result.resetWrittenOff).toBe(result.endLevel);
   });
 

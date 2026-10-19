@@ -24,6 +24,18 @@ const WEEKLY_CAP_IMPACT_CONFIG: Partial<Record<string, { triggerReason: string; 
 export class SystemSettingsService implements SettingsReader {
   constructor(private readonly prisma: PrismaService) {}
 
+  // After review (19 Oct 2026): every fill-up and every citizen check reads
+  // ~7 settings that change a few times a year. They are kept in memory for
+  // 30 s, and dropped the moment a setting is changed through the API
+  // (invalidate()). Off in tests, which change settings straight in the
+  // database and expect it at once.
+  private readonly cache = new Map<string, { value: string; at: number }>();
+  private readonly cacheMs = process.env.NODE_ENV === 'test' ? 0 : 30_000;
+
+  invalidate(): void {
+    this.cache.clear();
+  }
+
   async getNumber(key: string): Promise<number> {
     const raw = await this.getString(key);
     const value = Number(raw);
@@ -34,10 +46,13 @@ export class SystemSettingsService implements SettingsReader {
   }
 
   async getString(key: string): Promise<string> {
+    const cached = this.cache.get(key);
+    if (cached && Date.now() - cached.at < this.cacheMs) return cached.value;
     const setting = await this.prisma.systemSetting.findUnique({ where: { key } });
     if (!setting) {
       throw new Error(`SystemSetting "${key}" is not seeded.`);
     }
+    if (this.cacheMs > 0) this.cache.set(key, { value: setting.value, at: Date.now() });
     return setting.value;
   }
 
