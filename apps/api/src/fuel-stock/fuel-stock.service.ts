@@ -838,7 +838,7 @@ export class FuelStockService {
     };
     await this.notifications.notifyScopeOnce({ stationId }, said, [
       { permissions: ['notifications:municipality_events'], link: `/monitoring/stations/${stationId}` },
-      { permissions: ['notifications:station_events'], link: '/my-station?tab=fuel' },
+      { permissions: ['notifications:station_events'], link: `/my-station?station=${stationId}&tab=fuel` },
     ], { exceptUserId: actorId });
     await this.notifications.notifyPermissionHolders(
       'notifications:system_events',
@@ -895,7 +895,7 @@ export class FuelStockService {
 
       const station = await this.station(stationId);
       const fuel = FUEL_LABELS_AR[fuelType];
-      const link = `/my-station?tab=fuel`;
+      const link = `/my-station?station=${stationId}&tab=fuel`; // the station, for a supervisor of several
       const managerLink = `/monitoring/stations/${stationId}`;
 
       if (decision.alertLow) {

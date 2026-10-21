@@ -472,6 +472,14 @@ export const SYSTEM_SETTINGS = [
     value: '0',
     description: 'Max vehicles registered to one owner (by identity); 0 = no limit',
   },
+  // After review (21 Oct 2026): every fill-up is this amount, in LYD, of the
+  // vehicle's own fuel; the liters are amount ÷ that fuel's price. Also added
+  // by migration 20261021090000_fillup_fixed_amount.
+  {
+    key: 'fillup.fixed_amount_lyd',
+    value: '6',
+    description: 'LYD of every fill-up; the liters are this amount divided by the price of the vehicle\'s fuel',
+  },
   // Round 4 client feedback: cost = quantityLiters × price-per-liter, shown
   // read-only on the fill-up form. The client gave exactly ONE real number
   // (بنزين 95 at 0.15 LYD/liter) — diesel/kerosene are NOT confirmed and

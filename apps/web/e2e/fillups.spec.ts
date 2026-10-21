@@ -47,12 +47,11 @@ test('supervisor: scan the card, confirm the vehicle, trip the gap rule and reso
   await expect(page.getByTestId('fillup-scan-confirm-plate')).toHaveText(`${city} - ${seq}`);
   await page.getByTestId('fillup-scan-confirm-yes').click();
 
-  // Fuel and amount, at a real desktop width: the same wizard.
+  // At a real desktop width: the same wizard. No fuel-and-amount step (after
+  // review, 21 Oct 2026): the vehicle's fuel, the fixed amount.
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByTestId('fillup-mobile-wizard')).toBeVisible();
-  await page.getByTestId('fillup-amount-input-mobile').fill('10');
-  await expect(page.getByTestId('fillup-estimated-liters-mobile')).toBeVisible();
-  await page.getByTestId('fillup-mobile-continue-to-review').click();
+  await expect(page.getByTestId('fillup-fixed-amount')).toContainText('د.ل');
 
   // Review: the real rule preview. The fixture fill-up a few seconds ago is
   // well inside the minimum gap.

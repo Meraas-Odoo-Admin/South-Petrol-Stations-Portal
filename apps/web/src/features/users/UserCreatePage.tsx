@@ -50,6 +50,9 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
   const presetKind = searchParams.get('kind') as PlaceKind | null;
   const presetPlace = searchParams.get('place');
   const presetPlaceName = searchParams.get('placeName');
+  // After review (21 Oct 2026): «إضافة مشرف» — only supervisor-level jobs, and
+  // as many of the side's places as they oversee.
+  const supervisorOnly = searchParams.get('supervisor') === '1';
   const backPath = searchParams.get('back') || basePath;
   const options = useUserOptions();
   const create = useCreateUser();
@@ -63,7 +66,7 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
   const [created, setCreated] = useState<CreatedUser | null>(null);
 
   const allJobs = options.data?.jobs ?? [];
-  const jobs = presetKind ? allJobs.filter((j) => placeKindOf(j) === presetKind) : allJobs;
+  const jobs = (presetKind ? allJobs.filter((j) => placeKindOf(j) === presetKind) : allJobs).filter((j) => !supervisorOnly || j.managesStaff);
   // A supervisor can only give one job: it is shown, not asked.
   const fixedJob = jobs.length === 1 ? jobs[0] : null;
   useEffect(() => {
@@ -132,10 +135,14 @@ export function UserCreatePage({ basePath, standalone = false }: { basePath: str
   }
 
   const header = standalone ? (
-    <PageHeader title="حساب جديد" subtitle={presetPlaceName ? `في ${presetPlaceName}` : 'موظف جديد في محطتك أو مكتبك'} />
+    <PageHeader
+      title={supervisorOnly ? 'مشرف جديد' : 'حساب جديد'}
+      subtitle={supervisorOnly ? 'اختر كل المحطات أو المكاتب التي يشرف عليها' : presetPlaceName ? `في ${presetPlaceName}` : 'موظف جديد في محطتك أو مكتبك'}
+    />
   ) : (
     <div>
-      <h1 className="text-[24px] font-extrabold text-ink lg:text-xl">حساب جديد</h1>
+      <h1 className="text-[24px] font-extrabold text-ink lg:text-xl">{supervisorOnly ? 'مشرف جديد' : 'حساب جديد'}</h1>
+      {supervisorOnly && <p className="mt-1 text-[16px] text-ink-soft lg:text-[14px]">اختر كل المحطات أو المكاتب التي يشرف عليها.</p>}
       {presetPlaceName && <p className="mt-1 text-[16px] text-ink-soft lg:text-[14px]">في {presetPlaceName}</p>}
     </div>
   );

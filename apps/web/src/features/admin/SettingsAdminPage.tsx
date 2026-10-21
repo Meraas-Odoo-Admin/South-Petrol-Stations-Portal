@@ -31,6 +31,7 @@ const STEPPER_KEYS: Record<string, { step: number; decimals: number }> = {
   'fillup.max_liters_per_week_per_owner': { step: 10, decimals: 0 },
   'registration.max_vehicles_per_owner': { step: 1, decimals: 0 },
   'stock.low_threshold_liters': { step: 100, decimals: 0 },
+  'fillup.fixed_amount_lyd': { step: 0.5, decimals: 2 },
   'fillup.price_per_liter.PETROL_95': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.DIESEL': { step: 0.01, decimals: 2 },
   'fillup.price_per_liter.KEROSENE': { step: 0.01, decimals: 2 },
@@ -101,9 +102,11 @@ export function SettingsAdminPage() {
   const weekStartDay = editing['fillup.week_start_day'] ?? byKey.get('fillup.week_start_day')?.value;
 
   const numericSettings = data?.filter((s) => STEPPER_KEYS[s.key]) ?? [];
-  const priceSettings = numericSettings.filter((s) => s.key.startsWith('fillup.price_per_liter.'));
+  // After review (21 Oct 2026): the fixed amount of every fill-up sits with the prices.
+  const isPrice = (key: string) => key.startsWith('fillup.price_per_liter.') || key === 'fillup.fixed_amount_lyd';
+  const priceSettings = numericSettings.filter((s) => isPrice(s.key)).sort((a, b) => Number(b.key === 'fillup.fixed_amount_lyd') - Number(a.key === 'fillup.fixed_amount_lyd'));
   const ownerSettings = OWNER_KEYS.map((key) => numericSettings.find((s) => s.key === key)).filter((s): s is SystemSettingRow => Boolean(s));
-  const otherNumericSettings = numericSettings.filter((s) => !s.key.startsWith('fillup.price_per_liter.') && !OWNER_KEYS.includes(s.key));
+  const otherNumericSettings = numericSettings.filter((s) => !isPrice(s.key) && !OWNER_KEYS.includes(s.key));
   const isDirty = (key: string) => editing[key] !== undefined && editing[key] !== byKey.get(key)?.value;
 
   return (
@@ -241,7 +244,7 @@ export function SettingsAdminPage() {
           {priceSettings.length > 0 && (
             <section aria-labelledby="settings-prices" className="space-y-3">
               <h3 id="settings-prices" className="text-[17px] font-extrabold text-primary-dark lg:text-[14px]">
-                أسعار الوقود (دينار للتر)
+                مبلغ التعبئة وأسعار الوقود
               </h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {priceSettings.map((setting) => (

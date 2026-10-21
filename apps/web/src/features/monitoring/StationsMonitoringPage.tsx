@@ -16,6 +16,10 @@ import { OpsReportPanel } from '../reports/OpsReportPanel';
 import { stamp } from '../regreports/common';
 import { litersText, STOCK_STATUS_TEXT, STOCK_STATUS_VARIANT, type StockStatus } from '../stock/fuelStock';
 
+// After review (21 Oct 2026): every fill-up is a fixed amount, so the liters
+// dispensed are an estimate; «تقرير التوريد والتعبئة» (a tab of this screen,
+// and of each station) sets the vehicles filled beside the fuel delivered.
+//
 // «مراقبة المحطات» (after review, 19 Oct 2026) — the municipality manager's
 // screen for the stations' fuel: every station's tanks at a glance, which
 // need a delivery, and, per station, the deliveries and resets (recorded here
@@ -134,6 +138,11 @@ export function StationsMonitoringPage() {
   const municipality = choices.find((m) => m.id === chosenId) ?? choices[0] ?? null;
   const [show, setShow] = useState<Show>('all');
   const [q, setQ] = useState('');
+  const views: TabDef[] = [
+    { key: 'stations', label: 'المحطات' },
+    { key: 'supply', label: 'تقرير التوريد والتعبئة' },
+  ];
+  const [view, setView] = useTab(views, 'view');
 
   const overview = useQuery({
     queryKey: ['fuel-stock-overview', municipality?.id ?? ''],
@@ -176,7 +185,14 @@ export function StationsMonitoringPage() {
       {(municipalities.isError || overview.isError) && <Notice kind="error">تعذّر تحميل المحطات. تأكد من الاتصال ثم أعد المحاولة.</Notice>}
       {overview.isLoading && <SkeletonRows rows={5} />}
 
-      {data && (
+      <Tabs tabs={views} value={view} onChange={setView} label="مراقبة المحطات" />
+      {view === 'supply' && municipality && (
+        <div className="pt-4" data-testid="monitor-supply">
+          <OpsReportPanel key={municipality.id} report="supply" fixedMunicipalityId={municipality.id} />
+        </div>
+      )}
+
+      {view === 'stations' && data && (
         <>
           <section aria-label="ملخص المحطات" className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="monitor-summary">
             <Figure label="المحطات" value={nf.format(data.totals.stations)} onClick={() => setShow('all')} active={show === 'all'} />
@@ -278,6 +294,7 @@ export function StationMonitorPage() {
   const canReports = hasPermission('reports:view');
   const tabs: TabDef[] = [
     { key: 'stock', label: 'المخزون والتوريد' },
+    { key: 'supply', label: 'التوريد والتعبئة' },
     ...(canReports ? [{ key: 'fillups', label: 'الصرف (التعبئات)' }, { key: 'reports', label: 'التقارير' }] : []),
   ];
   const [tab, setTab] = useTab(tabs);
@@ -299,6 +316,9 @@ export function StationMonitorPage() {
 
       <TabPanel tab="stock" value={tab}>
         <FuelStockPanel stationId={stationId} stationName={name} />
+      </TabPanel>
+      <TabPanel tab="supply" value={tab}>
+        <OpsReportPanel report="supply" fixedStationId={stationId} />
       </TabPanel>
       {canReports && (
         <>

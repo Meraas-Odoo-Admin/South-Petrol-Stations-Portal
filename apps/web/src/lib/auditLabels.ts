@@ -212,6 +212,7 @@ export const AUDIT_REPORT_LABELS: Record<string, string> = {
   summary: 'الملخص بين البلديات',
   'registration-offices': 'مكاتب التسجيل',
   'audit-log': 'سجل التدقيق',
+  supply: 'التوريد والتعبئة',
 };
 
 // Why a sign-in failed (LOGIN_FAILED's reason).

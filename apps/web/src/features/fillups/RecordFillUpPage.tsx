@@ -31,7 +31,7 @@ import {
 } from '@fuel-tracking/shared-types';
 import { fuelTypeLabel } from '../../lib/labels';
 import { describeApiError } from '../../lib/apiError';
-import { StockStrip, StockWarning } from '../stock/StockStrip';
+import { StockStrip } from '../stock/StockStrip';
 import { useAuth } from '../auth/AuthProvider';
 import { useStations } from '../stations/useStations';
 import { Card } from '../../components/design/Card';
@@ -42,7 +42,7 @@ import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { VehiclePreviewCard } from './VehiclePreviewCard';
 import { QrScanPanel, type ScannedCard } from '../../components/QrScanPanel';
 import { RULE_VIOLATION_MESSAGES, RULE_CHECK_LABELS, describeRuleCheck } from './ruleViolationMessages';
-import { useFuelPrices } from './useFuelPrice';
+import { useFillAmount, useFuelPrices } from './useFuelPrice';
 import type { VehicleBasicInfo } from '../vehicles/types';
 import { SkeletonRows } from '../../components/design/Skeleton';
 import { LIST_PAGE_SIZE } from '../../lib/pageSize';
@@ -346,9 +346,9 @@ function DayListRail({
   );
 }
 
-// Amounts in LYD, not liters: the amount is what staff actually enter (pay then
-// pump); the liter count is derived from it with the fuel's price.
-const AMOUNT_QUICK_PICKS = ['5', '10', '20'];
+// After review (21 Oct 2026): every fill-up is the fixed amount in LYD (the
+// fillup.fixed_amount_lyd setting, 6 now) of the vehicle's own fuel; the liters
+// are that amount divided by the fuel's price. Nothing is typed or chosen.
 
 const FUEL_TYPES: { value: CreateFillUpRequest['fuelType']; label: string }[] = [
   { value: 'PETROL_95', label: 'بنزين 95' },
@@ -415,21 +415,21 @@ interface ConfirmationSummary {
 }
 
 // Phase 6: a fill-up is recorded from a CARD SCAN. The journey:
-//   scan the card -> confirm the vehicle -> fuel type and amount -> review the
-//   rules -> done. (An exception step exists only when a rule is broken.)
+//   scan the card -> confirm the vehicle -> review the rules -> done. (An
+//   exception step exists only when a rule is broken.) After review (21 Oct
+//   2026) there is no fuel-and-amount step: both are fixed (see above).
 // The pump never accepts a typed plate. When the card cannot be used, the
 // employee searches a REGISTERED vehicle (plate, owner name or booklet number)
 // and says why; it is recorded «بدون بطاقة» and counted in the reports.
-type Step = 'scan' | 'match' | 'fuel' | 'review' | 'exception';
+type Step = 'scan' | 'match' | 'review' | 'exception';
 
 const STEP_TITLES: Record<Step, string> = {
   scan: 'مسح بطاقة المركبة',
   match: 'تأكيد المركبة',
-  fuel: 'الوقود والكمية',
   review: 'المراجعة وفحص القواعد',
   exception: 'تسجيل استثناء',
 };
-const STEP_SEGMENT: Record<Step, number> = { scan: 1, match: 1, fuel: 2, review: 3, exception: 3 };
+const STEP_SEGMENT: Record<Step, number> = { scan: 1, match: 1, review: 2, exception: 2 };
 
 export function RecordFillUpPage() {
   const { user, hasPermission } = useAuth();
@@ -438,8 +438,12 @@ export function RecordFillUpPage() {
   const canViewReports = hasPermission('reports:view');
   const canRecordException = hasPermission('fillups:record_exception');
   const ownStation = user?.stationScope[0] ?? null;
+  // After review (21 Oct 2026): whoever has more than one station (a group's
+  // supervisor) chooses it first, like the super admin; never the first one by itself.
+  const choosesStation = canViewAllStations || (user?.stationScope.length ?? 0) > 1;
   const { data: stations } = useStations();
   const { data: fuelPrices } = useFuelPrices();
+  const fillAmount = useFillAmount().data?.amountLyd;
 
   const [step, setStep] = useState<Step>('scan');
   const [rejection, setRejection] = useState<Rejection | null>(null);
@@ -460,7 +464,7 @@ export function RecordFillUpPage() {
   const fillUpForm = useForm<FillUpFormValues>({
     resolver: zodResolver(fillUpSchema),
     defaultValues: {
-      stationId: canViewAllStations ? '' : (ownStation?.stationId ?? ''),
+      stationId: choosesStation ? '' : (ownStation?.stationId ?? ''),
       vehicleId: '',
       fuelType: 'PETROL_95',
       quantityLiters: '',
@@ -525,6 +529,14 @@ export function RecordFillUpPage() {
       fillUpForm.setValue('fuelType', availableFuelTypes[0].value, { shouldValidate: true });
     }
   }, [chosenIsOffered, availableFuelTypes.map((f) => f.value).join(',')]);
+  // The vehicle's fuel, when the station does not sell it: nothing to pump.
+  const fuelNotSoldHere = Boolean(registeredPumpFuel && soldFuels.length > 0 && !soldFuels.includes(registeredPumpFuel));
+  // The liters of the fixed amount, for the fuel in force (set again whenever
+  // the fuel, the price, the amount or the step changes — a new fill-up too).
+  const chosenPrice = fuelPrices?.[chosenFuel];
+  useEffect(() => {
+    if (fillAmount !== undefined) applyAmount(String(fillAmount), chosenFuel);
+  }, [chosenFuel, chosenPrice, fillAmount, step]);
   const rulePreviewErrorMessage = isAxiosError(rulePreviewQuery.error) ? stationBlockedMessage(rulePreviewQuery.error) : null;
 
   const previewRejection: Rejection | null = (() => {
@@ -568,7 +580,8 @@ export function RecordFillUpPage() {
 
   function resetAll() {
     fillUpForm.reset({
-      stationId: canViewAllStations ? '' : (ownStation?.stationId ?? ''),
+      // The station chosen stays chosen for the next fill-up.
+      stationId: choosesStation ? fillUpForm.getValues('stationId') : (ownStation?.stationId ?? ''),
       vehicleId: '',
       fuelType: 'PETROL_95',
       quantityLiters: '',
@@ -762,12 +775,11 @@ export function RecordFillUpPage() {
       setScannedCard(null);
       setNoCard(null);
       setStep('scan');
-    } else if (step === 'fuel') setStep('match');
-    else if (step === 'review') setStep('fuel');
+    } else if (step === 'review') setStep('match');
     else if (step === 'exception') setStep('review');
   }
 
-  const needStationFirst = canViewAllStations && !stationId;
+  const needStationFirst = choosesStation && !stationId;
 
   return (
     <div className="sm:mx-auto sm:grid sm:max-w-3xl sm:grid-cols-[280px_1fr] sm:items-start sm:gap-5">
@@ -793,14 +805,14 @@ export function RecordFillUpPage() {
           <h1 className="text-[24px] font-extrabold text-ink lg:text-[20px]">{STEP_TITLES[step]}</h1>
         </div>
         <div className="mb-4 flex gap-1.5">
-          {[1, 2, 3].map((segment) => (
+          {[1, 2].map((segment) => (
             <div key={segment} className={`h-1.5 flex-1 rounded-full ${segment <= STEP_SEGMENT[step] ? 'bg-primary' : 'bg-surface-alt'}`} />
           ))}
         </div>
 
         {step === 'scan' && (
           <Card className="relative p-4">
-            {canViewAllStations && (
+            {choosesStation && (
               <div className="mb-4">
                 <label className={fieldLabelClass}>المحطة</label>
                 <StationSelect
@@ -961,7 +973,7 @@ export function RecordFillUpPage() {
         {step === 'match' && scannedCard && (
           <ScanConfirmView
             card={scannedCard}
-            onConfirm={() => setStep('fuel')}
+            onConfirm={() => setStep('review')}
             onReject={() => {
               fillUpForm.setValue('vehicleId', '', { shouldValidate: false });
               setScannedCard(null);
@@ -996,9 +1008,9 @@ export function RecordFillUpPage() {
                 data-testid="fillup-mobile-continue-to-fuel"
                 className="h-12 w-full text-[18px] lg:text-[14px]"
                 disabled={!selectedVehicle || rulePreviewQuery.isError}
-                onClick={() => setStep('fuel')}
+                onClick={() => setStep('review')}
               >
-                نعم، متابعة إلى الوقود
+                نعم، متابعة إلى المراجعة
               </PillButton>
               <button
                 type="button"
@@ -1016,104 +1028,6 @@ export function RecordFillUpPage() {
           </>
         )}
 
-        {step === 'fuel' && (
-          <Card className="p-4">
-            <p id="fillup-fuel-label" className={fieldLabelClass}>نوع الوقود</p>
-            <div className="flex gap-2" role="group" aria-labelledby="fillup-fuel-label">
-              {availableFuelTypes.map((ft) => {
-                const selected = chosenFuel === ft.value;
-                return (
-                  <button
-                    key={ft.value}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => {
-                      fillUpForm.setValue('fuelType', ft.value, { shouldValidate: true });
-                      applyAmount(amountLyd, ft.value);
-                    }}
-                    className={`h-12 flex-1 rounded-sm border-2 text-[16px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 lg:h-11 lg:text-[14px] ${
-                      selected ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink'
-                    }`}
-                  >
-                    {selected && <span aria-hidden="true">✓ </span>}
-                    {ft.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-3">
-              <StockWarning stationId={stationId || undefined} fuelType={chosenFuel} />
-            </div>
-            {fuelMismatch && vehicleFuelType && (
-              <div role="alert" data-testid="fillup-fuel-mismatch" className="mt-3 rounded-md bg-accent-100 p-3.5 text-[16px] font-bold leading-[1.7] text-ink">
-                تنبيه: هذه المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[vehicleFuelType]}، والوقود المختار مختلف. راجع نوع الوقود قبل المتابعة — يمكنك المتابعة، وسيُسجَّل التنبيه للمشرف.
-              </div>
-            )}
-
-            <label htmlFor="fillup-amount" className={`${fieldLabelClass} mt-4`}>المبلغ المدفوع (د.ل)</label>
-            {(() => {
-              const price = fuelPrices?.[chosenFuel];
-              return (
-                <>
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
-                    <input
-                      id="fillup-amount"
-                      type="number"
-                      step="0.01"
-                      data-testid="fillup-amount-input-mobile"
-                      data-figure="large"
-                      value={amountLyd}
-                      onChange={(e) => applyAmount(e.target.value, chosenFuel)}
-                      dir="ltr"
-                      disabled={!price}
-                      className="w-full rounded-sm bg-transparent text-center font-mono text-[48px] font-extrabold leading-tight text-primary-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark disabled:opacity-50 lg:w-28 lg:text-start lg:text-[30px]"
-                    />
-                    <div className="flex flex-1 justify-center gap-2 lg:justify-end lg:gap-1.5">
-                      {AMOUNT_QUICK_PICKS.map((amount) => (
-                        <button
-                          key={amount}
-                          type="button"
-                          onClick={() => applyAmount(amount, chosenFuel)}
-                          aria-pressed={amountLyd === amount}
-                          aria-label={`${amount} دينار`}
-                          className={`h-12 w-14 rounded-sm border-2 font-mono text-[18px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark lg:h-10 lg:w-12 lg:text-[14px] ${
-                            amountLyd === amount ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink'
-                          }`}
-                        >
-                          {amount}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {!price && <p className="mt-1.5 text-[14px] text-ink-soft lg:text-[12px]">جارٍ تحميل سعر الوقود…</p>}
-                </>
-              );
-            })()}
-            {fillUpForm.formState.errors.quantityLiters && <p className={fieldErrorClass}>{fillUpForm.formState.errors.quantityLiters.message}</p>}
-            {fillUpForm.watch('quantityLiters') && (
-              <div className="mt-3 flex items-center justify-between rounded-sm bg-surface-alt px-3 py-3">
-                <span className="text-[16px] font-bold text-ink-soft lg:text-[13px]">الكمية المقدَّرة</span>
-                <span className="text-[26px] font-extrabold text-ink lg:text-[16px]" data-testid="fillup-estimated-liters-mobile">
-                  <LtrText>{fillUpForm.watch('quantityLiters')}</LtrText> لتر
-                </span>
-              </div>
-            )}
-          </Card>
-        )}
-
-        {step === 'fuel' && (
-          <ThumbBar>
-            <PillButton
-              data-testid="fillup-mobile-continue-to-review"
-              className="h-12 w-full text-[18px] lg:text-[14px]"
-              disabled={!fillUpForm.watch('quantityLiters') || !!fillUpForm.formState.errors.quantityLiters}
-              onClick={() => setStep('review')}
-            >
-              متابعة إلى المراجعة
-            </PillButton>
-          </ThumbBar>
-        )}
-
         {step === 'review' && (
           <>
             <form onSubmit={fillUpForm.handleSubmit(onSubmitFillUp, onInvalidFillUp)} className="space-y-3">
@@ -1124,8 +1038,16 @@ export function RecordFillUpPage() {
                     {fuelTypeLabel(chosenFuel)} · <LtrText>{fillUpForm.watch('quantityLiters')}</LtrText> لتر
                   </p>
                   {amountLyd && (
-                    <p className="text-center text-[18px] font-bold text-ink-soft lg:text-[14px]">
-                      <LtrText>{amountLyd}</LtrText> د.ل
+                    <p className="text-center text-[18px] font-bold text-ink-soft lg:text-[14px]" data-testid="fillup-fixed-amount">
+                      <LtrText>{amountLyd}</LtrText> د.ل — مبلغ ثابت لكل تعبئة، والوقود من بيانات المركبة
+                    </p>
+                  )}
+                  {!fillUpForm.watch('quantityLiters') && !fuelNotSoldHere && (
+                    <p className="mt-1 text-center text-[14px] text-ink-soft lg:text-[12px]">جارٍ حساب الكمية من سعر الوقود…</p>
+                  )}
+                  {fuelNotSoldHere && registeredFuel && (
+                    <p role="alert" className="mt-3 rounded-sm bg-danger-100 p-3 text-[16px] font-bold leading-[1.7] text-danger-dark lg:text-[14px]" data-testid="fillup-fuel-not-sold">
+                      هذه المركبة تعمل بـ {VEHICLE_FUEL_TYPE_LABELS_AR[registeredFuel]}، والمحطة لا تبيعه حاليًا. لا يمكن تسجيل التعبئة هنا.
                     </p>
                   )}
                 </div>
@@ -1164,6 +1086,7 @@ export function RecordFillUpPage() {
                   <PillButton
                     type="button"
                     data-testid="fillup-mobile-record-exception"
+                    disabled={fuelNotSoldHere || !fillUpForm.watch('quantityLiters')}
                     variant="danger"
                     size="md"
                     className="h-12 w-full text-[18px] lg:text-[15px]"
@@ -1177,7 +1100,9 @@ export function RecordFillUpPage() {
                   <PillButton
                     type="submit"
                     data-testid="fillup-submit-mobile"
-                    disabled={fillUpForm.formState.isSubmitting || rulePreviewQuery.isLoading}
+                    disabled={
+                      fillUpForm.formState.isSubmitting || rulePreviewQuery.isLoading || fuelNotSoldHere || !fillUpForm.watch('quantityLiters')
+                    }
                     size="md"
                     className="h-12 w-full text-[18px] lg:text-[15px]"
                   >

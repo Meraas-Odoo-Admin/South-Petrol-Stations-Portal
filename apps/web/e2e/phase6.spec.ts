@@ -50,11 +50,9 @@ test('pump: scan, confirm, fuel and amount, review (not submitted)', async ({ br
   await shots(page, '01-pump-confirm-vehicle');
 
   await page.getByTestId('fillup-scan-confirm-yes').click();
-  await page.getByTestId('fillup-amount-input-mobile').fill('10');
-  await shots(page, '02-pump-fuel-and-amount');
-
-  await page.getByTestId('fillup-mobile-continue-to-review').click();
+  // No fuel-and-amount step (after review, 21 Oct 2026).
   await expect(page.getByTestId('rule-review-card-mobile')).toBeVisible();
+  await expect(page.getByTestId('fillup-fixed-amount')).toContainText('د.ل');
   await shots(page, '03-pump-review');
   await context.close();
 });

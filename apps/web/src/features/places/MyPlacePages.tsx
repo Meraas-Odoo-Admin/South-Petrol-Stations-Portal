@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { usePageParam } from '../../lib/usePageParam';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/apiClient';
 import { FUEL_TYPE_LABELS, STATION_STATUS_LABELS, STATION_STATUS_VARIANT } from '../../lib/labels';
 import { PageHeader } from '../../components/design/PageHeader';
@@ -11,6 +12,8 @@ import { adminErrorMessage } from '../admin/adminErrors';
 import { Notice, SectionCard } from '../users/parts';
 import { OfficeWorkspace, StationWorkspace } from './Workspaces';
 import { SkeletonRows } from '../../components/design/Skeleton';
+import { litersText, STOCK_STATUS_TEXT, STOCK_STATUS_VARIANT, type StockStatus } from '../stock/fuelStock';
+import { tripoliToday } from '../regreports/common';
 import {
   ActivityCard,
   OFFICE_STATUS_LABELS,
@@ -38,11 +41,24 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 // «محطتي» — the station supervisor's own station: what it is, the fuel types
 // it sells (the one thing a supervisor controls about it), its employees, and
 // what happened there. The supervisor reaches their own station(s) only.
+// After review (21 Oct 2026): a supervisor oversees a GROUP of stations (and a
+// station may have more than one supervisor). With several, «محطاتي» opens on
+// all of them at a glance — today's fill-ups and liters, today's exceptions and
+// the tanks — and each one opens on its usual tabs (the choice is in the address).
 export function MyStationPage() {
   const stations = useStationList({});
-  const [chosen, setChosen] = useState('');
+  const [params, setParams] = useSearchParams();
+  const chosen = params.get('station') ?? '';
   const list = stations.data ?? [];
   const station: StationRow | undefined = list.length === 1 ? list[0] : list.find((s) => s.id === chosen);
+  const choose = (id: string) =>
+    setParams((prev) => {
+      const next = new URLSearchParams();
+      if (id) next.set('station', id);
+      // A station's own tab is kept only while staying on that station.
+      if (id && prev.get('station') === id && prev.get('tab')) next.set('tab', prev.get('tab')!);
+      return next;
+    });
 
   if (stations.isLoading) return <SkeletonRows rows={6} />;
   if (stations.isError) return <Notice kind="error">تعذّر تحميل محطتك. تأكد من الاتصال ثم أعد المحاولة.</Notice>;
@@ -54,24 +70,135 @@ export function MyStationPage() {
       </div>
     );
   }
+  const many = list.length > 1;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title="محطتي" subtitle="موظفو المحطة والوقود والمخزون والتقارير" />
-      {list.length > 1 && (
-        <div>
-          <label htmlFor="my-station" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">المحطة</label>
-          <select id="my-station" value={chosen} onChange={(e) => setChosen(e.target.value)} className={SELECT_CLASS}>
-            <option value="">اختر محطتك</option>
-            {list.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+      <PageHeader
+        title={many ? 'محطاتي' : 'محطتي'}
+        subtitle={many ? `${list.length} محطات تحت إشرافك: نشاط اليوم والمخزون، ثم كل محطة بتفاصيلها` : 'موظفو المحطة والوقود والمخزون والتقارير'}
+      />
+      {many && (
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor="my-station" className="mb-1.5 block text-[14px] font-bold text-ink lg:text-[12px]">المحطة</label>
+            <select id="my-station" value={station?.id ?? ''} onChange={(e) => choose(e.target.value)} className={SELECT_CLASS}>
+              <option value="">كل محطاتي</option>
+              {list.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
-      {station ? <MyStation station={station} /> : <Notice kind="info">اختر المحطة أولًا.</Notice>}
+      {station ? <MyStation key={station.id} station={station} /> : <MyStationsGlance stations={list} onOpen={choose} />}
+    </div>
+  );
+}
+
+interface GlanceTank {
+  fuelType: string;
+  fuelLabel: string;
+  level: number | null;
+  percentFull: number | null;
+  status: StockStatus;
+  fillUpsToday: number;
+  dispensedToday: number;
+}
+
+// Every station of the group on one page, the worst first.
+function MyStationsGlance({ stations, onOpen }: { stations: StationRow[]; onOpen: (id: string) => void }) {
+  const today = tripoliToday();
+  const stock = useQuery({
+    queryKey: ['fuel-stock-overview', 'mine'],
+    queryFn: async () =>
+      (await apiClient.get<{ stations: Array<{ id: string; tanks: GlanceTank[] }> }>('/fuel-stock/overview')).data,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const exceptions = useQueries({
+    queries: stations.map((s) => ({
+      queryKey: ['exceptions', 'today-count', s.id, today],
+      queryFn: async () =>
+        (await apiClient.get<{ total: number }>('/exceptions', { params: { stationId: s.id, from: today, to: today, take: 1 } })).data.total,
+      staleTime: 60_000,
+    })),
+  });
+  const tanksOf = new Map((stock.data?.stations ?? []).map((s) => [s.id, s.tanks]));
+  const RANK: Record<StockStatus, number> = { DATA_WARNING: 0, EMPTY: 1, LOW: 2, NOT_SET_UP: 3, OK: 4 };
+  const rows = stations
+    .map((s, i) => {
+      const tanks = tanksOf.get(s.id) ?? [];
+      return {
+        station: s,
+        tanks,
+        fillUps: tanks.reduce((n, t) => n + t.fillUpsToday, 0),
+        liters: tanks.reduce((n, t) => n + t.dispensedToday, 0),
+        exceptions: exceptions[i]?.data,
+        worst: Math.min(5, ...tanks.map((t) => RANK[t.status])),
+      };
+    })
+    .sort((a, b) => a.worst - b.worst || a.station.name.localeCompare(b.station.name, 'ar'));
+  const nf = new Intl.NumberFormat('en-US');
+  const total = (pick: (r: (typeof rows)[number]) => number) => rows.reduce((n, r) => n + pick(r), 0);
+
+  return (
+    <div className="space-y-4" data-testid="my-stations-glance">
+      <section aria-label="اليوم في كل محطاتي" className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'تعبئات اليوم', value: nf.format(total((r) => r.fillUps)) },
+          { label: 'لترات اليوم', value: litersText(total((r) => r.liters)) },
+          { label: 'استثناءات اليوم', value: nf.format(total((r) => r.exceptions ?? 0)) },
+        ].map((k) => (
+          <div key={k.label} className="rounded-md bg-surface p-4 shadow-sm">
+            <p className="text-[14px] font-bold text-ink-soft lg:text-[12px]">{k.label}</p>
+            <p className="mt-1.5 text-[24px] font-extrabold tabular-nums text-ink lg:text-[22px]">{stock.data ? k.value : '—'}</p>
+          </div>
+        ))}
+      </section>
+      {stock.isError && <Notice kind="error">تعذّر تحميل المخزون. تأكد من الاتصال ثم أعد المحاولة.</Notice>}
+      <ul className="space-y-3">
+        {rows.map((r) => (
+          <li key={r.station.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(r.station.id)}
+              className="block w-full rounded-md bg-surface p-4 text-start shadow-sm hover:ring-2 hover:ring-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark"
+              data-testid={`my-station-row-${r.station.id}`}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-[18px] font-extrabold text-ink lg:text-[16px]">{r.station.name}</p>
+                <StatusPill variant={STATION_STATUS_VARIANT[r.station.status] ?? 'neutral'} size="md">
+                  {STATION_STATUS_LABELS[r.station.status] ?? r.station.status}
+                </StatusPill>
+              </div>
+              <p className="mt-1 text-[15px] text-ink-soft lg:text-[13px]">
+                اليوم: <span className="font-bold tabular-nums text-ink">{nf.format(r.fillUps)}</span> تعبئة ·{' '}
+                <span className="font-bold tabular-nums text-ink">{litersText(r.liters)}</span> ·{' '}
+                <span className={`font-bold tabular-nums ${(r.exceptions ?? 0) > 0 ? 'text-danger-dark' : 'text-ink'}`}>
+                  {r.exceptions === undefined ? '—' : nf.format(r.exceptions)}
+                </span>{' '}
+                استثناء
+              </p>
+              {r.tanks.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {r.tanks.map((t) => (
+                    <span key={t.fuelType} className="inline-flex items-center gap-1.5 text-[14px] text-ink lg:text-[12px]">
+                      {t.fuelLabel}
+                      {t.level !== null && <span className="tabular-nums text-ink-soft">{litersText(t.level)}</span>}
+                      <StatusPill variant={STOCK_STATUS_VARIANT[t.status]} size="sm">
+                        {STOCK_STATUS_TEXT[t.status]}
+                      </StatusPill>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

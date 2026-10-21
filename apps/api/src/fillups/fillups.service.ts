@@ -528,6 +528,11 @@ export class FillUpsService {
     return { PETROL_95: petrol95, DIESEL: diesel, KEROSENE: kerosene };
   }
 
+  // After review (21 Oct 2026): the amount every fill-up is, in LYD.
+  async getFillAmount(): Promise<{ amountLyd: number }> {
+    return { amountLyd: await this.settings.getNumber('fillup.fixed_amount_lyd') };
+  }
+
   // The active exception types a fill-up at this station can use, with today's
   // uses and the strict switch (Phase 6). Without a station, every active type.
   listActiveExceptionTypes(stationId: string | undefined, actorId: string) {

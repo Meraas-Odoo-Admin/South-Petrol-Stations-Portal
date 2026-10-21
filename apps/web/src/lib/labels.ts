@@ -257,6 +257,12 @@ export const SYSTEM_SETTING_LABELS: Record<string, SettingLabel> = {
     unit: 'liter',
     per: 'في الأسبوع',
   },
+  // After review (21 Oct 2026).
+  'fillup.fixed_amount_lyd': {
+    label: 'مبلغ التعبئة الثابت',
+    description: 'كل تعبئة بهذا المبلغ، والوقود من بيانات المركبة. تُحسب اللترات بقسمته على سعر لتر وقود المركبة.',
+    unit: 'dinar',
+  },
   'fillup.price_per_liter.PETROL_95': {
     label: 'سعر لتر بنزين 95',
     description: 'يُستخدم لحساب كمية التعبئة من المبلغ المدفوع.',

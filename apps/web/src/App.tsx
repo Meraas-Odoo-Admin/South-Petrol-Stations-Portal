@@ -21,7 +21,7 @@ import { ListsPage } from './features/lists/ListsPage';
 import { AuditLogAdminPage } from './features/admin/AuditLogAdminPage';
 import { MunicipalitiesAdminPage } from './features/admin/MunicipalitiesAdminPage';
 import { MunicipalityDetailPage } from './features/admin/MunicipalityDetailPage';
-import { ManagePlacesPage } from './features/places/ManagePlacesPage';
+import { ManageOfficesPage, ManagePlacesPage } from './features/places/ManagePlacesPage';
 import { StationCreatePage, StationManagePage } from './features/places/StationManagePage';
 import { StationMonitorPage, StationsMonitoringPage } from './features/monitoring/StationsMonitoringPage';
 import { OfficeCreatePage, OfficeManagePage } from './features/places/OfficeManagePage';
@@ -70,7 +70,8 @@ function Home() {
 function PeopleHomeRedirect() {
   const { hasPermission } = useAuth();
   if (hasPermission('municipalities:manage')) return <Navigate to="/admin/municipalities" replace />;
-  if (NAV_ACCESS.manage(hasPermission)) return <Navigate to="/manage" replace />;
+  if (NAV_ACCESS.manage(hasPermission)) return <Navigate to="/manage?part=people" replace />;
+  if (NAV_ACCESS.manageOffices(hasPermission)) return <Navigate to="/manage/offices?part=people" replace />;
   if (NAV_ACCESS.myStation(hasPermission)) return <Navigate to="/my-station" replace />;
   if (NAV_ACCESS.myOffice(hasPermission)) return <Navigate to="/my-office" replace />;
   return <Navigate to="/" replace />;
@@ -100,8 +101,8 @@ function ListsRedirect() {
 function FoldedReportRedirect({ tab }: { tab: 'overview' | 'cards' }) {
   const { hasPermission } = useAuth();
   const { officeId } = useParams();
-  if (NAV_ACCESS.manage(hasPermission)) {
-    return <Navigate to={officeId ? `/manage/offices/${officeId}?tab=${tab}` : '/manage'} replace />;
+  if (NAV_ACCESS.manageOffices(hasPermission)) {
+    return <Navigate to={officeId ? `/manage/offices/${officeId}?tab=${tab}` : '/manage/offices'} replace />;
   }
   if (NAV_ACCESS.myOffice(hasPermission)) return <Navigate to={`/my-office?tab=${tab}`} replace />;
   if (NAV_ACCESS.myStation(hasPermission)) return <Navigate to="/my-station" replace />;
@@ -158,8 +159,9 @@ function App() {
               <Route path="/manage" element={<Gate allow={NAV_ACCESS.manage}><ManagePlacesPage /></Gate>} />
               <Route path="/manage/stations/new" element={<Gate allow={(h) => h('stations:create')}><StationCreatePage /></Gate>} />
               <Route path="/manage/stations/:stationId" element={<Gate allow={NAV_ACCESS.manage}><StationManagePage /></Gate>} />
+              <Route path="/manage/offices" element={<Gate allow={NAV_ACCESS.manageOffices}><ManageOfficesPage /></Gate>} />
               <Route path="/manage/offices/new" element={<Gate allow={(h) => h('registration_stations:manage')}><OfficeCreatePage /></Gate>} />
-              <Route path="/manage/offices/:officeId" element={<Gate allow={NAV_ACCESS.manage}><OfficeManagePage /></Gate>} />
+              <Route path="/manage/offices/:officeId" element={<Gate allow={NAV_ACCESS.manageOffices}><OfficeManagePage /></Gate>} />
               {/* «مراقبة المحطات»: the stations' fuel (after review, 19 Oct 2026). */}
               <Route path="/monitoring" element={<Gate allow={NAV_ACCESS.monitoring}><StationsMonitoringPage /></Gate>} />
               <Route path="/monitoring/stations/:stationId" element={<Gate allow={NAV_ACCESS.monitoring}><StationMonitorPage /></Gate>} />
@@ -184,7 +186,7 @@ function App() {
                 {/* The security-authorities section is gone: each municipality's
                     directorate is created with it and renamed from its page. */}
                 <Route path="security-authorities" element={<Navigate to="/admin/municipalities" replace />} />
-                <Route path="registration-stations" element={<Navigate to="/manage" replace />} />
+                <Route path="registration-stations" element={<Navigate to="/manage/offices" replace />} />
                 <Route path="stations" element={<Navigate to="/manage" replace />} />
                 <Route path="audit-log" element={<AuditLogAdminPage />} />
               </Route>

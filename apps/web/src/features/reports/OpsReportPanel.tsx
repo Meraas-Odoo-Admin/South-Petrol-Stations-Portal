@@ -13,7 +13,8 @@ import { PAGE } from './OpsReportView';
 // few filters that report has. Every filter goes to the API, which checks it
 // against the caller's scope; this screen only asks.
 
-export type OpsReportKey = 'my-shift' | 'my-day' | 'office' | 'station' | 'municipality' | 'summary';
+// 'supply': «التوريد والتعبئة» of «مراقبة المحطات» (after review, 21 Oct 2026).
+export type OpsReportKey = 'my-shift' | 'my-day' | 'office' | 'station' | 'municipality' | 'summary' | 'supply';
 
 const SELECT =
   'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3.5 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark lg:h-10 lg:text-[14px]';
@@ -39,6 +40,7 @@ const HAS_RANGE: Record<OpsReportKey, boolean> = {
   station: true,
   municipality: true,
   summary: true,
+  supply: true,
 };
 
 function Select({
@@ -126,11 +128,11 @@ export function OpsReportPanel({
   // server, so choosing one does not remove the others.
   const employeeChoices: Array<[string, string]> = (data?.employees ?? []).map((e) => [e.id, e.name]);
 
-  const showStation = !fixedStationId && (report === 'station' || report === 'municipality') && (data?.subject.length ?? 0) > 1;
+  const showStation = !fixedStationId && (report === 'station' || report === 'municipality' || report === 'supply') && (data?.subject.length ?? 0) > 1;
   const stationOptions: Array<[string, string]> = (data?.subject ?? []).map((s) => [s.id, s.name]);
-  const showFuel = report === 'station' || report === 'municipality';
+  const showFuel = report === 'station' || report === 'municipality' || report === 'supply';
   const showEmployee = (report === 'station' || report === 'office') && employeeChoices.length > 0;
-  const showMunicipality = report === 'municipality' && !fixedMunicipalityId && (data?.municipalities?.length ?? 0) > 1;
+  const showMunicipality = (report === 'municipality' || report === 'supply') && !fixedMunicipalityId && (data?.municipalities?.length ?? 0) > 1;
   const subject = fixedStationId || fixedOfficeId ? undefined : data?.subject.map((s) => s.name).join('، ');
   const shownTable = data?.tables.find((t) => t.id === chosenTable) ?? data?.tables[0];
 

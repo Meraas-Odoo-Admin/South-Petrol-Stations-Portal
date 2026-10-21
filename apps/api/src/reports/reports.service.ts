@@ -60,6 +60,11 @@ export class ReportsService {
       if (hasAllStations) {
         return scope === null ? undefined : { in: scope };
       }
+      // After review (21 Oct 2026): a supervisor of a group of stations may
+      // ask for all of theirs at once («كل محطاتي»).
+      if (scope !== null && scope.length > 1) {
+        return { in: scope };
+      }
       throw new BadRequestException(
         'stationId is required unless you hold reports:view_all_stations.',
       );

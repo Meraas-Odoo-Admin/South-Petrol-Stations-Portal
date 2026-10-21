@@ -170,7 +170,7 @@ test('municipality manager: the day, dates, places, lists, cards (3.2, 4.1-4.3, 
     await weakScreen(page, 'manage-places');
   });
   await step('manage places, offices tab (after)', async () => {
-    await page.getByTestId('tab-offices').click();
+    await visit(page, '/manage/offices');
     await page.waitForLoadState('networkidle').catch(() => undefined);
     await shot(page, 'p5-manage-offices');
   });

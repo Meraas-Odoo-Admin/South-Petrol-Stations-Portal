@@ -101,7 +101,8 @@ test('«إدارة المحطات»: stations and offices in two paged lists', a
   await expect(page.getByTestId('stations-list-pager-range')).toContainText('من');
   await expect(page.getByTestId('stations-list-add')).toBeVisible();
   await shots(page, '10-manage-places');
-  await page.getByTestId('tab-offices').click();
+  // After review (21 Oct 2026): «إدارة مكاتب التسجيل» is its own page.
+  await navigateInApp(page, '/manage/offices');
   await expect(page.getByTestId('offices-list')).toBeVisible();
   await expect(page.getByTestId('offices-list-add')).toBeVisible();
   await context.close();

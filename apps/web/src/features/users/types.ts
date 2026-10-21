@@ -15,6 +15,8 @@ export interface JobOption {
   municipalityScoped?: boolean;
   placeKind?: PlaceKind;
   unrestrictedStationAccess: boolean;
+  /** A supervisor-level job (it manages a place's staff). */
+  managesStaff?: boolean;
 }
 
 export interface UserListItem {

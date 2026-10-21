@@ -4,6 +4,8 @@ interface StationSelectProps {
   value: string;
   onChange: (stationId: string) => void;
   allowAllOption?: boolean;
+  /** The words of the "all" choice («كل محطاتي» for a supervisor of several). */
+  allLabel?: string;
   className?: string;
   disabled?: boolean;
   /** Ties the list to its visible label (Phase 7 audit). */
@@ -19,6 +21,7 @@ export function StationSelect({
   value,
   onChange,
   allowAllOption = false,
+  allLabel = 'جميع المحطات',
   className,
   disabled,
   id,
@@ -36,7 +39,7 @@ export function StationSelect({
         className ?? 'w-64 rounded-sm border border-line bg-surface-alt px-2 py-1 disabled:opacity-60'
       }
     >
-      {allowAllOption && <option value="">جميع المحطات</option>}
+      {allowAllOption && <option value="">{allLabel}</option>}
       {!allowAllOption && !value && <option value="">اختر محطة</option>}
       {isLoading && <option disabled>جارٍ التحميل…</option>}
       {stations?.map((station) => (

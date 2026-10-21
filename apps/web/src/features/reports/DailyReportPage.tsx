@@ -63,8 +63,10 @@ export function DailyReportPage({ fixedStationId, embedded = false }: { fixedSta
   const canViewAllStations = hasPermission('reports:view_all_stations');
   const permissions = user?.permissions ?? [];
   const ownStation = user?.stationScope[0] ?? null;
+  // A supervisor of a group of stations (after review, 21 Oct 2026): «كل محطاتي» or one of them.
+  const manyOwn = (user?.stationScope.length ?? 0) > 1;
 
-  const [stationId, setStationId] = useState(fixedStationId ?? (canViewAllStations ? '' : (ownStation?.stationId ?? '')));
+  const [stationId, setStationId] = useState(fixedStationId ?? (canViewAllStations || manyOwn ? '' : (ownStation?.stationId ?? '')));
   const [date, setDate] = useState(todayIso());
   // Phase 7 (4.1): a cleared or half-typed date is never sent - the API refused
   // `date=` and the page then blamed the station. The report keeps showing the
@@ -208,8 +210,15 @@ export function DailyReportPage({ fixedStationId, embedded = false }: { fixedSta
         <div className="flex flex-wrap items-end gap-3">
           {!fixedStationId && <div>
             <label htmlFor="daily-station" className="mb-1 block text-[13px] lg:text-[12px] font-bold text-ink-soft">المحطة</label>
-            {canViewAllStations ? (
-              <StationSelect id="daily-station" value={stationId} onChange={setStationId} allowAllOption className={`w-56 ${selectClass}`} />
+            {canViewAllStations || manyOwn ? (
+              <StationSelect
+                id="daily-station"
+                value={stationId}
+                onChange={setStationId}
+                allowAllOption
+                allLabel={canViewAllStations ? undefined : 'كل محطاتي'}
+                className={`w-56 ${selectClass}`}
+              />
             ) : (
               <StationSelect id="daily-station" value={stationId} onChange={setStationId} disabled className={`w-56 ${selectClass}`} />
             )}

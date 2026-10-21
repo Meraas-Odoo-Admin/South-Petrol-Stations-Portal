@@ -99,6 +99,24 @@ export class OpsReportsController {
     return this.csv(await this.reports.station(query, actor.id), query, res);
   }
 
+  // «التوريد والتعبئة» in «مراقبة المحطات» (after review, 21 Oct 2026).
+  @RequirePermission('fuel_stock:read')
+  @Get('supply')
+  supply(@Query() query: OpsReportQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.reports.supply(query, actor.id).then((r) => this.paged(r, query));
+  }
+
+  @RequirePermission('fuel_stock:read')
+  @AuditedExport('supply')
+  @Get('supply/export')
+  async supplyExport(
+    @Query() query: OpsReportExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.csv(await this.reports.supply(query, actor.id), query, res);
+  }
+
   @RequirePermission('reports:municipality')
   @Get('municipality')
   municipality(@Query() query: OpsReportQueryDto, @CurrentUser() actor: AuthenticatedUser) {

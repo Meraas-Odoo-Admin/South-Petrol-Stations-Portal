@@ -1016,6 +1016,143 @@ export class OpsReportsService {
     };
   }
 
+  // ── «التوريد والتعبئة» (after review, Khalil, 21 Oct 2026) ───────────
+  //
+  // Every fill-up is now a fixed amount, so the liters dispensed are an
+  // estimate. The municipality manager's working measure, from «مراقبة
+  // المحطات»: per station and day, how many vehicles were filled beside how
+  // much fuel was delivered — and, over the period, the fuel delivered per
+  // vehicle filled. A vehicle counts once a day at a station and fuel.
+  async supply(query: OpsReportQueryDto, actorId: string): Promise<OpsReport> {
+    const { chosen, visible } = await this.chooseMunicipality(actorId, query.municipalityId);
+    const range = resolveReportRange(query, 7);
+    const stations = await this.stationsInScope(actorId, { municipalityId: chosen.id, stationId: query.stationId });
+    const ids = stations.map((s) => s.id);
+    const names = new Map(stations.map((s) => [s.id, s.name]));
+    const where = this.fillupWhere({ stationIds: ids, range, fuelType: query.fuelType });
+
+    const [filled, deliveries] = await Promise.all([
+      ids.length === 0
+        ? []
+        : this.prisma.$queryRaw<Array<{ day: Date; station: string; fuel: string; vehicles: number }>>`
+            SELECT ${DAY_OF_FILLUP} AS day, f."stationId" AS station, f."fuelType"::text AS fuel,
+                   count(DISTINCT COALESCE(f."vehicleId", f."id"))::int AS vehicles
+            FROM "FillUpTransaction" f WHERE ${where} GROUP BY 1, 2, 3`,
+      ids.length === 0
+        ? []
+        : this.prisma.fuelStockEntry.findMany({
+            where: {
+              stationId: { in: ids },
+              kind: 'DELIVERY',
+              occurredAt: { gte: range.start, lt: range.endExclusive },
+              ...(query.fuelType ? { fuelType: query.fuelType } : {}),
+            },
+            select: {
+              stationId: true,
+              fuelType: true,
+              liters: true,
+              occurredAt: true,
+              corrections: { select: { liters: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 },
+            },
+          }),
+    ]);
+
+    // One row per station, day and fuel that had either.
+    type Row = { day: string; station: string; fuel: string; vehicles: number; delivered: number; deliveries: number };
+    const rows = new Map<string, Row>();
+    const rowOf = (day: string, station: string, fuel: string) => {
+      const k = `${day}|${station}|${fuel}`;
+      let row = rows.get(k);
+      if (!row) {
+        row = { day, station, fuel, vehicles: 0, delivered: 0, deliveries: 0 };
+        rows.set(k, row);
+      }
+      return row;
+    };
+    for (const f of filled) rowOf(dayString(f.day), f.station, f.fuel).vehicles += f.vehicles;
+    for (const d of deliveries) {
+      const row = rowOf(tripoliDay(d.occurredAt), d.stationId, d.fuelType);
+      row.delivered += Number(d.corrections[0]?.liters ?? d.liters);
+      row.deliveries += 1;
+    }
+    const round = (n: number) => Math.round(n * 10) / 10;
+    const fuelLabel = (fuel: string) => FUEL_LABELS_AR[fuel as FuelType] ?? fuel;
+    const dayRows = [...rows.values()]
+      .sort((a, b) => b.day.localeCompare(a.day) || (names.get(a.station) ?? '').localeCompare(names.get(b.station) ?? '', 'ar'))
+      .map((r) => ({
+        day: r.day,
+        station: names.get(r.station) ?? '',
+        fuel: fuelLabel(r.fuel),
+        vehicles: r.vehicles,
+        delivered: round(r.delivered),
+        deliveries: r.deliveries,
+      }));
+
+    // The period, per station and fuel.
+    const totals = new Map<string, { station: string; fuel: string; vehicles: number; delivered: number; deliveries: number; days: Set<string> }>();
+    for (const r of rows.values()) {
+      const k = `${r.station}|${r.fuel}`;
+      const t = totals.get(k) ?? { station: r.station, fuel: r.fuel, vehicles: 0, delivered: 0, deliveries: 0, days: new Set<string>() };
+      t.vehicles += r.vehicles;
+      t.delivered += r.delivered;
+      t.deliveries += r.deliveries;
+      if (r.vehicles > 0) t.days.add(r.day);
+      totals.set(k, t);
+    }
+    const stationRows = [...totals.values()]
+      .sort((a, b) => (names.get(a.station) ?? '').localeCompare(names.get(b.station) ?? '', 'ar') || a.fuel.localeCompare(b.fuel))
+      .map((t) => ({
+        station: names.get(t.station) ?? '',
+        fuel: fuelLabel(t.fuel),
+        days: t.days.size,
+        vehicles: t.vehicles,
+        perDay: t.days.size ? round(t.vehicles / t.days.size) : 0,
+        deliveries: t.deliveries,
+        delivered: round(t.delivered),
+        perVehicle: t.vehicles ? round(t.delivered / t.vehicles) : null,
+      }));
+
+    return {
+      report: 'supply',
+      title: `التوريد والتعبئة في محطات ${chosen.name}`,
+      range: { from: range.from, to: range.to },
+      subject: stations.map((s) => ({ id: s.id, name: s.name })),
+      municipalities: visible.map((m) => ({ id: m.id, name: m.name })),
+      tables: [
+        {
+          id: 'supply-stations',
+          title: 'مجموع الفترة لكل محطة',
+          note: 'تقريبي: كل تعبئة بمبلغ ثابت، فالمقياس هو عدد السيارات المعبَّأة مقابل الوقود المورَّد. تُحسب السيارة مرة واحدة في اليوم.',
+          columns: [
+            col('station', 'المحطة'),
+            col('fuel', 'الوقود'),
+            col('days', 'أيام فيها تعبئة', 'number'),
+            col('vehicles', 'السيارات المعبَّأة', 'number'),
+            col('perDay', 'متوسط السيارات في اليوم', 'number'),
+            col('deliveries', 'عدد التوريدات', 'number'),
+            col('delivered', 'الوقود المورَّد', 'liters'),
+            col('perVehicle', 'المورَّد لكل سيارة', 'liters'),
+          ],
+          rows: stationRows,
+        },
+        {
+          id: 'supply-days',
+          title: 'لكل محطة ويوم',
+          note: 'عدد السيارات التي عُبِّئت في اليوم، والوقود المورَّد للمحطة في اليوم نفسه.',
+          columns: [
+            col('day', 'اليوم', 'date'),
+            col('station', 'المحطة'),
+            col('fuel', 'الوقود'),
+            col('vehicles', 'السيارات المعبَّأة', 'number'),
+            col('deliveries', 'عدد التوريدات', 'number'),
+            col('delivered', 'الوقود المورَّد', 'liters'),
+          ],
+          rows: dayRows,
+        },
+      ],
+    };
+  }
+
   // ── the short row at the top of a municipality's page ────────────────
 
   // Registration: cards issued today, offices working. Fuel: stations low on

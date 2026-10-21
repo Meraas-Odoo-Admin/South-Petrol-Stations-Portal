@@ -71,7 +71,8 @@ test('municipality manager: places in two tabs, tabs without a scrollbar, «ال
   await expect(page.getByTestId('stations-list')).toBeVisible();
   await expect(page.getByTestId('stations-list-add')).toContainText('إضافة محطة وقود');
   await expect(page.getByTestId('stations-list')).not.toContainText('مكتب تسجيل');
-  await page.getByTestId('tab-offices').click();
+  // After review (21 Oct 2026): «إدارة مكاتب التسجيل» is its own page.
+  await navigateInApp(page, '/manage/offices');
   await expect(page.getByTestId('offices-list')).toBeVisible();
   await expect(page.getByTestId('offices-list-add')).toContainText('إضافة مكتب تسجيل');
 

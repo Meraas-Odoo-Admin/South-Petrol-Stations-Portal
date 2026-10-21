@@ -94,6 +94,13 @@ export class FillUpsController {
     return this.fillups.getFuelPrices();
   }
 
+  // After review (21 Oct 2026): the fixed amount of every fill-up (LYD).
+  @RequirePermission('fillups:create')
+  @Get('fill-amount')
+  getFillAmount() {
+    return this.fillups.getFillAmount();
+  }
+
   // The pre-submit rule-review breakdown — gated like getFuelPrices rather
   // than vehicles:read.
   @RequirePermission('fillups:create')

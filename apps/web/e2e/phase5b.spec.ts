@@ -303,9 +303,8 @@ test('municipality manager: the summary row, a station and an office, and the re
   await page.getByRole('link', { name: fixtures.stationName }).first().click();
 
   // An office: overview and staff (Phase 7: no desks and printers).
-  await navigateInApp(page, '/manage');
-  // Phase 7: offices are their own tab. The list is paged: search for the one wanted.
-  await page.getByTestId('tab-offices').click();
+  // After review (21 Oct 2026): «إدارة مكاتب التسجيل» is its own page. The list is paged: search for the one wanted.
+  await navigateInApp(page, '/manage/offices');
   await page.locator('#pl-of-search').fill(fixtures.registrationStationName);
   await page.getByRole('link', { name: fixtures.registrationStationName }).first().click();
   await expect(page.getByTestId('tab-overview')).toBeVisible();

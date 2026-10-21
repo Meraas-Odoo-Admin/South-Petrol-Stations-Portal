@@ -38,6 +38,12 @@ const STATUS_OPTIONS = [
 const SELECT_CLASS =
   'h-[52px] w-full rounded-sm border border-line bg-surface-alt px-3 text-[16px] text-ink focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 focus:ring-offset-surface lg:h-11 lg:text-[14px]';
 
+// Clearing the filters keeps the page's own tab («المحطات» / «المشرفون»).
+function keepPart(params: URLSearchParams): Record<string, string> {
+  const part = params.get('part');
+  return part ? { part } : {};
+}
+
 function whereText(item: UserListItem): string {
   if (item.sees === 'ALL') return 'كل البلديات والمحطات والمكاتب';
   if (item.placeCount === 0) return 'لم يُحدَّد مكان عمل';
@@ -59,6 +65,10 @@ export function UsersListPage({
   createParams,
   title = 'الحسابات',
   emptyText,
+  fixedSide,
+  supervisorsOnly = false,
+  municipalityId,
+  createLabel = 'حساب جديد',
 }: {
   basePath: string;
   standalone?: boolean;
@@ -66,13 +76,20 @@ export function UsersListPage({
   createParams?: Record<string, string>;
   title?: string;
   emptyText?: string;
+  /** After review (21 Oct 2026): only one side's people (stations or offices). */
+  fixedSide?: 'PETROL_STATION' | 'REGISTRATION';
+  /** Only the people who manage a place's staff (supervisors, office managers). */
+  supervisorsOnly?: boolean;
+  /** Only people working in this municipality. */
+  municipalityId?: string;
+  createLabel?: string;
 }) {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const isAdminView = hasPermission('users:manage') && !fixedPlaceId;
+  const isAdminView = hasPermission('users:manage') && !fixedPlaceId && !fixedSide;
   const here = `${location.pathname}${location.search}`;
   const [rowAction, setRowAction] = useState<{ user: UserListItem; kind: 'archive' | 'restore' } | null>(null);
   const [rowReason, setRowReason] = useState('');
@@ -91,13 +108,15 @@ export function UsersListPage({
 
   const filters = {
     q: params.get('q') ?? '',
-    side: params.get('side') ?? '',
+    side: fixedSide ?? params.get('side') ?? '',
     roleId: params.get('roleId') ?? '',
     placeId: fixedPlaceId ?? params.get('placeId') ?? '',
     status: params.get('status') ?? '',
     sort: params.get('sort') ?? '',
     dir: params.get('dir') ?? '',
     skip: Number(params.get('skip') ?? '0') || 0,
+    supervisorsOnly,
+    municipalityId,
   };
 
   // Typing waits a moment before it asks the server.
@@ -143,7 +162,7 @@ export function UsersListPage({
     <PillButton size="field" onClick={() => navigate(createPath)}>
       <span className="inline-flex items-center gap-2">
         <Icon d={ICONS.plus} size={18} />
-        حساب جديد
+        {createLabel}
       </span>
     </PillButton>
   );
@@ -244,7 +263,7 @@ export function UsersListPage({
               type="button"
               onClick={() => {
                 setSearch('');
-                setParams({}, { replace: true });
+                setParams(keepPart(params), { replace: true });
               }}
               className="h-11 rounded-full px-4 text-[15px] font-bold text-primary hover:bg-primary-100 lg:h-9 lg:text-[13px]"
             >
@@ -288,7 +307,7 @@ export function UsersListPage({
                 variant="secondary"
                 onClick={() => {
                   setSearch('');
-                  setParams({}, { replace: true });
+                  setParams(keepPart(params), { replace: true });
                 }}
               >
                 مسح التصفية

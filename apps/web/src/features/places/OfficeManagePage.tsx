@@ -75,7 +75,7 @@ export function OfficeCreatePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <BackLink to="/manage">العودة إلى إدارة المحطات</BackLink>
+      <BackLink to="/manage/offices">العودة إلى إدارة مكاتب التسجيل</BackLink>
       <PageHeader title="مكتب تسجيل جديد" subtitle={only ? `في ${only.name}` : undefined} />
       <SectionCard title="بيانات المكتب">
         <OfficeForm values={values} onChange={setValues} errors={errors} />
@@ -87,7 +87,7 @@ export function OfficeCreatePage() {
         <PillButton size="field" data-testid="reg-station-create" disabled={create.isPending} onClick={submit}>
           {create.isPending ? 'جارٍ الحفظ…' : 'حفظ المكتب'}
         </PillButton>
-        <PillButton size="field" variant="ghost" onClick={() => navigate('/manage')}>
+        <PillButton size="field" variant="ghost" onClick={() => navigate('/manage/offices')}>
           إلغاء
         </PillButton>
       </div>
@@ -124,7 +124,7 @@ export function OfficeManagePage() {
   if (office.isError || !office.data) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
-        <BackLink to="/manage">العودة إلى إدارة المحطات</BackLink>
+        <BackLink to="/manage/offices">العودة إلى إدارة مكاتب التسجيل</BackLink>
         <Notice kind="error">تعذّر فتح هذا المكتب. قد يكون خارج بلديتك.</Notice>
       </div>
     );
@@ -142,7 +142,7 @@ export function OfficeManagePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <BackLink to="/manage">العودة إلى إدارة المحطات</BackLink>
+      <BackLink to="/manage/offices">العودة إلى إدارة مكاتب التسجيل</BackLink>
       <header className="rounded-md bg-surface p-4 shadow-sm lg:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">

@@ -32,9 +32,7 @@ test('supervisor: no camera, so a registered vehicle is found by search and reco
   await page.getByTestId('fillup-nocard-confirm').click();
 
   await expect(page.getByTestId('fillup-nocard-active')).toContainText('البطاقة تالفة');
-  await page.getByTestId('fillup-mobile-continue-to-fuel').click();
-  await page.getByTestId('fillup-amount-input-mobile').fill('10');
-  await page.getByTestId('fillup-mobile-continue-to-review').click();
+  await page.getByTestId('fillup-mobile-continue-to-fuel').click(); // «نعم، متابعة إلى المراجعة»
   await expect(page.getByTestId('rule-check-VEHICLE_GAP_TOO_SHORT-mobile')).toContainText('مقبول');
   await page.getByTestId('fillup-submit-mobile').click();
 

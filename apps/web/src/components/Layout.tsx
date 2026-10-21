@@ -1,3 +1,4 @@
+import { arabicCount } from '@fuel-tracking/shared-types';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -37,7 +38,9 @@ export function Layout() {
   const { pathname } = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const stationName = user?.stationScope[0]?.name;
+  // A supervisor of a group of stations (after review, 21 Oct 2026): how many, not the first one's name.
+  const stationCount = user?.stationScope.length ?? 0;
+  const stationName = stationCount > 1 ? arabicCount(stationCount, 'station') : user?.stationScope[0]?.name;
   const roleName = user?.roles[0] ? roleLabel(user.roles[0]) : '';
 
   const canSeeChangeRequests = hasPermission('vehicles:approve_change');
@@ -113,8 +116,9 @@ export function Layout() {
     },
     // Phase 5A: each level's own place for its places and people.
     { to: '/manage', label: 'إدارة المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.manage(hasPermission) },
+    { to: '/manage/offices', label: 'إدارة مكاتب التسجيل', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.manageOffices(hasPermission) },
     { to: '/monitoring', label: 'مراقبة المحطات', icon: <Icon d={ICONS.fuel} />, show: NAV_ACCESS.monitoring(hasPermission) },
-    { to: '/my-station', label: 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
+    { to: '/my-station', label: stationCount > 1 ? 'محطاتي' : 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
     { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
@@ -153,7 +157,7 @@ export function Layout() {
     { title: '', paths: ['/'] },
     { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations'] },
     { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
-    { title: 'محطتي ومكتبي', paths: ['/manage', '/monitoring', '/my-station', '/my-office'] },
+    { title: 'محطتي ومكتبي', paths: ['/manage', '/manage/offices', '/monitoring', '/my-station', '/my-office'] },
     { title: 'الإدارة', paths: ['/admin'] },
   ];
   const grouped = new Set(SHEET_GROUPS.flatMap((g) => g.paths));

@@ -48,7 +48,7 @@ function Figure({
   );
 }
 
-export function PlaceSummaryRow({ municipalityId }: { municipalityId?: string }) {
+export function PlaceSummaryRow({ municipalityId, only }: { municipalityId?: string; only?: 'fuel' | 'registration' }) {
   const { hasPermission } = useAuth();
   const allowed = hasPermission('reports:municipality');
   const query = useQuery({
@@ -66,14 +66,20 @@ export function PlaceSummaryRow({ municipalityId }: { municipalityId?: string })
   return (
     <section aria-label="ملخص اليوم" className="mb-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="place-summary">
-        <Figure testId="summary-cards-today" label="بطاقات صدرت اليوم" value={tall.format(r.cardsToday)} />
-        <Figure
-          testId="summary-offices-active"
-          label="مكاتب تعمل"
-          value={`${r.activeOffices} / ${r.offices}`}
-          tone={r.offices > 0 && r.activeOffices < r.offices ? 'attention' : 'plain'}
-          state={r.offices > 0 && r.activeOffices < r.offices ? 'بعضها مغلق' : undefined}
-        />
+        {only !== 'fuel' && (
+          <>
+            <Figure testId="summary-cards-today" label="بطاقات صدرت اليوم" value={tall.format(r.cardsToday)} />
+            <Figure
+              testId="summary-offices-active"
+              label="مكاتب تعمل"
+              value={`${r.activeOffices} / ${r.offices}`}
+              tone={r.offices > 0 && r.activeOffices < r.offices ? 'attention' : 'plain'}
+              state={r.offices > 0 && r.activeOffices < r.offices ? 'بعضها مغلق' : undefined}
+            />
+          </>
+        )}
+        {only !== 'registration' && (
+          <>
         <Figure
           testId="summary-low-stock"
           label="محطات مخزونها منخفض"
@@ -84,6 +90,8 @@ export function PlaceSummaryRow({ municipalityId }: { municipalityId?: string })
         />
         {/* After review (19 Oct 2026): in place of «وقود غير مبرَّر», which is gone. */}
         <Figure testId="summary-dispensed-today" label="لترات صُرفت اليوم" value={tall.format(f.dispensedToday)} unit="لتر" />
+          </>
+        )}
       </div>
     </section>
   );

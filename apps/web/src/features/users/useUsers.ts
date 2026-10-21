@@ -14,6 +14,9 @@ export interface UserListFilters {
   sort?: string;
   dir?: string;
   skip: number;
+  /** After review (21 Oct 2026): «المشرفون» of «إدارة المحطات» / «إدارة مكاتب التسجيل». */
+  supervisorsOnly?: boolean;
+  municipalityId?: string;
 }
 
 export const USERS_PAGE_SIZE = LIST_PAGE_SIZE;
@@ -26,6 +29,8 @@ export function useUserList(filters: UserListFilters) {
       for (const key of ['q', 'side', 'roleId', 'placeId', 'status', 'sort', 'dir'] as const) {
         if (filters[key]) params[key] = filters[key];
       }
+      if (filters.supervisorsOnly) params.supervisorsOnly = 'true';
+      if (filters.municipalityId) params.municipalityId = filters.municipalityId;
       return (await apiClient.get<UserListResponse>('/users', { params })).data;
     },
     // Typing in the search box keeps the previous rows on screen until the

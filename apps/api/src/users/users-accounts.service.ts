@@ -205,6 +205,17 @@ export class UsersAccountsService {
     if (query.side === 'ADMIN') and.push({ roles: { some: { role: { kind: null } } } });
     else if (query.side) and.push({ roles: { some: { role: { kind: query.side } } } });
     if (query.roleId) and.push({ roles: { some: { roleId: query.roleId } } });
+    if (query.supervisorsOnly) {
+      and.push({ roles: { some: { role: { permissions: { some: { permission: { key: 'users:manage_staff' } } } } } } });
+    }
+    if (query.municipalityId) {
+      and.push({
+        OR: [
+          { stationScope: { some: { station: { municipalityId: query.municipalityId } } } },
+          { registrationStationScope: { some: { registrationStation: { municipalityId: query.municipalityId } } } },
+        ],
+      });
+    }
     if (query.placeId) {
       and.push({
         OR: [
@@ -390,6 +401,9 @@ export class UsersAccountsService {
         municipalityScoped: role.municipalityScoped,
         // Where holders of this job work - the create flow asks for exactly this.
         placeKind: role.municipalityScoped ? ('MUNICIPALITY' as const) : role.kind,
+        // A supervisor-level job (it manages a place's staff): «إضافة مشرف»
+        // offers only these (after review, 21 Oct 2026).
+        managesStaff: role.permissions.some((p) => p.permission.key === 'users:manage_staff'),
         unrestrictedStationAccess: role.unrestrictedStationAccess,
       }));
   }

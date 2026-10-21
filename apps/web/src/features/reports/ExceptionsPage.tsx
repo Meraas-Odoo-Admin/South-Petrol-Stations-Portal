@@ -95,11 +95,13 @@ export function ExceptionsPage() {
   const canViewAllStations = hasPermission('reports:view_all_stations');
   const canByStation = hasPermission('reports:municipality');
   const ownStation = user?.stationScope[0] ?? null;
+  // A supervisor of a group of stations (after review, 21 Oct 2026).
+  const manyOwn = (user?.stationScope.length ?? 0) > 1;
 
   const tabs: TabDef[] = [{ key: 'list', label: 'القائمة' }, ...(canByStation ? [{ key: 'stations', label: 'حسب المحطة' }] : [])];
   const [tab, setTab] = useTab(tabs);
 
-  const [stationId, setStationId] = useState(canViewAllStations || canByStation ? '' : (ownStation?.stationId ?? ''));
+  const [stationId, setStationId] = useState(canViewAllStations || canByStation || manyOwn ? '' : (ownStation?.stationId ?? ''));
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   // Remembered for this person on this device.
@@ -182,8 +184,9 @@ export function ExceptionsPage() {
                 id="exc-station"
                 value={stationId}
                 onChange={reset(setStationId)}
-                allowAllOption={canViewAllStations || canByStation}
-                disabled={!canViewAllStations && !canByStation}
+                allowAllOption={canViewAllStations || canByStation || manyOwn}
+                allLabel={canViewAllStations || canByStation ? undefined : 'كل محطاتي'}
+                disabled={!canViewAllStations && !canByStation && !manyOwn}
                 className={`w-52 ${selectClass}`}
               />
             </div>

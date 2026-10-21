@@ -67,8 +67,6 @@ test('pump: the plate step opens straight into the camera, reads the card, and a
 
   // Nothing is recorded without the tap.
   await page.getByTestId('fillup-scan-confirm-yes').click();
-  await page.getByTestId('fillup-amount-input-mobile').fill('10');
-  await page.getByTestId('fillup-mobile-continue-to-review').click();
   await expect(page.getByTestId('rule-check-VEHICLE_GAP_TOO_SHORT-mobile')).toContainText('مقبول');
   await page.getByTestId('fillup-submit-mobile').click();
   await expect(page.getByTestId('fillup-success-heading')).toContainText('تم تسجيل التعبئة');
@@ -89,9 +87,9 @@ test('pump: after a successful scan the camera is released and later frames cann
   // «نعم، هذه هي المركبة» moves on and stays there: a scanner that kept
   // decoding would re-resolve the card and send the wizard back to this step.
   await page.getByTestId('fillup-scan-confirm-yes').click();
-  await expect(page.getByTestId('fillup-amount-input-mobile')).toBeVisible();
+  await expect(page.getByTestId('rule-review-card-mobile')).toBeVisible();
   await page.waitForTimeout(3_000);
-  await expect(page.getByTestId('fillup-amount-input-mobile')).toBeVisible();
+  await expect(page.getByTestId('rule-review-card-mobile')).toBeVisible();
   await expect(page.getByTestId('fillup-scan-confirm')).toHaveCount(0);
   expect(await liveTracks(page)).toBe(0);
 });
