@@ -711,7 +711,11 @@ model Vehicle {
   // رقم كتيب السيارة — added for the anti-fraud chassis/booklet linkage
   // (docs/IMPLEMENTATION_PLAN.md phase note: chassis-booklet-linkage
   // proposal). Nullable: not every vehicle has one recorded yet.
-  registrationBooklet               String?                 @unique
+  // After review (22 Oct 2026): unique EXCEPT «000000» (an unknown booklet
+  // number, which may repeat) — a partial unique index Prisma cannot express,
+  // made in migration 20261022090000_booklet_placeholder_repeats. Keep it
+  // when generating a migration: never drop "Vehicle_registrationBooklet_unique".
+  registrationBooklet               String?
   vehicleTypeId                     String?
   vehicleType                       VehicleType?            @relation(fields: [vehicleTypeId], references: [id])
   // Phase 5A: the make and the model, both free text typed exactly as written

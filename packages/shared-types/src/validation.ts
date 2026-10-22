@@ -218,7 +218,16 @@ export function checkChassis(raw: string, nonStandard = false): FieldCheck {
 
 export const BOOKLET_MIN_LENGTH = 6;
 export const BOOKLET_MAX_LENGTH = 12;
-export const BOOKLET_HELP = 'أرقام فقط، من 6 إلى 12 رقمًا.';
+export const BOOKLET_HELP = 'أرقام فقط، من 6 إلى 12 رقمًا. إن لم يُعرف رقم الدفتر اكتب 000000.';
+
+// After review (22 Oct 2026): «000000» stands for an unknown booklet number,
+// so it may belong to many vehicles; every other booklet number is unique
+// (a partial unique index in the database, migration
+// 20261022090000_booklet_placeholder_repeats).
+export const BOOKLET_PLACEHOLDER = '000000';
+export function isBookletPlaceholder(value: string | null | undefined): boolean {
+  return normalizeBooklet(value ?? '') === BOOKLET_PLACEHOLDER;
+}
 
 export function normalizeBooklet(raw: string): string {
   return toWesternDigits(raw).replace(/\s+/g, '').toUpperCase();

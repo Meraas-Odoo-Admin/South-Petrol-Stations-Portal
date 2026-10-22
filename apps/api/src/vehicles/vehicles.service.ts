@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, VehicleChangeType, VehicleUsageType } from '@prisma/client';
-import { checkBooklet, checkChassis, normalizeBooklet, normalizeChassis, normalizePlate, plateSearchTerm } from '@fuel-tracking/shared-types';
+import { checkBooklet, checkChassis, isBookletPlaceholder, normalizeBooklet, normalizeChassis, normalizePlate, plateSearchTerm } from '@fuel-tracking/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -72,7 +72,9 @@ function findVehicleByChangeValue(
     case VehicleChangeType.CHASSIS_CHANGE:
       return prisma.vehicle.findUnique({ where: { chassisNumber: value } });
     case VehicleChangeType.BOOKLET_CHANGE:
-      return prisma.vehicle.findUnique({ where: { registrationBooklet: value } });
+      // «000000» (an unknown booklet number) may repeat (after review, 22 Oct 2026).
+      if (isBookletPlaceholder(value)) return Promise.resolve(null);
+      return prisma.vehicle.findFirst({ where: { registrationBooklet: value } });
     case VehicleChangeType.PLATE_CHANGE:
       // Matched by the normalized plate too: the same plate typed another
       // way is still the same plate.
@@ -280,10 +282,11 @@ export class VehiclesService {
     if (values.chassisNumber) {
       checks.push(['chassisNumber', this.prisma.vehicle.findUnique({ where: { chassisNumber: values.chassisNumber }, select })]);
     }
-    if (values.registrationBooklet) {
+    // «000000» (an unknown booklet number) may repeat (after review, 22 Oct 2026).
+    if (values.registrationBooklet && !isBookletPlaceholder(values.registrationBooklet)) {
       checks.push([
         'registrationBooklet',
-        this.prisma.vehicle.findUnique({ where: { registrationBooklet: values.registrationBooklet }, select }),
+        this.prisma.vehicle.findFirst({ where: { registrationBooklet: values.registrationBooklet }, select }),
       ]);
     }
     const conflicts: VehicleDuplicate[] = [];
