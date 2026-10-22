@@ -12,6 +12,16 @@ export class UpdateStationDto {
   @MinLength(1)
   name?: string;
 
+  // After review (22 Oct 2026): the station's number at its company may be
+  // corrected (still unique within the company). The company itself is not
+  // changed on edit.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  stationNumber?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

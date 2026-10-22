@@ -65,6 +65,8 @@ export function adminErrorMessage(error: unknown, fallback: string): string {
   if (typeof code !== 'string') return describeApiError(error, fallback).message;
   // The API's own duplicate-username refusal is English prose, not a code.
   if (error.response.status === 409 && /username/i.test(code)) return 'اسم المستخدم هذا مستخدم مسبقًا، اختر اسمًا آخر.';
+  // A station number already used by another station of the same company.
+  if (error.response.status === 409 && /stationNumber/.test(code)) return 'رقم المحطة هذا مستخدم لمحطة أخرى لدى الشركة نفسها. تحقّق من الرقم.';
 
   // Registration pivot, phase 2: one person can never work both sides.
   if (code === 'ROLE_SEPARATION_CONFLICT') {

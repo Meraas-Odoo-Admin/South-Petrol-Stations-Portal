@@ -388,6 +388,16 @@ export class StationsService {
     } else if (dto.municipalityId && dto.municipalityId !== before.municipalityId) {
       await this.assertMunicipalityWritable(dto.municipalityId, actorId);
     }
+    if (dto.stationNumber !== undefined) dto.stationNumber = dto.stationNumber.trim();
+    if (dto.stationNumber && dto.stationNumber !== before.stationNumber) {
+      const taken = await this.prisma.station.findUnique({
+        where: { companyId_stationNumber: { companyId: before.companyId, stationNumber: dto.stationNumber } },
+        select: { id: true },
+      });
+      if (taken && taken.id !== id) {
+        throw new ConflictException('This company already has a station with that stationNumber.');
+      }
+    }
     const { fuelTypes, ...rest } = dto;
 
     return this.prisma.$transaction(async (tx) => {
@@ -424,11 +434,13 @@ export class StationsService {
           // audit trail, by who and from what to what (client decision, #62).
           oldValue: {
             name: before.name,
+            ...(rest.stationNumber && rest.stationNumber !== before.stationNumber ? { stationNumber: before.stationNumber } : {}),
             status: before.status,
             ...(fuelTypes ? { fuelTypes: soldFuelTypes(before.fuelAvailability) } : {}),
           },
           newValue: {
             name: station.name,
+            ...(rest.stationNumber && rest.stationNumber !== before.stationNumber ? { stationNumber: station.stationNumber } : {}),
             status: station.status,
             ...(fuelTypes ? { fuelTypes: soldFuelTypes(station.fuelAvailability) } : {}),
           },

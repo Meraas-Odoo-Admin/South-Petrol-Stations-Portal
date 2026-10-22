@@ -129,7 +129,8 @@ export function stationPayload(values: StationFormValues, mode: 'create' | 'edit
   return {
     stationNumber: values.stationNumber.trim(),
     name: values.name.trim(),
-    companyId: values.companyId,
+    // The company is chosen once, on create; the edit form shows it locked.
+    ...(mode === 'create' ? { companyId: values.companyId } : {}),
     municipalityId: values.municipalityId || undefined,
     status: values.status,
     statusNote: text(values.statusNote),
