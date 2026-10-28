@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { VehicleUsageType } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
@@ -87,6 +87,24 @@ export class FindVehiclesQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   duplicatePlate?: boolean;
+
+  // After review (28 Oct 2026): the office the vehicle was registered at.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  registrationStationId?: string;
+
+  // After review (28 Oct 2026): registered on these Libya days, inclusive.
+  @ApiProperty({ required: false, example: '2026-10-01' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'from must be a calendar day, YYYY-MM-DD.' })
+  from?: string;
+
+  @ApiProperty({ required: false, example: '2026-10-31' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'to must be a calendar day, YYYY-MM-DD.' })
+  to?: string;
 
   // true: answer {total, skip, take, items} (the vehicles list screen). Left
   // out: the bare array of one page that the pickers read.

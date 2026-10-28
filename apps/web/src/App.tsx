@@ -24,6 +24,7 @@ import { MunicipalityDetailPage } from './features/admin/MunicipalityDetailPage'
 import { ManageOfficesPage, ManagePlacesPage } from './features/places/ManagePlacesPage';
 import { StationCreatePage, StationManagePage } from './features/places/StationManagePage';
 import { StationMonitorPage, StationsMonitoringPage } from './features/monitoring/StationsMonitoringPage';
+import { OwnerManagePage, OwnersListPage } from './features/owners/OwnersPages';
 import { OfficeCreatePage, OfficeManagePage } from './features/places/OfficeManagePage';
 import { MyOfficePage, MyStationPage } from './features/places/MyPlacePages';
 import { EmployeeActivityPage } from './features/regreports/EmployeeActivityPage';
@@ -146,6 +147,9 @@ function App() {
               <Route path="/stations" element={<Gate allow={NAV_ACCESS.stations}><StationsListPage /></Gate>} />
               <Route path="/vehicles" element={<Gate allow={NAV_ACCESS.vehicles}><VehiclesListPage /></Gate>} />
               <Route path="/vehicles/:vehicleId" element={<Gate allow={NAV_ACCESS.vehicles}><VehicleDetailPage /></Gate>} />
+              {/* «الملاك» (after review, 28 Oct 2026). */}
+              <Route path="/owners" element={<Gate allow={NAV_ACCESS.owners}><OwnersListPage /></Gate>} />
+              <Route path="/owners/:ownerId" element={<Gate allow={NAV_ACCESS.owners}><OwnerManagePage /></Gate>} />
               <Route path="/vehicles/change-requests" element={<ChangeRequestsQueuePage />} />
               {/* People, from inside their place. */}
               <Route path="/people" element={<PeopleHomeRedirect />} />

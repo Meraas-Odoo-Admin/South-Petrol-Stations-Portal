@@ -29,6 +29,10 @@ export function registrationErrorMessage(error: unknown): string {
       return 'بلدية هذا المكتب مؤرشفة، ولا يمكن التسجيل فيه.';
     case 'VEHICLE_TYPE_INVALID':
       return 'نوع المركبة المختار غير موجود أو موقوف. اختر نوعًا آخر من القائمة.';
+    case 'VEHICLE_HAS_NO_OWNER':
+      return 'هذه المركبة بلا مالك أصلًا.';
+    case 'SAME_OWNER':
+      return 'هذا هو المالك الحالي للمركبة. اختر المالك الجديد.';
     case 'OWNER_VEHICLE_LIMIT':
       return `هذا المالك مسجّل له الحد الأقصى المسموح من المركبات (${data?.details?.limit ?? '—'}). لا يمكن تسجيل مركبة أخرى باسمه.`;
     case 'VEHICLE_DUPLICATE':

@@ -23,6 +23,8 @@ import { VEHICLE_BRANDS } from '../../lib/vehicleBrands';
 import type { VehicleBasicInfo } from './types';
 import { SkeletonRows } from '../../components/design/Skeleton';
 import { LIST_PAGE_SIZE } from '../../lib/pageSize';
+import { DateField } from '../../components/DateField';
+import { downloadBlob } from '../../lib/download';
 
 const TAKE = LIST_PAGE_SIZE;
 
@@ -79,6 +81,20 @@ export function VehiclesListPage() {
   // After review (19 Oct 2026): only vehicles that share their plate number.
   const [duplicatePlateOnly, setDuplicatePlateOnly] = useState(false);
   const [sort, setSort] = useState<VehicleSortField>('CREATED_AT');
+  // After review (28 Oct 2026): registered between these days, at this office.
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [officeFilter, setOfficeFilter] = useState('');
+  const canFilterOffice = hasPermission('registration_stations:read');
+  const canExport = hasPermission('registration_reports:view');
+  const offices = useQuery({
+    queryKey: ['registration-stations'],
+    enabled: canFilterOffice,
+    queryFn: async () => (await apiClient.get<Array<{ id: string; name: string }>>('/registration-stations')).data,
+  });
+  const fullDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const [exporting, setExporting] = useState(false);
+  const [exportNote, setExportNote] = useState<string | null>(null);
 
   const typeLookup = useLookup<{ id: string; name: string; isActive: boolean }>('/vehicle-types', 'vehicle-types');
   const vehicleTypes = typeLookup.items;
@@ -99,22 +115,39 @@ export function VehiclesListPage() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  // The filters, as the list and its export both send them.
+  const filterParams = {
+    search: debounced || undefined,
+    brand: brandFilter || undefined,
+    vehicleTypeId: vehicleTypeFilter || undefined,
+    ownerIdentityStatus: ownerStatusFilter || undefined,
+    duplicatePlate: duplicatePlateOnly || undefined,
+    from: fullDay(from) ? from : undefined,
+    to: fullDay(to) ? to : undefined,
+    registrationStationId: officeFilter || undefined,
+  };
+
+  async function exportList() {
+    setExporting(true);
+    setExportNote(null);
+    try {
+      const res = await apiClient.get<Blob>('/vehicles/export', { params: filterParams, responseType: 'blob' });
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
+      downloadBlob(res.data, `vehicles-${day}.csv`);
+      if (res.headers['x-truncated'] === 'true') setExportNote('الكشف يضم أحدث 10,000 مركبة فقط. ضيّق التصفية لتصدير الباقي.');
+    } catch {
+      setExportNote('تعذّر سحب الكشف. أعد المحاولة.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const { data: pageData, isLoading, isError } = useQuery({
-    queryKey: ['vehicles', 'list', skip, debounced, brandFilter, vehicleTypeFilter, ownerStatusFilter, sort, duplicatePlateOnly],
+    queryKey: ['vehicles', 'list', skip, debounced, brandFilter, vehicleTypeFilter, ownerStatusFilter, sort, duplicatePlateOnly, from, to, officeFilter],
     queryFn: async () =>
       (
         await apiClient.get<{ total: number; items: VehicleBasicInfo[] }>('/vehicles', {
-          params: {
-            paged: true,
-            skip,
-            take: TAKE,
-            search: debounced || undefined,
-            brand: brandFilter || undefined,
-            vehicleTypeId: vehicleTypeFilter || undefined,
-            ownerIdentityStatus: ownerStatusFilter || undefined,
-            duplicatePlate: duplicatePlateOnly || undefined,
-            sort,
-          },
+          params: { paged: true, skip, take: TAKE, ...filterParams, sort },
         })
       ).data,
   });
@@ -159,10 +192,19 @@ export function VehiclesListPage() {
         title="المركبات"
         subtitle={pageData ? `${totalVehicles.toLocaleString('en-US')} مركبة` : undefined}
         actions={
-          canRegisterVehicles ? (
-            <Link to="/registration">
-              <PillButton size="sm">تسجيل مركبة +</PillButton>
-            </Link>
+          canRegisterVehicles || canExport ? (
+            <>
+              {canExport && (
+                <PillButton size="sm" variant="secondary" onClick={() => void exportList()} disabled={exporting || !totalVehicles} data-testid="vehicles-export">
+                  {exporting ? 'جارٍ السحب…' : 'سحب كشف (CSV)'}
+                </PillButton>
+              )}
+              {canRegisterVehicles && (
+                <Link to="/registration">
+                  <PillButton size="sm">تسجيل مركبة +</PillButton>
+                </Link>
+              )}
+            </>
           ) : undefined
         }
       />
@@ -286,6 +328,61 @@ export function VehiclesListPage() {
           />
           لوحات مكررة فقط
         </label>
+        {canFilterOffice && (offices.data?.length ?? 0) > 0 && (
+          <select
+            value={officeFilter}
+            onChange={(e) => {
+              setOfficeFilter(e.target.value);
+              setSkip(0);
+            }}
+            className={selectClass}
+            aria-label="مكتب التسجيل"
+            data-testid="vehicles-office-filter"
+          >
+            <option value="">كل المكاتب</option>
+            {offices.data!.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-ink-soft lg:text-[12px]">
+          سُجّلت من
+          <DateField
+            id="vl-from"
+            value={from}
+            onChange={(v) => {
+              setFrom(v);
+              setSkip(0);
+            }}
+            inputClassName={`w-40 pe-9 ${selectClass}`}
+          />
+          إلى
+          <DateField
+            id="vl-to"
+            value={to}
+            onChange={(v) => {
+              setTo(v);
+              setSkip(0);
+            }}
+            inputClassName={`w-40 pe-9 ${selectClass}`}
+          />
+        </span>
+        {(from || to || officeFilter) && (
+          <button
+            type="button"
+            className="text-[13px] font-bold text-primary-dark hover:underline lg:text-[12px]"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+              setOfficeFilter('');
+              setSkip(0);
+            }}
+          >
+            مسح الفترة والمكتب
+          </button>
+        )}
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as VehicleSortField)}
@@ -300,6 +397,7 @@ export function VehiclesListPage() {
         </select>
       </div>
 
+      {exportNote && <p className="mb-3 text-[14px] font-bold text-danger-dark lg:text-[13px]">{exportNote}</p>}
       {isLoading && <SkeletonRows rows={6} />}
       {isError && <p className="text-[15px] lg:text-[13px] text-danger">تعذر تحميل قائمة المركبات.</p>}
 

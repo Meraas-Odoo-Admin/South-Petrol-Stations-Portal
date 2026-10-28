@@ -31,6 +31,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   PLATE_CHANGE: 'غيّر اللوحة',
   // After review (18 Oct 2026): «تعديل» changes these directly.
   UPDATE_IDENTITY: 'عدّل هوية المركبة (اللوحة/الشاصي/الكتيب/النوع/المالك)',
+  TRANSFER_OWNERSHIP: 'نقل ملكية مركبة',
+  DETACH_OWNER: 'فكّ مركبة من مالكها',
   UPDATE_OWNER_IDENTITY: 'صحّح هوية المالك',
   VEHICLE_CHANGE_REQUESTED: 'طلب تعديل بيانات مركبة',
   VEHICLE_CHANGE_APPROVED: 'وافق على تعديل بيانات مركبة',
@@ -92,6 +94,8 @@ export const AUDIT_ACTION_GROUPS: Array<{ label: string; actions: string[] }> = 
     actions: [
       'UPDATE_IDENTITY',
       'UPDATE_OWNER_IDENTITY',
+      'TRANSFER_OWNERSHIP',
+      'DETACH_OWNER',
       'PLATE_CHANGE',
       'VEHICLE_CHANGE_REQUESTED',
       'VEHICLE_CHANGE_APPROVED',
@@ -146,6 +150,12 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
 
 export const AUDIT_FIELD_LABELS: Record<string, string> = {
   fullName: 'الاسم الكامل',
+  // After review (28 Oct 2026): an owner's details, and a vehicle given or taken.
+  phone: 'الهاتف',
+  address: 'العنوان',
+  identityNumber: 'رقم الهوية',
+  ownerName: 'المالك',
+  cancelledCard: 'البطاقة الملغاة',
   username: 'اسم المستخدم',
   name: 'الاسم',
   job: 'الوظيفة',
@@ -213,6 +223,7 @@ export const AUDIT_REPORT_LABELS: Record<string, string> = {
   'registration-offices': 'مكاتب التسجيل',
   'audit-log': 'سجل التدقيق',
   supply: 'التوريد والتعبئة',
+  vehicles: 'كشف المركبات',
 };
 
 // Why a sign-in failed (LOGIN_FAILED's reason).

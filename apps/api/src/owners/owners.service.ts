@@ -72,21 +72,94 @@ export class OwnersService {
       });
     }
     const search = query.search?.trim();
+    const where = search
+      ? {
+          OR: [
+            { fullName: { contains: search, mode: 'insensitive' as const } },
+            { identityNumber: { contains: search } },
+            { phone: { contains: search } },
+          ],
+        }
+      : {};
+    if (query.paged) {
+      const skip = query.skip ?? 0;
+      const take = query.take ?? 25;
+      return Promise.all([
+        this.prisma.vehicleOwner.count({ where }),
+        this.prisma.vehicleOwner.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' },
+          include: { _count: { select: { vehicles: true } } },
+        }),
+      ]).then(([total, rows]) => ({
+        total,
+        skip,
+        take,
+        items: rows.map(({ _count, ...owner }) => ({ ...owner, vehicleCount: _count.vehicles })),
+      }));
+    }
     return this.prisma.vehicleOwner.findMany({
-      where: {
-        ...(search
-          ? {
-              OR: [
-                { fullName: { contains: search, mode: 'insensitive' as const } },
-                { identityNumber: { contains: search } },
-              ],
-            }
-          : {}),
-      },
+      where,
       skip: query.skip,
       take: query.take,
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  // After review (28 Oct 2026): one owner on «الملاك» — their details, their
+  // vehicles (with each one's active card), and their history: every change
+  // to the owner, and every vehicle given to them or taken from them.
+  async detail(id: string) {
+    const owner = await this.prisma.vehicleOwner.findUnique({
+      where: { id },
+      include: {
+        vehicles: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            internalCode: true,
+            currentPlate: true,
+            make: true,
+            model: true,
+            color: true,
+            createdAt: true,
+            cards: { where: { status: 'ACTIVE' }, select: { cardNumber: true }, take: 1 },
+          },
+        },
+      },
+    });
+    if (!owner) throw new NotFoundException('Vehicle owner not found.');
+    const history = await this.prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: 'VehicleOwner', entityId: id },
+          {
+            action: { in: ['TRANSFER_OWNERSHIP', 'DETACH_OWNER'] },
+            OR: [{ oldValue: { path: ['ownerId'], equals: id } }, { newValue: { path: ['ownerId'], equals: id } }],
+          },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        action: true,
+        entityType: true,
+        entityId: true,
+        oldValue: true,
+        newValue: true,
+        createdAt: true,
+        user: { select: { id: true, fullName: true, username: true } },
+      },
+    });
+    const { vehicles, ...rest } = owner;
+    return {
+      ...rest,
+      vehicles: vehicles.map(({ cards, ...v }) => ({ ...v, activeCardNumber: cards[0]?.cardNumber ?? null })),
+      history,
+    };
   }
 
   async findOne(id: string) {

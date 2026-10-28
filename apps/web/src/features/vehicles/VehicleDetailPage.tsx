@@ -25,6 +25,7 @@ import { FillUpStatusPill } from '../../components/FillUpStatusPill';
 import { OwnerIdentityReveal } from '../../components/OwnerIdentityReveal';
 import { VehicleEditForm } from './VehicleEditForm';
 import { OwnerEditForm } from './OwnerEditForm';
+import { TransferOwnerDialog } from './TransferOwnerDialog';
 import type { VehicleBasicInfo } from './types';
 import { SkeletonRows } from '../../components/design/Skeleton';
 import { LIST_PAGE_SIZE } from '../../lib/pageSize';
@@ -54,6 +55,9 @@ export function VehicleDetailPage() {
   const canReadCards = hasPermission('cards:read');
   const canEditOwner = hasPermission('owners:manage');
   const canEditOwnerIdentity = hasPermission('owners:approve_change');
+  // After review (28 Oct 2026): «نقل الملكية» — the office manager's.
+  const canTransferOwner = hasPermission('vehicles:transfer_owner');
+  const [transferring, setTransferring] = useState(false);
   const [skip, setSkip] = useState(0);
   const [editingCosmetic, setEditingCosmetic] = useState(false);
   const [editingOwner, setEditingOwner] = useState(false);
@@ -239,6 +243,16 @@ export function VehicleDetailPage() {
                           تعديل
                         </button>
                       )}
+                      {canTransferOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setTransferring(true)}
+                          data-testid="vehicle-transfer-owner"
+                          className="mt-1 block text-[13px] lg:text-[12px] font-bold text-danger-dark underline-offset-2 hover:underline"
+                        >
+                          نقل الملكية (بيع المركبة)
+                        </button>
+                      )}
                     </>
                   )
                 }
@@ -273,6 +287,15 @@ export function VehicleDetailPage() {
             style={{ animationDelay: '60ms' }}
           />
         </div>
+
+        {transferring && (
+          <TransferOwnerDialog
+            vehicleId={vehicle.id}
+            currentOwnerId={vehicle.owner?.id ?? null}
+            currentOwnerName={vehicle.owner?.fullName ?? null}
+            onClose={() => setTransferring(false)}
+          />
+        )}
 
         {weeklyUsageQuery.data && (
           <Card

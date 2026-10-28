@@ -7,6 +7,7 @@ import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { UpdateVehicleIdentityDto } from './dto/update-vehicle-identity.dto';
 import { FindVehiclesQueryDto, OwnerIdentityStatusFilter, VehicleSortField } from './dto/find-vehicles-query.dto';
+import { TransferOwnerDto } from './dto/transfer-owner.dto';
 import { PlateChangeDto } from './dto/plate-change.dto';
 import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
 import { RejectVehicleChangeRequestDto } from './dto/reject-change-request.dto';
@@ -16,6 +17,7 @@ import { resolveWeekWindowStrategy } from '../fillups/rule-engine/week-window.st
 import { RegistrationStationsService } from '../registration-stations/registration-stations.service';
 import { DuplicateCheckQueryDto } from './dto/duplicate-check-query.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { addDays, tripoliMidnight } from '../common/utils/tripoli';
 
 // One clash between a value being registered and an already-registered
 // vehicle — which field, and whose vehicle it is. The registration screen
@@ -474,17 +476,117 @@ export class VehiclesService {
   // comment and docs/OPEN_ITEMS.md; requesting it isn't possible yet
   // since the DTO's enum doesn't expose it, not silently ignored.
   async findAll(query: FindVehiclesQueryDto) {
+    const { where, repeatedPlates } = await this.vehicleWhere(query);
+    const include = {
+      owner: {
+        select: {
+          id: true,
+          fullName: true,
+          identityType: true,
+          identityNumber: true,
+          phone: true,
+          responsibleDriverName: true,
+          responsibleDriverPhone: true,
+        },
+      },
+      vehicleType: { select: { id: true, name: true } },
+      // After review (28 Oct 2026): the office it was registered at, on the list.
+      registeredAtRegistrationStation: { select: { id: true, name: true } },
+    } satisfies Prisma.VehicleInclude;
+    const sortOrderBy: Record<VehicleSortField, object> = {
+      [VehicleSortField.CREATED_AT]: { createdAt: 'desc' },
+      [VehicleSortField.INTERNAL_CODE]: { internalCode: 'asc' },
+      [VehicleSortField.CURRENT_PLATE]: { currentPlate: 'asc' },
+    };
+    // Repeated plates: each plate's vehicles side by side.
+    const orderBy = repeatedPlates
+      ? [{ normalizedPlate: 'asc' as const }, { createdAt: 'asc' as const }]
+      : sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT];
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 50;
+
+    // `paged`: one page and the total («1–20 من 340»); otherwise the bare page
+    // of rows the pickers use. Either way, never more than `take` (<= 100).
+    if (query.paged) {
+      const [total, items] = await Promise.all([
+        this.prisma.vehicle.count({ where }),
+        this.prisma.vehicle.findMany({ where, include, skip, take, orderBy }),
+      ]);
+      return { total, skip, take, items };
+    }
+    return this.prisma.vehicle.findMany({ where, include, skip, take, orderBy });
+  }
+
+  // After review (28 Oct 2026): «سحب كشف» — the vehicles of the list's own
+  // filters (the registration days, the office, the search…) as a CSV file,
+  // newest first, at most EXPORT_MAX rows (the file says when it was cut
+  // short). The owner's identity number is shown in full only to who may
+  // reveal it. The export itself is in the audit log (@AuditedExport).
+  async exportCsv(query: FindVehiclesQueryDto, revealIdentity: boolean): Promise<{ csv: string; truncated: boolean }> {
+    const EXPORT_MAX = 10_000;
+    const { where } = await this.vehicleWhere(query);
+    const rows = await this.prisma.vehicle.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: EXPORT_MAX + 1,
+      include: {
+        owner: { select: { fullName: true, identityType: true, identityNumber: true, phone: true } },
+        vehicleType: { select: { name: true } },
+        registeredAtRegistrationStation: { select: { name: true } },
+        registeredBy: { select: { fullName: true } },
+        cards: { where: { status: 'ACTIVE' }, select: { cardNumber: true }, take: 1 },
+      },
+    });
+    const truncated = rows.length > EXPORT_MAX;
+    const when = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Tripoli', dateStyle: 'short', timeStyle: 'short' });
+    const FUEL: Record<string, string> = { PETROL: 'بنزين', DIESEL: 'ديزل' };
+    const ID_TYPE: Record<string, string> = { NATIONAL_ID: 'وطني', ADMINISTRATIVE_ID: 'إداري' };
+    const mask = (n: string) => (n.length > 4 ? '•'.repeat(n.length - 4) + n.slice(-4) : n);
+    const cell = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = [
+      'الرمز الداخلي', 'اللوحة', 'الصانع', 'الطراز', 'اللون', 'سنة الصنع', 'الوقود', 'نوع المركبة',
+      'رقم الشاصي', 'رقم الدفتر', 'المالك', 'نوع الهوية', 'رقم الهوية', 'هاتف المالك',
+      'مكتب التسجيل', 'سجّلها', 'تاريخ التسجيل (ليبيا)', 'البطاقة الفعّالة',
+    ];
+    const lines = rows.slice(0, EXPORT_MAX).map((v) =>
+      [
+        v.internalCode,
+        v.currentPlate,
+        v.make,
+        v.model,
+        v.color,
+        v.manufactureYear,
+        v.fuelType ? (FUEL[v.fuelType] ?? v.fuelType) : '',
+        v.vehicleType?.name,
+        v.chassisNumber,
+        v.registrationBooklet,
+        v.owner?.fullName,
+        v.owner ? (ID_TYPE[v.owner.identityType] ?? v.owner.identityType) : '',
+        v.owner ? (revealIdentity ? v.owner.identityNumber : mask(v.owner.identityNumber)) : '',
+        v.owner?.phone,
+        v.registeredAtRegistrationStation?.name,
+        v.registeredBy?.fullName,
+        when.format(v.createdAt),
+        v.cards[0]?.cardNumber ?? 'لا توجد',
+      ]
+        .map(cell)
+        .join(','),
+    );
+    if (truncated) lines.push(cell(`… قُطع الكشف عند ${EXPORT_MAX} مركبة؛ ضيّق التصفية لرؤية الباقي.`));
+    // BOM first, so Excel opens the Arabic correctly.
+    return { csv: '\uFEFF' + [header.map(cell).join(','), ...lines].join('\r\n') + '\r\n', truncated };
+  }
+
+  // The list's filters as a query, shared by the list and its export.
+  private async vehicleWhere(query: FindVehiclesQueryDto): Promise<{ where: Prisma.VehicleWhereInput; repeatedPlates: string[] | null }> {
     const ownerIdentityFilter: Record<OwnerIdentityStatusFilter, object> = {
       [OwnerIdentityStatusFilter.VERIFIED]: {
         owner: { identityType: { in: ['NATIONAL_ID', 'ADMINISTRATIVE_ID'] } },
       },
       [OwnerIdentityStatusFilter.MISSING]: { ownerId: null },
-    };
-
-    const sortOrderBy: Record<VehicleSortField, object> = {
-      [VehicleSortField.CREATED_AT]: { createdAt: 'desc' },
-      [VehicleSortField.INTERNAL_CODE]: { internalCode: 'asc' },
-      [VehicleSortField.CURRENT_PLATE]: { currentPlate: 'asc' },
     };
 
     // «لوحات مكررة»: the plates (normalized) that more than one vehicle has.
@@ -520,6 +622,17 @@ export class VehiclesService {
         usageType: query.usageType,
         make: query.brand ? { equals: query.brand } : undefined,
         vehicleTypeId: query.vehicleTypeId,
+        // After review (28 Oct 2026): the office it was registered at, and
+        // the days (Libya's) it was registered on, inclusive.
+        registeredAtRegistrationStationId: query.registrationStationId || undefined,
+        ...(query.from || query.to
+          ? {
+              createdAt: {
+                ...(query.from ? { gte: tripoliMidnight(query.from) } : {}),
+                ...(query.to ? { lt: tripoliMidnight(addDays(query.to, 1)) } : {}),
+              },
+            }
+          : {}),
         ...(query.ownerIdentityStatus ? ownerIdentityFilter[query.ownerIdentityStatus] : {}),
         // Independent OR search — a caller who doesn't know whether their
         // typed term is an internal code, plate, chassis number, or the
@@ -538,37 +651,7 @@ export class VehiclesService {
             ]
           : undefined,
     };
-    const include = {
-      owner: {
-        select: {
-          id: true,
-          fullName: true,
-          identityType: true,
-          identityNumber: true,
-          phone: true,
-          responsibleDriverName: true,
-          responsibleDriverPhone: true,
-        },
-      },
-      vehicleType: { select: { id: true, name: true } },
-    } satisfies Prisma.VehicleInclude;
-    // Repeated plates: each plate's vehicles side by side.
-    const orderBy = repeatedPlates
-      ? [{ normalizedPlate: 'asc' as const }, { createdAt: 'asc' as const }]
-      : sortOrderBy[query.sort ?? VehicleSortField.CREATED_AT];
-    const skip = query.skip ?? 0;
-    const take = query.take ?? 50;
-
-    // `paged`: one page and the total («1–20 من 340»); otherwise the bare page
-    // of rows the pickers use. Either way, never more than `take` (<= 100).
-    if (query.paged) {
-      const [total, items] = await Promise.all([
-        this.prisma.vehicle.count({ where }),
-        this.prisma.vehicle.findMany({ where, include, skip, take, orderBy }),
-      ]);
-      return { total, skip, take, items };
-    }
-    return this.prisma.vehicle.findMany({ where, include, skip, take, orderBy });
+    return { where, repeatedPlates };
   }
 
   async findOne(id: string) {
@@ -760,6 +843,122 @@ export class VehiclesService {
       );
     });
     return this.findOne(id);
+  }
+
+  // After review (Khalil, 28 Oct 2026): «نقل الملكية» — a vehicle sold to
+  // someone else. In one transaction: the vehicle goes to the new owner (who
+  // must have room under «ضوابط المالك»), its active card is cancelled (the
+  // card was the old owner's; the new owner is issued a new one), and both are
+  // in the audit log with the reason. Held by the office manager
+  // (vehicles:transfer_owner).
+  async transferOwner(id: string, dto: TransferOwnerDto, actorId: string) {
+    const before = await this.prisma.vehicle.findUnique({
+      where: { id },
+      include: { owner: { select: { id: true, fullName: true } } },
+    });
+    if (!before) throw new NotFoundException('Vehicle not found.');
+    if (before.ownerId === dto.ownerId) throw new BadRequestException('SAME_OWNER');
+    const owner = await this.prisma.vehicleOwner.findUnique({ where: { id: dto.ownerId }, select: { id: true, fullName: true } });
+    if (!owner) throw new NotFoundException('Vehicle owner not found.');
+    await this.assertOwnerHasRoom(dto.ownerId, id);
+    const reason = dto.reason.trim();
+
+    const cancelled = await this.prisma.$transaction(async (tx) => {
+      await applyIdentityChange(tx, id, VehicleChangeType.OWNER_CHANGE, dto.ownerId);
+      const card = await tx.vehicleCard.findFirst({ where: { activeForVehicleId: id, status: 'ACTIVE' } });
+      if (card) {
+        await tx.vehicleCard.update({
+          where: { id: card.id },
+          data: {
+            status: 'CANCELLED',
+            activeForVehicleId: null,
+            cancelledAt: new Date(),
+            cancelledById: actorId,
+            cancelReason: `نقل الملكية: ${reason}`,
+          },
+        });
+        await this.audit.log(
+          {
+            userId: actorId,
+            action: 'CANCEL_CARD',
+            entityType: 'VehicleCard',
+            entityId: card.id,
+            oldValue: { status: 'ACTIVE' },
+            newValue: { status: 'CANCELLED', cancelReason: `نقل الملكية: ${reason}` },
+          },
+          tx,
+        );
+      }
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'TRANSFER_OWNERSHIP',
+          entityType: 'Vehicle',
+          entityId: id,
+          oldValue: { ownerId: before.ownerId, ownerName: before.owner?.fullName ?? null },
+          newValue: { ownerId: owner.id, ownerName: owner.fullName, reason, cancelledCard: card?.cardNumber ?? null },
+        },
+        tx,
+      );
+      return card ? { id: card.id, cardNumber: card.cardNumber } : null;
+    });
+    return { vehicle: await this.findOne(id), cancelledCard: cancelled };
+  }
+
+  // After review (Khalil, 28 Oct 2026): «فك المركبة من المالك» — from the
+  // owners screen. The vehicle is left with no owner (it shows under «بلا
+  // مالك» on the vehicles list until it is given to one with «نقل الملكية»),
+  // and its card, which was this owner's, is cancelled. One transaction, in
+  // the audit log with the reason.
+  async detachOwner(id: string, reasonText: string, actorId: string) {
+    const before = await this.prisma.vehicle.findUnique({
+      where: { id },
+      include: { owner: { select: { id: true, fullName: true } } },
+    });
+    if (!before) throw new NotFoundException('Vehicle not found.');
+    if (!before.ownerId) throw new BadRequestException('VEHICLE_HAS_NO_OWNER');
+    const reason = reasonText.trim();
+
+    const cancelled = await this.prisma.$transaction(async (tx) => {
+      await tx.vehicle.update({ where: { id }, data: { owner: { disconnect: true } } });
+      const card = await tx.vehicleCard.findFirst({ where: { activeForVehicleId: id, status: 'ACTIVE' } });
+      if (card) {
+        await tx.vehicleCard.update({
+          where: { id: card.id },
+          data: {
+            status: 'CANCELLED',
+            activeForVehicleId: null,
+            cancelledAt: new Date(),
+            cancelledById: actorId,
+            cancelReason: `فك من المالك: ${reason}`,
+          },
+        });
+        await this.audit.log(
+          {
+            userId: actorId,
+            action: 'CANCEL_CARD',
+            entityType: 'VehicleCard',
+            entityId: card.id,
+            oldValue: { status: 'ACTIVE' },
+            newValue: { status: 'CANCELLED', cancelReason: `فك من المالك: ${reason}` },
+          },
+          tx,
+        );
+      }
+      await this.audit.log(
+        {
+          userId: actorId,
+          action: 'DETACH_OWNER',
+          entityType: 'Vehicle',
+          entityId: id,
+          oldValue: { ownerId: before.ownerId, ownerName: before.owner?.fullName ?? null },
+          newValue: { ownerId: null, reason, cancelledCard: card?.cardNumber ?? null },
+        },
+        tx,
+      );
+      return card ? { id: card.id, cardNumber: card.cardNumber } : null;
+    });
+    return { vehicle: await this.findOne(id), cancelledCard: cancelled };
   }
 
   // Dedicated endpoint, not part of general update(): closes the current

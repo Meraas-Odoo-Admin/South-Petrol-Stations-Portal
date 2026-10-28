@@ -18,6 +18,8 @@ export const NAV_ACCESS = {
   // records:browse, not vehicles:read: the station employee looks vehicles up
   // while recording but has no vehicles screen (after review, 15 Oct 2026).
   vehicles: (has: HasPermission) => has('records:browse'),
+  // After review (28 Oct 2026): «الملاك» — the office managers and those above them.
+  owners: (has: HasPermission) => has('owners:approve_change'),
   violations: (has: HasPermission) => has('reports:view'),
   // After review (Khalil, 15 Oct 2026): «طلبات التعديل» is hidden from every
   // role — no menu item, home card or bar tab. The screen and its API stay
@@ -73,6 +75,7 @@ const DESTINATION_PATHS: Partial<Record<NavKey, string>> = {
   fillup: '/fillups/new',
   registration: '/registration',
   vehicles: '/vehicles',
+  owners: '/owners',
   violations: '/reports/violations',
   changeRequests: '/vehicles/change-requests',
   reports: '/reports',
@@ -105,6 +108,7 @@ export const NAV_PATHS = [
   '/fillups/new',
   '/registration',
   '/vehicles',
+  '/owners',
   '/reports/violations',
   '/vehicles/change-requests',
   '/reports',

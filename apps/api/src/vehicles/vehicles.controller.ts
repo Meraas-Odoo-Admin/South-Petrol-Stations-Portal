@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -10,6 +11,10 @@ import { CreateVehicleChangeRequestDto } from './dto/create-change-request.dto';
 import { RejectVehicleChangeRequestDto } from './dto/reject-change-request.dto';
 import { FindChangeRequestsQueryDto } from './dto/find-change-requests-query.dto';
 import { DuplicateCheckQueryDto } from './dto/duplicate-check-query.dto';
+import { TransferOwnerDto } from './dto/transfer-owner.dto';
+import { DetachOwnerDto } from './dto/detach-owner.dto';
+import { AuditedExport } from '../audit/audited-export';
+import { RbacService } from '../rbac/rbac.service';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
@@ -17,7 +22,10 @@ import type { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 @ApiTags('vehicles')
 @Controller('vehicles')
 export class VehiclesController {
-  constructor(private readonly vehicles: VehiclesService) {}
+  constructor(
+    private readonly vehicles: VehiclesService,
+    private readonly rbac: RbacService,
+  ) {}
 
   @RequirePermission('vehicles:manage')
   @Post()
@@ -29,6 +37,29 @@ export class VehiclesController {
   @Get()
   findAll(@Query() query: FindVehiclesQueryDto) {
     return this.vehicles.findAll(query);
+  }
+
+  // After review (28 Oct 2026): «سحب كشف» — the list's own filters as a CSV
+  // file. For the office managers and those above them (their reports
+  // permission); recorded in the audit log.
+  @RequirePermission('registration_reports:view')
+  @AuditedExport('vehicles')
+  @Get('export')
+  async exportCsv(
+    @Query() query: FindVehiclesQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const reveal = (await this.rbac.getPermissionsForUser(actor.id)).has('owners:reveal_identity');
+    const { csv, truncated } = await this.vehicles.exportCsv(query, reveal);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="vehicles-${day}.csv"`,
+      'X-Truncated': String(truncated),
+      'Access-Control-Expose-Headers': 'X-Truncated',
+    });
+    return new StreamableFile(Buffer.from(csv, 'utf-8'));
   }
 
   // Registration screen's pre-save duplicate check — gated like
@@ -90,6 +121,20 @@ export class VehiclesController {
   // admin/system-admin) for a genuinely-urgent direct correction; an
   // employee goes through POST /vehicles/:id/change-requests
   // (PLATE_CHANGE) instead, gated on vehicles:request_change.
+  // After review (28 Oct 2026): «نقل الملكية» — the office manager's.
+  @RequirePermission('vehicles:transfer_owner')
+  @Post(':id/transfer-owner')
+  transferOwner(@Param('id') id: string, @Body() dto: TransferOwnerDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.vehicles.transferOwner(id, dto, actor.id);
+  }
+
+  // After review (28 Oct 2026): «فك المركبة من المالك» — same holders as «نقل الملكية».
+  @RequirePermission('vehicles:transfer_owner')
+  @Post(':id/detach-owner')
+  detachOwner(@Param('id') id: string, @Body() dto: DetachOwnerDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.vehicles.detachOwner(id, dto.reason, actor.id);
+  }
+
   @RequirePermission('vehicles:approve_change')
   @Post(':id/plate-change')
   changePlate(

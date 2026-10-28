@@ -18,7 +18,7 @@ const PROFILES: Array<{ key: string; matches: (has: Has) => boolean; order: stri
   {
     key: 'office-manager',
     matches: (has) => has('users:manage_staff') && has('registration_reports:view'),
-    order: ['/my-office', '/registration', '/vehicles', '/reports', '/vehicles/change-requests'],
+    order: ['/my-office', '/registration', '/vehicles', '/owners', '/reports', '/vehicles/change-requests'],
   },
   {
     key: 'station-supervisor',

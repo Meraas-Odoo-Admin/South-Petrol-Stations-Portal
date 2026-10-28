@@ -1,7 +1,7 @@
 import { Transform } from 'class-transformer';
 import { cleanDigits } from '@fuel-tracking/shared-types';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { IdentityType } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
@@ -29,4 +29,13 @@ export class FindOwnersQueryDto extends PaginationQueryDto {
   @IsString()
   @MinLength(1)
   identityNumber?: string;
+
+  // After review (28 Oct 2026): «الملاك» — one page and the total, newest
+  // first, each owner with how many vehicles they have. Left out: the bare
+  // array the pickers read.
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  paged?: boolean;
 }

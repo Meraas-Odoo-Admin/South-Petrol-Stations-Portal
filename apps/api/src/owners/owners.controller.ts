@@ -41,6 +41,13 @@ export class OwnersController {
     return this.owners.listChangeRequests(query);
   }
 
+  // After review (28 Oct 2026): «الملاك» — an owner, their vehicles and their history.
+  @RequirePermission('owners:approve_change')
+  @Get(':id/detail')
+  detail(@Param('id') id: string) {
+    return this.owners.detail(id);
+  }
+
   @RequirePermission('owners:read')
   @Get(':id')
   findOne(@Param('id') id: string) {

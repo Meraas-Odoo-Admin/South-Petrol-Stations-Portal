@@ -22,6 +22,7 @@ const QUICK_LINKS: QuickLink[] = [
   { to: '/fillups/new', label: 'تسجيل تعبئة', hint: 'تسجيل عملية تعبئة جديدة لمركبة', show: NAV_ACCESS.fillup, icon: 'fillup' },
   { to: '/registration', label: 'تسجيل المركبات', hint: 'تسجيل مالك ومركبة في مكتب التسجيل', show: NAV_ACCESS.registration, icon: 'register' },
   { to: '/vehicles', label: 'المركبات', hint: 'البحث عن مركبة وعرض سجلها', show: NAV_ACCESS.vehicles, icon: 'vehicles' },
+  { to: '/owners', label: 'الملاك', hint: 'بيانات الملاك ومركباتهم وسجل تعديلاتهم', show: NAV_ACCESS.owners, icon: 'people' },
   { to: '/reports/violations', label: 'الاستثناءات', hint: 'ما استُخدم منها في محطتك أو بلديتك', show: NAV_ACCESS.violations, icon: 'violations' },
   { to: '/reports', label: 'التقارير', hint: 'التقارير التي تحتاجها وظيفتك', show: NAV_ACCESS.reports, icon: 'reports' },
   { to: '/reports/daily', label: 'اليوم', hint: 'تعبئات اليوم وأرقام المحطات والمديرية', show: NAV_ACCESS.dailyReport, icon: 'reports' },

@@ -130,6 +130,9 @@ export const PERMISSIONS = [
   { key: 'owners:manage', description: 'Create/update the vehicle owner registry' },
   { key: 'vehicles:manage', description: 'Create/update vehicles, plate changes' },
   { key: 'vehicles:read', description: 'Look up the vehicle registry (read-only)' },
+  // After review (28 Oct 2026): a sold vehicle goes to its new owner and its
+  // card is cancelled — the office manager's.
+  { key: 'vehicles:transfer_owner', description: 'Transfer a sold vehicle to its new owner, cancelling its card (office managers)' },
   // After review (15 Oct 2026): vehicles:read and stations:read are also what
   // the fill-up screen calls (the plate lookup, the fuels a station sells), so
   // they no longer decide who gets the record screens («السجلات»: «المركبات»
@@ -285,6 +288,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'vehicles:approve_change',
     'owners:approve_change',
     'owners:reveal_identity',
+    // After review (28 Oct 2026): «نقل الملكية».
+    'vehicles:transfer_owner',
     'cards:read',
     'cards:issue',
     'cards:cancel',

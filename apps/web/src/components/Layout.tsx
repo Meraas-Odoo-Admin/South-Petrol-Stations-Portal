@@ -120,6 +120,7 @@ export function Layout() {
     { to: '/monitoring', label: 'مراقبة المحطات', icon: <Icon d={ICONS.fuel} />, show: NAV_ACCESS.monitoring(hasPermission) },
     { to: '/my-station', label: stationCount > 1 ? 'محطاتي' : 'محطتي', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.myStation(hasPermission) },
     { to: '/my-office', label: 'مكتبي', icon: <Icon d={ICONS.register} />, show: NAV_ACCESS.myOffice(hasPermission) },
+    { to: '/owners', label: 'الملاك', icon: <Icon d={ICONS.people} />, show: NAV_ACCESS.owners(hasPermission) },
     { to: '/stations', label: 'المحطات', icon: <Icon d={ICONS.stations} />, show: NAV_ACCESS.stations(hasPermission) },
     { to: '/admin', label: 'الإدارة', icon: <Icon d={ICONS.admin} />, show: NAV_ACCESS.admin(hasPermission) },
   ].filter((item) => item.show);
@@ -156,7 +157,7 @@ export function Layout() {
   const SHEET_GROUPS: Array<{ title: string; paths: string[] }> = [
     { title: '', paths: ['/'] },
     { title: 'التسجيل والمتابعة', paths: ['/fillups/new', '/registration', '/reports', '/reports/daily', '/reports/violations'] },
-    { title: 'السجلات', paths: ['/vehicles', '/stations', '/vehicles/change-requests'] },
+    { title: 'السجلات', paths: ['/vehicles', '/owners', '/stations', '/vehicles/change-requests'] },
     { title: 'محطتي ومكتبي', paths: ['/manage', '/manage/offices', '/monitoring', '/my-station', '/my-office'] },
     { title: 'الإدارة', paths: ['/admin'] },
   ];
